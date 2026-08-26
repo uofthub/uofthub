@@ -30,27 +30,22 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // POST /projects — create project (auth required)
-  app.post('/', async (request, reply) => {
-    await request.jwtVerify()
-    // TODO: validate body, create project
+  app.post('/', { preHandler: [app.authenticate] }, async (request, reply) => {
     reply.code(501).send({ error: 'Not implemented' })
   })
 
   // PATCH /projects/:id — update project (owner only)
-  app.patch<{ Params: { id: string } }>('/:id', async (request, reply) => {
-    await request.jwtVerify()
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     reply.code(501).send({ error: 'Not implemented' })
   })
 
   // DELETE /projects/:id
-  app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
-    await request.jwtVerify()
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     reply.code(501).send({ error: 'Not implemented' })
   })
 
   // POST /projects/:id/like
-  app.post<{ Params: { id: string } }>('/:id/like', async (request, reply) => {
-    await request.jwtVerify()
+  app.post<{ Params: { id: string } }>('/:id/like', { preHandler: [app.authenticate] }, async (request, reply) => {
     reply.code(501).send({ error: 'Not implemented' })
   })
 }

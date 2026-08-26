@@ -32,8 +32,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // POST /users/:id/follow
-  app.post<{ Params: { id: string } }>('/:id/follow', async (request, reply) => {
-    await request.jwtVerify()
+  app.post<{ Params: { id: string } }>('/:id/follow', { preHandler: [app.authenticate] }, async (request, reply) => {
     reply.code(501).send({ error: 'Not implemented' })
   })
 }

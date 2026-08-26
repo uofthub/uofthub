@@ -1,7 +1,10 @@
-import Fastify from 'fastify'
+import './types.js'
+import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
+import cookie from '@fastify/cookie'
 import jwt from '@fastify/jwt'
 import multipart from '@fastify/multipart'
+import oauth2 from '@fastify/oauth2'
 import { authRoutes } from './routes/auth.js'
 import { projectRoutes } from './routes/projects.js'
 import { userRoutes } from './routes/users.js'
@@ -14,18 +17,42 @@ export async function buildApp() {
     credentials: true,
   })
 
+  await app.register(cookie)
+
   await app.register(jwt, {
     secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
+    cookie: { cookieName: 'token', signed: false },
   })
 
   await app.register(multipart, {
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+    limits: { fileSize: 50 * 1024 * 1024 },
   })
 
-  app.addHook('onRequest', async (request, reply) => {
-    const PUBLIC_ROUTES = ['/health', '/auth/callback']
-    if (PUBLIC_ROUTES.some((r) => request.url.startsWith(r))) return
-    // Routes that require auth will call request.jwtVerify() themselves
+  await app.register(oauth2, {
+    name: 'microsoftOAuth2',
+    credentials: {
+      client: {
+        id: process.env.MICROSOFT_CLIENT_ID!,
+        secret: process.env.MICROSOFT_CLIENT_SECRET!,
+      },
+      auth: {
+        authorizeHost: 'https://login.microsoftonline.com',
+        authorizePath: `/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`,
+        tokenHost: 'https://login.microsoftonline.com',
+        tokenPath: `/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+      },
+    },
+    startRedirectPath: '/auth/microsoft',
+    callbackUri: process.env.MICROSOFT_REDIRECT_URI ?? 'http://localhost:3001/auth/callback',
+    scope: ['openid', 'profile', 'email', 'https://graph.microsoft.com/User.Read'],
+  })
+
+  app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify()
+    } catch {
+      reply.code(401).send({ error: 'Unauthorized' })
+    }
   })
 
   await app.register(authRoutes, { prefix: '/auth' })
