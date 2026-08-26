@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Prisma generated client
+apps/api/node_modules/.prisma
+
+# Build outputs
+apps/*/dist
+
+# pnpm lockfile (committed — don't ignore)
+# pnpm-lock.yaml

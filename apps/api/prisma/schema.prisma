@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Visibility {
+  PRIVATE
+  UOFT
+  PUBLIC
+}
+
+enum CollaboratorRole {
+  OWNER
+  COLLABORATOR
+  VIEWER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  faculty   String?
+  program   String?
+  classYear Int?
+  avatarUrl String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedProjects  Project[]             @relation("ProjectOwner")
+  collaborations ProjectCollaborator[]
+  likes          ProjectLike[]
+  comments       Comment[]
+  following      Follow[]              @relation("Following")
+  followers      Follow[]              @relation("Followers")
+}
+
+model Project {
+  id          String     @id @default(uuid())
+  ownerId     String
+  title       String
+  description String?
+  tags        String[]
+  visibility  Visibility @default(PRIVATE)
+  viewCount   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  owner         User                  @relation("ProjectOwner", fields: [ownerId], references: [id])
+  collaborators ProjectCollaborator[]
+  files         ProjectFile[]
+  links         ProjectLink[]
+  likes         ProjectLike[]
+  comments      Comment[]
+}
+
+model ProjectCollaborator {
+  projectId String
+  userId    String
+  role      CollaboratorRole @default(COLLABORATOR)
+  accepted  Boolean          @default(false)
+  invitedAt DateTime         @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+}
+
+model ProjectFile {
+  id         String   @id @default(uuid())
+  projectId  String
+  name       String
+  url        String
+  sizeBytes  Int
+  mimeType   String?
+  uploadedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectLink {
+  id        String @id @default(uuid())
+  projectId String
+  label     String
+  url       String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectLike {
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+}

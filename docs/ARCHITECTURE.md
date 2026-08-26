@@ -111,11 +111,19 @@ TA/professor access is granted per-project by the student owner (generates a vie
 
 ## Stack decisions
 
-> To be documented as decisions are made.
-
 | Concern | Decision | Rationale |
 |---|---|---|
-| — | TBD | — |
+| Monorepo | pnpm workspaces | Shared types between api/web without publishing; fast installs |
+| Frontend | React 19 + Vite | Fast DX, strong ecosystem, no framework lock-in at this scale |
+| Backend | Fastify 5 | Faster than Express, built-in JSON Schema validation, good TS support |
+| Language | TypeScript throughout | Type safety across the API boundary via `@uofthub/types` |
+| ORM | Prisma | Clean migrations, generated TS types, good Postgres support |
+| Database | PostgreSQL | Relational model fits the social graph; Prisma handles migrations |
+| Routing (web) | React Router v7 | Standard choice, no SSR complexity needed at MVP |
+| Data fetching | TanStack Query | Server state management, caching, background refetch |
+| Auth | Google/Microsoft OAuth (domain-restricted) | Easiest student verification for `@mail.utoronto.ca` / `@utoronto.ca` |
+| Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
+| File storage | S3-compatible (TBD provider) | Decoupled from compute; `@fastify/multipart` handles upload |
 
 ---
 
