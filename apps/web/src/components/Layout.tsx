@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import uoftHubLogo from '../assets/uofthub-logo.svg'
+import uoftHubMark from '../assets/uofthub-mark.svg'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
@@ -17,8 +17,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center">
-            <img src={uoftHubLogo} alt="uofthub" className="h-7 w-auto" />
+          <Link to="/" className="flex items-center gap-2.5">
+            <img src={uoftHubMark} alt="" aria-hidden="true" className="h-8 w-auto" />
+            <span className="font-bold text-[#002658] text-lg tracking-tight">uofthub</span>
           </Link>
 
           <nav className="flex items-center gap-4">
