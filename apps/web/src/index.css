@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-primary: #00285e;
+    --color-primary-hover: #003c8f;
+    --color-accent: #007fa3;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}

@@ -9,29 +9,29 @@ Based on [prd.md](prd.md). Items within each phase are not strictly ordered.
 Goal: a working platform that a real U of T student can use to publish and share a project.
 
 **Auth**
-- [ ] U of T email verification (Google/Microsoft OAuth, domain-restricted)
+- [x] U of T email verification (Google/Microsoft OAuth, domain-restricted)
 
 **Profiles**
-- [ ] Basic profile: name, faculty, program, class year
-- [ ] List of a student's projects (auto-generated portfolio)
-- [ ] Follow/unfollow students
+- [x] Basic profile: name, faculty, program, class year
+- [x] List of a student's projects (auto-generated portfolio)
+- [x] Follow/unfollow students
 
 **Projects**
-- [ ] Create and edit a project
-- [ ] Title, description, course/research association, tags (faculty, topic)
-- [ ] Visibility control: Private / U of T only / Public (default: Private)
-- [ ] Add collaborators (invite with accept/deny flow)
-- [ ] Add external links (GitHub, demo, website)
+- [x] Create and edit a project
+- [x] Title, description, course/research association, tags (faculty, topic)
+- [x] Visibility control: Private / U of T only / Public (default: Private)
+- [x] Add collaborators (invite with accept/deny flow)
+- [x] Add external links (GitHub, demo, website)
 - [ ] File uploads
 
 **Discovery**
-- [ ] Search projects
-- [ ] Browse by faculty / course
-- [ ] Trending / new projects feed
+- [x] Search projects
+- [x] Browse by faculty / course
+- [x] Trending / new projects feed
 
 **Social**
-- [ ] Like a project
-- [ ] Comment on a project
+- [x] Like a project
+- [x] Comment on a project
 
 ---
 
