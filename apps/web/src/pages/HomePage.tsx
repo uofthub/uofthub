@@ -4,6 +4,77 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { api, type ProjectSummary } from '../lib/api'
 
+function AIDiscovery() {
+  const [query, setQuery] = useState('')
+  const [submitted, setSubmitted] = useState('')
+
+  const { data, isFetching, isError, error } = useQuery({
+    queryKey: ['discover', submitted],
+    queryFn: () => api.discover.search(submitted),
+    enabled: !!submitted,
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (query.trim()) setSubmitted(query.trim())
+  }
+
+  return (
+    <div className="mb-8 bg-gradient-to-br from-blue-900 to-blue-700 rounded-xl p-5 text-white">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">✦</span>
+        <h2 className="font-semibold">AI-powered discovery</h2>
+      </div>
+      <p className="text-blue-200 text-sm mb-3">Ask in plain English — "show me ML projects from Engineering" or "trending bioinformatics research"</p>
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="What are you looking for?"
+          className="flex-1 bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white/40"
+        />
+        <button type="submit" disabled={!query.trim() || isFetching}
+          className="bg-white text-blue-900 text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-50 disabled:opacity-50 transition-colors">
+          {isFetching ? 'Searching…' : 'Search'}
+        </button>
+      </form>
+
+      {isError && (
+        <p className="text-red-300 text-sm mt-3">{(error as Error).message}</p>
+      )}
+
+      {data && (
+        <div className="mt-4">
+          {data.params && Object.keys(data.params).length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {Object.entries(data.params).map(([k, v]) => (
+                <span key={k} className="text-xs bg-white/20 rounded-full px-2 py-0.5">{k}: {v}</span>
+              ))}
+            </div>
+          )}
+          {data.projects.length === 0 ? (
+            <p className="text-blue-200 text-sm">No projects matched this query.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {data.projects.map(p => (
+                <Link key={p.id} to={`/projects/${p.id}`}
+                  className="block bg-white/10 hover:bg-white/20 rounded-lg p-3 transition-colors">
+                  <div className="font-medium text-sm truncate">{p.title}</div>
+                  {p.owner && <div className="text-xs text-blue-200 mt-0.5">{p.owner.name}</div>}
+                  <div className="flex gap-3 mt-1.5 text-xs text-blue-200">
+                    <span>♥ {p._count.likes}</span>
+                    <span>💬 {p._count.comments}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const FACULTIES = ['Arts & Science', 'Engineering', 'Medicine', 'Law', 'Education', 'Rotman', 'Music', 'Architecture']
 
 function ProjectCard({ project }: { project: ProjectSummary }) {
@@ -68,6 +139,8 @@ export default function HomePage() {
 
   return (
     <div>
+      <AIDiscovery />
+
       {/* Hero */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-blue-900 mb-2">uofthub</h1>

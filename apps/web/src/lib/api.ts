@@ -40,6 +40,35 @@ export type ProfileUser = {
   _count: { ownedProjects: number; followers: number; following: number }
 }
 
+export type ProjectVersion = {
+  id: string
+  projectId: string
+  versionNum: number
+  title: string
+  description?: string
+  tags: string[]
+  createdAt: string
+}
+
+export type Analytics = {
+  totalViews: number
+  likes: number
+  comments: number
+  forks: number
+  dailyViews: { date: string; count: number }[]
+}
+
+export type Org = {
+  id: string
+  slug: string
+  name: string
+  type: 'CLUB' | 'LAB'
+  description?: string
+  websiteUrl?: string
+  createdAt: string
+  _count?: { members: number; projects: number }
+}
+
 export const api = {
   auth: {
     me: () => request<MeUser>('/auth/me'),
@@ -71,6 +100,25 @@ export const api = {
       request<{ ok: boolean }>(`/projects/${id}/links/${linkId}`, { method: 'DELETE' }),
     inviteCollaborator: (id: string, email: string) =>
       request<unknown>(`/projects/${id}/collaborators`, { method: 'POST', body: JSON.stringify({ email }) }),
+    versions: (id: string) => request<ProjectVersion[]>(`/projects/${id}/versions`),
+    createVersion: (id: string) => request<ProjectVersion>(`/projects/${id}/versions`, { method: 'POST', body: '{}' }),
+    fork: (id: string) => request<ProjectDetail>(`/projects/${id}/fork`, { method: 'POST', body: '{}' }),
+    analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
+    requestAccess: (id: string) => request<{ ok: boolean }>(`/projects/${id}/request-access`, { method: 'POST', body: '{}' }),
+    accessRequests: (id: string) => request<unknown[]>(`/projects/${id}/access-requests`),
+  },
+  discover: {
+    search: (q: string) => request<{ params: Record<string, string>; projects: ProjectSummary[] }>(`/discover?q=${encodeURIComponent(q)}`),
+  },
+  orgs: {
+    list: () => request<Org[]>('/orgs'),
+    get: (slug: string) => request<Org & { members: unknown[]; projects: unknown[] }>(`/orgs/${slug}`),
+    create: (body: { name: string; slug: string; type?: string; description?: string; websiteUrl?: string }) =>
+      request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
+    addProject: (slug: string, projectId: string) =>
+      request<unknown>(`/orgs/${slug}/projects`, { method: 'POST', body: JSON.stringify({ projectId }) }),
+    addMember: (slug: string, email: string) =>
+      request<unknown>(`/orgs/${slug}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
   },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),

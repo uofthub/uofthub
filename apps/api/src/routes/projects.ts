@@ -55,10 +55,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     })
     if (!project) return reply.code(404).send({ error: 'Not found' })
 
-    await db.project.update({
-      where: { id: project.id },
-      data: { viewCount: { increment: 1 } },
-    })
+    // Increment view count and upsert daily analytics
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    await Promise.all([
+      db.project.update({ where: { id: project.id }, data: { viewCount: { increment: 1 } } }),
+      db.projectDailyView.upsert({
+        where: { projectId_date: { projectId: project.id, date: today } },
+        update: { count: { increment: 1 } },
+        create: { projectId: project.id, date: today, count: 1 },
+      }),
+    ])
 
     return project
   })
@@ -268,4 +275,151 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return { ok: true }
     }
   )
+
+  // ── VERSIONING ─────────────────────────────────────────────────────────────
+
+  // GET /projects/:id/versions
+  app.get<{ Params: { id: string } }>('/:id/versions', async (request, reply) => {
+    const versions = await db.projectVersion.findMany({
+      where: { projectId: request.params.id },
+      orderBy: { versionNum: 'desc' },
+    })
+    return versions
+  })
+
+  // POST /projects/:id/versions — snapshot current state as a new version
+  app.post<{ Params: { id: string }; Body: { label?: string } }>(
+    '/:id/versions',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      const latest = await db.projectVersion.findFirst({
+        where: { projectId: project.id },
+        orderBy: { versionNum: 'desc' },
+      })
+
+      const version = await db.projectVersion.create({
+        data: {
+          projectId: project.id,
+          versionNum: (latest?.versionNum ?? 0) + 1,
+          title: project.title,
+          description: project.description,
+          tags: project.tags,
+        },
+      })
+      return reply.code(201).send(version)
+    }
+  )
+
+  // ── FORK / REMIX ────────────────────────────────────────────────────────────
+
+  // POST /projects/:id/fork
+  app.post<{ Params: { id: string } }>(
+    '/:id/fork',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const original = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: { links: true },
+      })
+      if (!original) return reply.code(404).send({ error: 'Not found' })
+      if (original.visibility === 'PRIVATE' && original.ownerId !== request.user.sub) {
+        return reply.code(403).send({ error: 'Cannot fork a private project' })
+      }
+
+      const fork = await db.project.create({
+        data: {
+          ownerId: request.user.sub,
+          title: `${original.title} (fork)`,
+          description: original.description,
+          tags: original.tags,
+          visibility: 'PRIVATE',
+          forkedFromId: original.id,
+          links: original.links.length
+            ? { create: original.links.map(l => ({ label: l.label, url: l.url })) }
+            : undefined,
+        },
+        include: {
+          owner: { select: { id: true, name: true, faculty: true } },
+          links: true,
+          _count: { select: { likes: true, comments: true } },
+        },
+      })
+      return reply.code(201).send(fork)
+    }
+  )
+
+  // ── ANALYTICS ───────────────────────────────────────────────────────────────
+
+  // GET /projects/:id/analytics — owner-only engagement metrics
+  app.get<{ Params: { id: string } }>('/:id/analytics', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const project = await db.project.findUnique({
+      where: { id: request.params.id },
+      select: { ownerId: true, viewCount: true, _count: { select: { likes: true, comments: true, forks: true } } },
+    })
+    if (!project) return reply.code(404).send({ error: 'Not found' })
+    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const dailyViews = await db.projectDailyView.findMany({
+      where: { projectId: request.params.id, date: { gte: thirtyDaysAgo } },
+      orderBy: { date: 'asc' },
+    })
+
+    return {
+      totalViews: project.viewCount,
+      likes: project._count.likes,
+      comments: project._count.comments,
+      forks: project._count.forks,
+      dailyViews: dailyViews.map(d => ({ date: d.date, count: d.count })),
+    }
+  })
+
+  // ── TA / FACULTY ACCESS REQUESTS ────────────────────────────────────────────
+
+  // POST /projects/:id/request-access — faculty/TA requests VIEWER access
+  app.post<{ Params: { id: string } }>(
+    '/:id/request-access',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      if (request.user.role !== 'FACULTY') {
+        return reply.code(403).send({ error: 'Only faculty/TAs can request access' })
+      }
+
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.visibility === 'PRIVATE') {
+        return reply.code(403).send({ error: 'Cannot request access to a private project' })
+      }
+
+      const existing = await db.projectCollaborator.findUnique({
+        where: { projectId_userId: { projectId: project.id, userId: request.user.sub } },
+      })
+      if (existing) return reply.code(409).send({ error: 'Access already requested or granted' })
+
+      await db.projectCollaborator.create({
+        data: { projectId: project.id, userId: request.user.sub, role: 'VIEWER', accepted: false },
+      })
+      return { ok: true, message: 'Access request sent to project owner' }
+    }
+  )
+
+  // GET /projects/:id/access-requests — owner sees pending VIEWER requests
+  app.get<{ Params: { id: string } }>('/:id/access-requests', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const project = await db.project.findUnique({ where: { id: request.params.id } })
+    if (!project) return reply.code(404).send({ error: 'Not found' })
+    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+    const requests = await db.projectCollaborator.findMany({
+      where: { projectId: project.id, role: 'VIEWER', accepted: false },
+      include: { user: { select: { id: true, name: true, email: true, faculty: true } } },
+      orderBy: { invitedAt: 'desc' },
+    })
+    return requests
+  })
 }

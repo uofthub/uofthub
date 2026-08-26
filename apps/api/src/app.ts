@@ -8,6 +8,8 @@ import oauth2 from '@fastify/oauth2'
 import { authRoutes } from './routes/auth.js'
 import { projectRoutes } from './routes/projects.js'
 import { userRoutes } from './routes/users.js'
+import { discoverRoutes } from './routes/discover.js'
+import { orgRoutes } from './routes/orgs.js'
 
 export async function buildApp() {
   const app = Fastify({ logger: true })
@@ -58,6 +60,8 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/auth' })
   await app.register(projectRoutes, { prefix: '/projects' })
   await app.register(userRoutes, { prefix: '/users' })
+  await app.register(discoverRoutes, { prefix: '/discover' })
+  await app.register(orgRoutes, { prefix: '/orgs' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

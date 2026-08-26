@@ -38,28 +38,30 @@ Goal: a working platform that a real U of T student can use to publish and share
 ## Phase 2 — Semester 2+
 
 **Projects**
-- [ ] Project versioning (v1 → v2 → v3)
-- [ ] Fork / remix ("Built from X's project")
+- [x] Project versioning (v1 → v2 → v3) — snapshot current state; version history panel on project page
+- [x] Fork / remix ("Built from X's project") — fork button creates a private copy
 - [ ] Collaborative editing
 
 **Analytics**
-- [ ] Project view counts and engagement metrics (visible to owner)
+- [x] Project view counts and engagement metrics (visible to owner) — daily view chart + totals panel
 
 **Pages**
-- [ ] Course pages (aggregate all projects tagged to a course)
-- [ ] Club pages
-- [ ] Research lab pages
+- [x] Course pages (aggregate all projects tagged to a course) — `/courses/:tag`
+- [x] Club pages — `/orgs/:slug` with CLUB type
+- [x] Research lab pages — `/orgs/:slug` with LAB type
 
 **Access**
-- [ ] Formalized TA / professor invite-to-view workflow
+- [x] Formalized TA / professor invite-to-view workflow — faculty users can request VIEWER access; owner approves via collaborator panel
 
 **Discovery**
-- [ ] AI-powered project discovery ("show me AI projects by U of T students in the last year")
+- [x] AI-powered project discovery — natural language search via Claude (requires ANTHROPIC_API_KEY in .env)
 
 ---
 
 ## Later / Exploratory
 
+- File uploads (requires object storage: S3 or compatible)
+- Collaborative editing (requires WebSocket infrastructure)
 - Alumni-persistent portfolios (profile persists post-graduation)
 - Privacy-preserving, aggregate research study on discovery/collaboration behavior (HCI angle)
 - Potential official U of T subdomain/hosting once there's real usage traction
