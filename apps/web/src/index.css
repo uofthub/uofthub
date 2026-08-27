@@ -751,7 +751,7 @@
   border-radius: 100%;
   width: 8px;
   height: 8px;
-  transform: translate3d(31vw, 69vh, 0);
+  transform: translate3d(11vw, 27vh, 0);
 }
 .shape-purple::before {
   background: #7e57c2;
@@ -770,10 +770,10 @@
 }
 @keyframes shape-purple {
   50% {
-    transform: translate3d(32vw, 49vh, 0);
+    transform: translate3d(5vw, 15vh, 0);
   }
   to {
-    transform: translate3d(48vw, 70vh, 0);
+    transform: translate3d(26vw, 13vh, 0);
   }
 }
 @keyframes shape-purple-pseudo {
@@ -790,7 +790,7 @@
   border-radius: 100%;
   width: 45px;
   height: 45px;
-  transform: translate3d(48vw, 45vh, 0);
+  transform: translate3d(64vw, 10vh, 0);
 }
 .shape-blue::before {
   background: #1e88e5;
@@ -809,10 +809,10 @@
 }
 @keyframes shape-blue {
   50% {
-    transform: translate3d(53vw, 40vh, 0);
+    transform: translate3d(48vw, 17vh, 0);
   }
   to {
-    transform: translate3d(54vw, 46vh, 0);
+    transform: translate3d(57vw, 15vh, 0);
   }
 }
 @keyframes shape-blue-pseudo {
@@ -829,7 +829,7 @@
   border-radius: 100%;
   width: 43px;
   height: 43px;
-  transform: translate3d(75vw, 52vh, 0);
+  transform: translate3d(69vw, 34vh, 0);
 }
 .shape-light-blue::before {
   background: #1b74c2;
@@ -848,10 +848,10 @@
 }
 @keyframes shape-light-blue {
   50% {
-    transform: translate3d(60vw, 30vh, 0);
+    transform: translate3d(92vw, 36vh, 0);
   }
   to {
-    transform: translate3d(82vw, 61vh, 0);
+    transform: translate3d(76vw, 29vh, 0);
   }
 }
 @keyframes shape-light-blue-pseudo {
@@ -868,7 +868,7 @@
   border-radius: 100%;
   width: 22px;
   height: 22px;
-  transform: translate3d(15vw, 24vh, 0);
+  transform: translate3d(15vw, 67vh, 0);
 }
 .shape-red::before {
   background: #bf1537;
@@ -887,10 +887,10 @@
 }
 @keyframes shape-red {
   50% {
-    transform: translate3d(28vw, 12vh, 0);
+    transform: translate3d(13vw, 51vh, 0);
   }
   to {
-    transform: translate3d(9vw, 38vh, 0);
+    transform: translate3d(5vw, 64vh, 0);
   }
 }
 @keyframes shape-red-pseudo {
@@ -907,7 +907,7 @@
   border-radius: 100%;
   width: 33px;
   height: 33px;
-  transform: translate3d(88vw, 18vh, 0);
+  transform: translate3d(51vw, 61vh, 0);
 }
 .shape-orange::before {
   background: #d89648;
@@ -926,10 +926,10 @@
 }
 @keyframes shape-orange {
   50% {
-    transform: translate3d(70vw, 40vh, 0);
+    transform: translate3d(55vw, 67vh, 0);
   }
   to {
-    transform: translate3d(91vw, 9vh, 0);
+    transform: translate3d(65vw, 90vh, 0);
   }
 }
 @keyframes shape-orange-pseudo {
@@ -946,7 +946,7 @@
   border-radius: 100%;
   width: 14px;
   height: 14px;
-  transform: translate3d(62vw, 78vh, 0);
+  transform: translate3d(76vw, 77vh, 0);
 }
 .shape-cyan::before {
   background: #78ffba;
@@ -965,10 +965,10 @@
 }
 @keyframes shape-cyan {
   50% {
-    transform: translate3d(40vw, 62vh, 0);
+    transform: translate3d(84vw, 84vh, 0);
   }
   to {
-    transform: translate3d(66vw, 84vh, 0);
+    transform: translate3d(75vw, 63vh, 0);
   }
 }
 @keyframes shape-cyan-pseudo {
