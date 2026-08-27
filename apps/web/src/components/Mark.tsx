@@ -1,22 +1,28 @@
 import { useId } from 'react'
 
 /**
- * The uofthub mark, inline so its fills can follow the theme.
+ * The uofthub mark, inline so its fills can be varied per placement.
  *
- * The artwork is navy (#002658), which is invisible on the dark theme's
- * surfaces and on the navy drawer — both are within 1.3:1 of it. Colours come
- * from CSS custom properties instead, so a navy or dark ancestor can override
- * them (see `.on-navy` and the theme blocks in index.css).
+ * `brand` is the original navy artwork: the default, and what the light theme
+ * shows. The dark theme switches to the white variant automatically via the
+ * `.mark` class.
+ *
+ * `tone="white"` forces the white variant regardless of theme, for surfaces
+ * that are navy in both — the drawer is #002554 against the artwork's #002658,
+ * which is 1.02:1 and invisible.
  *
  * Kept in sync with src/assets/uofthub-mark.svg, which is still the source for
  * the favicons.
  */
 export default function Mark({
   size = 34,
+  tone = 'brand',
   className,
   title,
 }: {
   size?: number
+  /** `white` for navy or dark surfaces; `brand` (navy) everywhere else. */
+  tone?: 'brand' | 'white'
   className?: string
   /** Give the mark an accessible name; omit it when the mark is decorative. */
   title?: string
@@ -35,7 +41,7 @@ export default function Mark({
       width={size}
       height={(size * 540) / 508}
       fill="none"
-      className={className}
+      className={['mark', tone === 'white' && 'mark--white', className].filter(Boolean).join(' ')}
       role={title ? 'img' : 'presentation'}
       aria-hidden={title ? undefined : true}
       style={{ display: 'block', flexShrink: 0 }}

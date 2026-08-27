@@ -144,10 +144,10 @@ export default function SessionPage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
         }}
-        className="on-navy max-lg:hidden"
+        className="max-lg:hidden"
       >
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#fff' }}>
-          <Mark size={32} />
+          <Mark size={32} tone="white" />
           <span className="heading">uofthub</span>
         </Link>
 

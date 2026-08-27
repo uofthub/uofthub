@@ -21,7 +21,6 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="on-navy"
       style={{
         position: 'fixed',
         insetBlock: 0,
@@ -48,7 +47,7 @@ export default function Sidebar() {
           color: '#fff',
         }}
       >
-        <Mark size={28} />
+        <Mark size={28} tone="white" />
         {!collapsed && (
           <h1 className="heading" style={{ color: '#fff' }}>
             uofthub
