@@ -192,7 +192,9 @@ export function Chip({
   style?: CSSProperties
   children: ReactNode
 }) {
-  const base = `var(--v-${color}-base)`
+  // `--tone-*` resolves to whichever half of the palette pair is legible on the
+  // active theme's background, so the same formula works in light and dark.
+  const base = `var(--tone-${color})`
   const tone: CSSProperties = solid
     ? { backgroundColor: base, color: '#fff' }
     : { backgroundColor: `color-mix(in srgb, ${base} 20%, transparent)`, color: base }

@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useUI } from '../../lib/ui'
 import { useCrumbs } from '../../lib/crumbs'
-import { Avatar, Breadcrumbs, Btn, Chip, Divider, Icon, Menu, Switch, cx } from '../ui'
+import { Avatar, Breadcrumbs, Btn, Chip, Divider, Icon, Menu, Switch, Tooltip, cx } from '../ui'
 import { navSections } from './nav'
 import mark from '../../assets/uofthub-mark.svg'
 
@@ -16,6 +16,18 @@ export function Brand({ onNavy }: { onNavy?: boolean }) {
         uofthub
       </h1>
     </Link>
+  )
+}
+
+/** One-click light/dark switch, alongside the fuller settings menu. */
+function ThemeToggle() {
+  const { darkMode, setDarkMode } = useUI()
+  return (
+    <Tooltip text={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} position="bottom">
+      <Btn icon onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+        <Icon name={darkMode ? 'mdi-white-balance-sunny' : 'mdi-weather-night'} size={22} />
+      </Btn>
+    </Tooltip>
   )
 }
 
@@ -153,6 +165,7 @@ export default function AppBar({ variant }: { variant: 'landing' | 'inner' }) {
           </Btn>
           <Brand />
           <div style={{ flex: 1 }} />
+          <ThemeToggle />
           <SettingsMenu />
         </div>
       </header>
@@ -192,6 +205,7 @@ export default function AppBar({ variant }: { variant: 'landing' | 'inner' }) {
           {variant === 'inner' && onDesktop && <CommandPanelChip />}
           <AuthArea />
           <Divider vertical style={{ margin: '6px 8px' }} />
+          <ThemeToggle />
           <SettingsMenu />
         </div>
       </div>

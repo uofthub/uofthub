@@ -98,10 +98,10 @@ function OrgCard({ org }: { org: Org }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: `color-mix(in srgb, var(--v-${lab ? 'purple' : 'blue'}-base) 20%, transparent)`,
+            background: `color-mix(in srgb, var(--tone-${lab ? 'purple' : 'blue'}) 20%, transparent)`,
           }}
         >
-          <Icon name={lab ? 'mdi-flask-outline' : 'mdi-account-group-outline'} size={24} color={`var(--v-${lab ? 'purple' : 'blue'}-base)`} />
+          <Icon name={lab ? 'mdi-flask-outline' : 'mdi-account-group-outline'} size={24} color={`var(--tone-${lab ? 'purple' : 'blue'})`} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <h3 className="overflow-ellipsis" style={{ fontSize: '1.0625rem', fontWeight: 500 }}>

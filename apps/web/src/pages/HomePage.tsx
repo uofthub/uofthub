@@ -147,7 +147,7 @@ function FeatureCards() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: `var(--v-${feature.colour}-base)`,
+              background: `var(--tone-${feature.colour})`,
             }}
           >
             <Icon name={feature.icon} size={30} color="#fff" />

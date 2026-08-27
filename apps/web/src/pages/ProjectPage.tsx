@@ -98,7 +98,7 @@ function InviteDialog({ projectId, onClose }: { projectId: string; onClose: () =
       <DialogTitle onClose={onClose}>Invite collaborator</DialogTitle>
       <div style={{ padding: 22 }}>
         {mutation.isSuccess ? (
-          <p style={{ color: 'var(--v-success-base)', margin: 0 }}>
+          <p style={{ color: 'var(--tone-success)', margin: 0 }}>
             <Icon name="mdi-check-circle-outline" /> Invitation sent.
           </p>
         ) : (
@@ -341,7 +341,7 @@ export default function ProjectPage() {
                 <Btn
                   variant="outlined"
                   onClick={() => confirm('Delete this project?') && deleteMutation.mutate()}
-                  style={{ color: 'var(--v-error-base)', borderColor: 'var(--v-error-base)' }}
+                  style={{ color: 'var(--tone-error)', borderColor: 'var(--tone-error)' }}
                 >
                   <Icon name="mdi-delete-outline" size={18} />
                   Delete
@@ -406,7 +406,7 @@ export default function ProjectPage() {
             variant="outlined"
             onClick={() => me && likeMutation.mutate()}
             disabled={!me || likeMutation.isPending}
-            style={liked ? { color: 'var(--v-red-base)', borderColor: 'var(--v-red-base)' } : undefined}
+            style={liked ? { color: 'var(--tone-red)', borderColor: 'var(--tone-red)' } : undefined}
           >
             <Icon name={liked ? 'mdi-heart' : 'mdi-heart-outline'} size={18} />
             {project._count.likes} {liked ? 'Liked' : 'Like'}

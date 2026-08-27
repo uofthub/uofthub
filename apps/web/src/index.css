@@ -40,9 +40,30 @@
     --v-yellow-base: #ffeca4;
     --v-yellowText-base: #958116;
 
+    /* Saturated tones: readable as text/icons/fills against this theme's page
+       background. Chips tint these at 20%. In light mode that is the darker
+       half of each palette pair; in dark mode it is the lighter half. */
+    --tone-red: #ed0037;
+    --tone-orange: #c46e02;
+    --tone-blue: #1976d2;
+    --tone-green: #3d9941;
+    --tone-grey: #686666;
+    --tone-purple: #8810cc;
+    --tone-mint: #338a66;
+    --tone-pink: #c81bbd;
+    --tone-yellow: #958116;
+    --tone-accent: #003c85;
+    --tone-success: #067a53;
+    --tone-error: #d40000;
+    --tone-warning: #b35f00;
+
     --text-primary: rgba(0, 0, 0, 0.87);
     --text-secondary: rgba(0, 0, 0, 0.6);
     --text-disabled: rgba(0, 0, 0, 0.38);
+    /* The theme's border colour is too faint to outline an input or draw a
+       rule on white; cards still read from their elevation shadow. */
+    --field-border: rgba(0, 0, 0, 0.24);
+    --divider: rgba(0, 0, 0, 0.12);
     --overlay: rgba(33, 33, 33, 0.46);
     --hover-overlay: rgba(0, 0, 0, 0.04);
     --footer-bg: #f3f4f6;
@@ -82,9 +103,25 @@
     --v-yellow-base: #ead582;
     --v-yellowText-base: #5c511a;
 
+    --tone-red: #d25276;
+    --tone-orange: #eabb83;
+    --tone-blue: #7db9ee;
+    --tone-green: #7fc683;
+    --tone-grey: #dbdbdb;
+    --tone-purple: #bd93e8;
+    --tone-mint: #9ad9c4;
+    --tone-pink: #dd9dce;
+    --tone-yellow: #ead582;
+    --tone-accent: #1976d2;
+    --tone-success: #06be7c;
+    --tone-error: #bf1537;
+    --tone-warning: #fb8c00;
+
     --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.7);
     --text-disabled: rgba(255, 255, 255, 0.5);
+    --field-border: var(--v-border-base);
+    --divider: var(--v-border-base);
     --overlay: rgba(0, 0, 0, 0.6);
     --hover-overlay: rgba(255, 255, 255, 0.08);
     --footer-bg: #1a1a1a;
@@ -337,7 +374,7 @@
     color: #fff;
   }
   .v-btn--outlined {
-    border: 1px solid var(--v-border-base);
+    border: 1px solid var(--field-border);
     color: var(--text-secondary);
   }
   .v-btn--outlined:hover:not(:disabled) {
@@ -422,7 +459,7 @@
     gap: 8px;
     width: 100%;
     background: var(--v-component-base);
-    border: 1px solid var(--v-border-base);
+    border: 1px solid var(--field-border);
     border-radius: 6px;
     padding: 0 12px;
     min-height: 44px;
@@ -527,13 +564,13 @@
   /* ---------- Divider ---------- */
   .v-divider {
     border: none;
-    border-top: 1px solid var(--v-border-base);
+    border-top: 1px solid var(--divider);
     margin: 0;
     width: 100%;
   }
   .v-divider--vertical {
     border-top: none;
-    border-left: 1px solid var(--v-border-base);
+    border-left: 1px solid var(--divider);
     width: 0;
     align-self: stretch;
   }

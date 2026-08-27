@@ -64,7 +64,7 @@ export default function AboutPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: `var(--v-${p.colour}-base)`,
+                background: `var(--tone-${p.colour})`,
               }}
             >
               <Icon name={p.icon} size={24} color="#fff" />
