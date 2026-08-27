@@ -30,6 +30,12 @@ export async function buildApp() {
     limits: { fileSize: 50 * 1024 * 1024 },
   })
 
+  // Authority segment. A tenant GUID only admits users homed in that tenant, so
+  // signing in with a utoronto.ca account requires the multitenant authority
+  // `organizations` (any work/school tenant). Domain access is enforced on the
+  // callback in routes/auth.ts, not here.
+  const tenant = process.env.MICROSOFT_TENANT_ID || 'organizations'
+
   await app.register(oauth2, {
     name: 'microsoftOAuth2',
     credentials: {
@@ -39,9 +45,9 @@ export async function buildApp() {
       },
       auth: {
         authorizeHost: 'https://login.microsoftonline.com',
-        authorizePath: `/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`,
+        authorizePath: `/${tenant}/oauth2/v2.0/authorize`,
         tokenHost: 'https://login.microsoftonline.com',
-        tokenPath: `/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+        tokenPath: `/${tenant}/oauth2/v2.0/token`,
       },
     },
     startRedirectPath: '/auth/microsoft',
