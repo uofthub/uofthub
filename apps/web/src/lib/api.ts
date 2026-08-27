@@ -117,9 +117,6 @@ export const api = {
     requestAccess: (id: string) => request<{ ok: boolean }>(`/projects/${id}/request-access`, { method: 'POST', body: '{}' }),
     accessRequests: (id: string) => request<unknown[]>(`/projects/${id}/access-requests`),
   },
-  discover: {
-    search: (q: string) => request<{ params: Record<string, string>; projects: ProjectSummary[] }>(`/discover?q=${encodeURIComponent(q)}`),
-  },
   orgs: {
     list: () => request<Org[]>('/orgs'),
     get: (slug: string) => request<Org & { members: unknown[]; projects: unknown[] }>(`/orgs/${slug}`),

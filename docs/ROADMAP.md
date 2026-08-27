@@ -53,9 +53,6 @@ Goal: a working platform that a real U of T student can use to publish and share
 **Access**
 - [x] Formalized TA / professor invite-to-view workflow — faculty users can request VIEWER access; owner approves via collaborator panel
 
-**Discovery**
-- [x] AI-powered project discovery — natural language search via Claude (requires ANTHROPIC_API_KEY in .env)
-
 ---
 
 ## Phase 3 — Student groups & integrations
@@ -75,6 +72,9 @@ Full spec: [docs/student-groups.md](student-groups.md).
 
 ## Later / Exploratory
 
+AI features are deliberately last: they're the easiest layer to bolt on once the core product (accounts, projects, groups) is solid, and the most likely to get reworked once there's real usage to design against.
+
+- AI-powered project discovery — natural language search via Claude. Was implemented (`/discover`, `ANTHROPIC_API_KEY`) and then pulled back out of the codebase to keep AI work scoped to this phase; spec preserved in [prd.md § 7](prd.md#7-feature-set) for whenever this phase starts
 - File uploads (requires object storage: S3 or compatible)
 - Collaborative editing (requires WebSocket infrastructure)
 - Alumni-persistent portfolios (profile persists post-graduation)

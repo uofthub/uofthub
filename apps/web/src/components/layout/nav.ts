@@ -28,7 +28,6 @@ export const navSections: NavSection[] = [
     icon: '',
     options: [
       { page: 'Projects', icon: 'mdi-view-grid-outline', link: '/projects', internal: 1 },
-      { page: 'Discover', icon: 'mdi-creation', link: '/discover', internal: 1, beta: true },
       { page: 'Clubs & Labs', icon: 'mdi-account-group-outline', link: '/orgs', internal: 1 },
       { page: 'Share', icon: 'mdi-plus-box-outline', link: '/projects/new', internal: 1, new: true },
     ],

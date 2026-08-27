@@ -3,7 +3,6 @@ import Layout from './components/Layout'
 import HomePage from './pages/HomePage.tsx'
 import SessionPage from './pages/SessionPage.tsx'
 import DirectoryPage from './pages/DirectoryPage.tsx'
-import DiscoverPage from './pages/DiscoverPage.tsx'
 import ProjectPage from './pages/ProjectPage.tsx'
 import CreateProjectPage from './pages/CreateProjectPage.tsx'
 import ProfilePage from './pages/ProfilePage.tsx'
@@ -21,7 +20,6 @@ export default function App() {
         <Route path="/projects" element={<DirectoryPage />} />
         <Route path="/projects/new" element={<CreateProjectPage />} />
         <Route path="/projects/:id" element={<ProjectPage />} />
-        <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/orgs" element={<OrgsPage />} />
         <Route path="/orgs/:slug" element={<OrgPage />} />
         <Route path="/u/:id" element={<ProfilePage />} />

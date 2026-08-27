@@ -30,7 +30,6 @@ export function usePageCrumbs(items: Crumb[]) {
 const FALLBACK_LABELS: Record<string, string> = {
   projects: 'Projects',
   orgs: 'Clubs & Labs',
-  discover: 'Discover',
   courses: 'Tags',
   about: 'About',
   u: 'People',

@@ -111,10 +111,11 @@ Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual p
 - Collaborative editing
 - Project analytics (views, engagement)
 - Course pages, club pages, research lab pages
-- AI-powered project discovery ("show me AI projects built by U of T students in the last year")
 - TA/Professor invite-to-view workflow, formalized
 
 ### Later / Exploratory
+AI features are deliberately last — see [ROADMAP.md § Later / Exploratory](ROADMAP.md#later--exploratory).
+- AI-powered project discovery ("show me AI projects built by U of T students in the last year")
 - Research study on discovery/collaboration/publishing behavior (privacy-preserving, aggregate data)
 - Potential official U of T subdomain/hosting, once there's real traction
 - Alumni-persistent portfolios
