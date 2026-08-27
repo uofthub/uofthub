@@ -1,15 +1,140 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="514 77 508 540" width="508" height="540" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="514 77 508 540"
+     width="508"
+     height="540"
+     fill="none">
+
   <title>UofTHub mark</title>
+
   <defs>
-    <clipPath id="uh-clip"><path d="M514,60H1022V410C1022.0,534.2 920.4,617.0 768.0,617.0C615.6,617.0 514.0,534.2 514.0,410.0Z"/></clipPath>
+    <!-- Outer U silhouette: trims the bottom of the tower to the curve -->
+    <clipPath id="uh-clip">
+      <path d="M514,60H1022V410C1022,534.2 920.4,617 768,617C615.6,617 514,534.2 514,410Z"/>
+    </clipPath>
+
+    <!--
+      SEPARATION SLITS
+      Two thin transparent slits run down either side of the tower.
+      They START at y=512, just below the U's inner curve (~y=500),
+      and run out past the outer curve (~y=613).
+      That leaves a thin dark strip at the TOP where the inner edge
+      of the U meets the tower base - the halves hang off that strip.
+    -->
+    <mask id="u-slits" maskUnits="userSpaceOnUse" x="480" y="40" width="580" height="620">
+      <rect x="480" y="40" width="580" height="620" fill="#FFFFFF"/>
+      <rect x="713" y="512" width="5" height="120" fill="#000000"/>
+      <rect x="818" y="512" width="5" height="120" fill="#000000"/>
+
+      <!-- Entrance arch: also punched out of the U, since the U's bottom
+           band sits directly behind it and would otherwise fill the hole -->
+      <path d="M745,624V538A23,23 0 0 1 791,538V624Z" fill="#000000"/>
+    </mask>
+
+    <!-- Punches the old white shapes out of the tower so they read as transparent -->
+    <mask id="tower-holes" maskUnits="userSpaceOnUse" x="640" y="150" width="260" height="520">
+      <rect x="640" y="150" width="260" height="520" fill="#FFFFFF"/>
+
+      <!-- Belfry windows -->
+      <path d="M749.5,346V320A6,6 0 0 1 761.5,320V346Z" fill="#000000"/>
+      <path d="M774.5,346V320A6,6 0 0 1 786.5,320V346Z" fill="#000000"/>
+
+      <!-- Lower windows -->
+      <path d="M742.5,470V439.5A5.5,5.5 0 0 1 753.5,439.5V470Z" fill="#000000"/>
+      <path d="M762.5,470V439.5A5.5,5.5 0 0 1 773.5,439.5V470Z" fill="#000000"/>
+      <path d="M782.5,470V439.5A5.5,5.5 0 0 1 793.5,439.5V470Z" fill="#000000"/>
+
+      <!-- Entrance arch -->
+      <path d="M745,624V538A23,23 0 0 1 791,538V624Z" fill="#000000"/>
+    </mask>
   </defs>
-  <path d="M514,153H663V440C663.0,477.6 710.0,508.0 768.0,508.0C826.0,508.0 873.0,477.6 873.0,440.0V273H1022V410C1022.0,534.2 920.4,617.0 768.0,617.0C615.6,617.0 514.0,534.2 514.0,410.0Z" fill="#002658"/>
-  <path d="M873,77H917A105,105 0 0 1 1022,182V249H873Z" fill="#0090F9"/>
-  <g clip-path="url(#uh-clip)">
-    <path d="M741.0,287C741.0,258 751.0,245 764.5,245V213.5A3.5,3.5 0 0 1 771.5,213.5V245C785.0,245 795.0,258 795.0,287ZM731,290H805A3,3 0 0 1 808,293V306H800V347H803V352H806V363H808V366H810A8,8 0 0 1 818,374V404A8,8 0 0 1 810,412H726A8,8 0 0 1 718,404V374A8,8 0 0 1 726,366H728V363H730V352H733V347H736V306H728V293A3,3 0 0 1 731,290ZM725,414H811A2,2 0 0 1 813,416V470H818V624H718V470H723V416A2,2 0 0 1 725,414Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
-    <path d="M741.0,287C741.0,258 751.0,245 764.5,245V213.5A3.5,3.5 0 0 1 771.5,213.5V245C785.0,245 795.0,258 795.0,287ZM731,290H805A3,3 0 0 1 808,293V306H800V347H803V352H806V363H808V366H810A8,8 0 0 1 818,374V404A8,8 0 0 1 810,412H726A8,8 0 0 1 718,404V374A8,8 0 0 1 726,366H728V363H730V352H733V347H736V306H728V293A3,3 0 0 1 731,290ZM725,414H811A2,2 0 0 1 813,416V470H818V624H718V470H723V416A2,2 0 0 1 725,414ZM749.5,346.0V320.0A6.0,6.0 0 0 1 761.5,320.0V346.0ZM774.5,346.0V320.0A6.0,6.0 0 0 1 786.5,320.0V346.0ZM742.5,470.0V439.5A5.5,5.5 0 0 1 753.5,439.5V470.0ZM762.5,470.0V439.5A5.5,5.5 0 0 1 773.5,439.5V470.0ZM782.5,470.0V439.5A5.5,5.5 0 0 1 793.5,439.5V470.0ZM745.0,624.0V538.0A23.0,23.0 0 0 1 791.0,538.0V624.0Z" fill-rule="evenodd" fill="#002658"/>
-    <circle cx="768" cy="386" r="20" fill="#AAB7C9"/>
-    <path d="M770.1,386.0L770.1,372.5L765.9,372.5L765.9,386.0ZM769.0,387.8L777.3,383.1L775.2,379.4L767.0,384.2Z" fill="#002658"/>
-    <circle cx="768" cy="386" r="3.2" fill="#002658"/>
+
+
+  <!-- ===== THE U — split by two thin slits, joined at the bottom ===== -->
+  <g mask="url(#u-slits)">
+    <path
+      d="M514,153H663V440C663,477.6 710,508 768,508C826,508 873,477.6 873,440V273H1022V410C1022,534.2 920.4,617 768,617C615.6,617 514,534.2 514,410Z"
+      fill="#002658"
+    />
   </g>
+
+  <!-- ===== BRIGHT BLUE SECTION ===== -->
+  <path
+    d="M840,77H917A105,105 0 0 1 1022,182V249H840Z"
+    fill="#0090F9"
+  />
+
+
+  <!-- ===== CLOCK TOWER ===== -->
+  <g clip-path="url(#uh-clip)">
+
+    <g mask="url(#tower-holes)">
+      <path
+        d="
+          M741,287
+          C741,258 751,245 764.5,245
+          V213.5
+          A3.5,3.5 0 0 1 771.5,213.5
+          V245
+          C785,245 795,258 795,287
+
+          H805
+          A3,3 0 0 1 808,293
+          V306
+          H800
+          V347
+          H803
+          V352
+          H806
+          V363
+          H808
+          V366
+          H810
+          A8,8 0 0 1 818,374
+          V404
+          A8,8 0 0 1 810,412
+          H726
+          A8,8 0 0 1 718,404
+          V374
+          A8,8 0 0 1 726,366
+          H728
+          V363
+          H730
+          V352
+          H733
+          V347
+          H736
+          V306
+          H728
+          V293
+          A3,3 0 0 1 731,290
+          Z
+
+          M725,414
+          H811
+          A2,2 0 0 1 813,416
+          V470
+          H818
+          V624
+          H718
+          V470
+          H723
+          V416
+          A2,2 0 0 1 725,414
+          Z
+        "
+        fill="#002658"
+        fill-rule="evenodd"
+      />
+    </g>
+
+    <!-- Clock face (drawn after the mask so it isn't punched out) -->
+    <circle cx="768" cy="386" r="20" fill="#AAB7C9"/>
+    <path
+      d="M770.1,386V372.5H765.9V386ZM769,387.8L777.3,383.1L775.2,379.4L767,384.2Z"
+      fill="#002658"
+    />
+    <circle cx="768" cy="386" r="3.2" fill="#002658"/>
+
+  </g>
+
 </svg>
