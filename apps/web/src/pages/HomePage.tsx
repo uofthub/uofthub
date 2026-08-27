@@ -177,8 +177,9 @@ export default function HomePage() {
     <div>
       <Hero />
 
-      {/* Product preview */}
-      <section style={{ padding: '0 24px' }}>
+      {/* Product preview. Positioned so it paints above the hero's shape layer,
+          which is a viewport tall and overhangs the hero itself. */}
+      <section style={{ padding: '0 24px', position: 'relative', zIndex: 1 }}>
         <div className="contentMaxWidth">
           <img
             src={heroPreview}

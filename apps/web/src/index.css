@@ -716,12 +716,22 @@
    Hero shapes — ported from Home.vue's SCSS (rendered with static values)
    ========================================================================== */
 
+/*
+ * The shape transforms below are expressed in vw/vh, so this layer has to be a
+ * full viewport-sized coordinate space or the offsets land somewhere else.
+ * Anchored to the hero's top and re-centred on the viewport with left/translate,
+ * so the hero's own padding and max-width do not shift the shapes sideways.
+ */
 .animatedShapes {
   position: absolute;
-  inset: 0;
-  margin-top: 12vh;
+  top: 0;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  transform: translateX(-50%);
   overflow: hidden;
   pointer-events: none;
+  z-index: 0;
 }
 .animatedShapes span,
 .animatedShapes span::before,
