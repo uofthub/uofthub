@@ -5,6 +5,7 @@ import { useUI } from '../lib/ui'
 import { Btn, Card, Divider, Icon, TextField } from '../components/ui'
 import { GITHUB_URL } from '../components/layout/nav'
 import Mark from '../components/Mark'
+import Logo from '../components/Logo'
 import heroPreview from '../assets/hero.png'
 
 const SHAPES = ['purple', 'blue', 'light-blue', 'red', 'orange', 'cyan'] as const
@@ -105,7 +106,8 @@ function Hero() {
       )}
 
       <div className="contentMaxWidth" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
-        <Mark size={113} className="floating" />
+        {/* margin auto, not text-align: the logo is a block and would sit flush left */}
+        <Logo width="clamp(240px, 30vw, 380px)" className="floating" style={{ margin: '0 auto' }} />
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 700, marginTop: 24 }}>
           Everything students build
           <br />
@@ -236,7 +238,7 @@ export default function HomePage() {
       {/* Commitment */}
       <section style={{ padding: '0 24px', textAlign: 'center' }}>
         <div className="contentMaxWidth" style={{ maxWidth: 750 }}>
-          <Mark size={122} className="mb-10" />
+          <Mark size={122} style={{ margin: '0 auto 40px' }} />
           <h2 style={{ marginBottom: 16 }}>Our Commitment</h2>
           <p>
             uofthub is open source and built by students, for students. It is not officially affiliated with the

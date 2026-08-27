@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type CSSProperties } from 'react'
 
 /**
  * The uofthub mark, inline so its fills can be varied per placement.
@@ -18,12 +18,15 @@ export default function Mark({
   size = 34,
   tone = 'brand',
   className,
+  style,
   title,
 }: {
   size?: number
   /** `white` for navy or dark surfaces; `brand` (navy) everywhere else. */
   tone?: 'brand' | 'white'
   className?: string
+  /** The mark renders as a block, so centring needs `margin: '0 auto'`. */
+  style?: CSSProperties
   /** Give the mark an accessible name; omit it when the mark is decorative. */
   title?: string
 }) {
@@ -44,7 +47,7 @@ export default function Mark({
       className={['mark', tone === 'white' && 'mark--white', className].filter(Boolean).join(' ')}
       role={title ? 'img' : 'presentation'}
       aria-hidden={title ? undefined : true}
-      style={{ display: 'block', flexShrink: 0 }}
+      style={{ display: 'block', flexShrink: 0, ...style }}
     >
       {title && <title>{title}</title>}
 
