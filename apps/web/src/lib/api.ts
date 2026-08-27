@@ -73,6 +73,16 @@ export const api = {
   auth: {
     me: () => request<MeUser>('/auth/me'),
     logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+    login: (body: { email: string; password: string }) =>
+      request<{ id: string; email: string; name: string }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    register: (body: { name: string; email: string; password: string }) =>
+      request<{ id: string; email: string; name: string }>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
   projects: {
     list: (params?: { search?: string; faculty?: string; sort?: string; skip?: number }) => {

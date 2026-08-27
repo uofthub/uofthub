@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { useUI } from '../lib/ui'
-import { Btn, Chip, Divider, Icon, cx } from '../components/ui'
+import { api } from '../lib/api'
+import { Btn, Chip, Divider, ErrorText, Field, Icon, TextField, cx } from '../components/ui'
 import mark from '../assets/uofthub-mark.svg'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
+
+/** Matches the domain rule the API enforces on /auth/register. */
+const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
+const MIN_PASSWORD_LENGTH = 10
 
 const HIGHLIGHTS = [
   { icon: 'mdi-shield-check-outline', text: 'Verified with your @mail.utoronto.ca account' },
@@ -14,6 +20,97 @@ const HIGHLIGHTS = [
 ]
 
 type Mode = 'login' | 'signup'
+
+/** Email + password form. Microsoft stays available above it. */
+function CredentialsForm({ mode }: { mode: Mode }) {
+  const { refetch } = useAuth()
+  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [showPassword, setShowPassword] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      mode === 'login'
+        ? api.auth.login({ email: form.email, password: form.password })
+        : api.auth.register({ name: form.name, email: form.email, password: form.password }),
+    // The session cookie is set by the response; refetch drives the redirect.
+    onSuccess: () => refetch(),
+  })
+
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const email = form.email.trim().toLowerCase()
+  const domainOk = !email || UOFT_DOMAINS.some(d => email.endsWith(d))
+  const complete =
+    email &&
+    form.password.length > 0 &&
+    (mode === 'login' || (form.name.trim() && form.password.length >= MIN_PASSWORD_LENGTH))
+
+  return (
+    <form
+      onSubmit={e => {
+        e.preventDefault()
+        if (complete && domainOk) mutation.mutate()
+      }}
+      style={{ display: 'grid', gap: 16 }}
+    >
+      {mode === 'signup' && (
+        <Field label="Full name">
+          <TextField
+            value={form.name}
+            onChange={set('name')}
+            autoComplete="name"
+            placeholder="Jordan Lee"
+          />
+        </Field>
+      )}
+
+      <Field label="U of T email" hint={domainOk ? undefined : 'Use your utoronto.ca address.'}>
+        <TextField
+          type="email"
+          value={form.email}
+          onChange={set('email')}
+          autoComplete="email"
+          placeholder="you@mail.utoronto.ca"
+        />
+      </Field>
+
+      <Field
+        label="Password"
+        hint={mode === 'signup' ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
+      >
+        <TextField
+          type={showPassword ? 'text' : 'password'}
+          value={form.password}
+          onChange={set('password')}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          placeholder="••••••••••"
+          appendIcon={
+            <Btn
+              icon
+              onClick={() => setShowPassword(s => !s)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <Icon name={showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'} size={20} />
+            </Btn>
+          }
+        />
+      </Field>
+
+      {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
+
+      <Btn variant="accent" size="large" block type="submit" disabled={!complete || !domainOk || mutation.isPending}>
+        {mutation.isPending
+          ? mode === 'login'
+            ? 'Signing in…'
+            : 'Creating account…'
+          : mode === 'login'
+            ? 'Log in'
+            : 'Create account'}
+      </Btn>
+    </form>
+  )
+}
 
 /**
  * Log in / Sign up. Rendered without the app bar or drawer, the way
@@ -138,20 +235,22 @@ export default function SessionPage() {
               : 'Any current student, alum or faculty member with a U of T email can join.'}
           </p>
 
-          <Btn variant="accent" size="large" block onClick={signIn} style={{ marginTop: 24 }}>
-            <Icon name="mdi-microsoft" size={20} color="#fff" />
+          <Btn variant="outlined" size="large" block onClick={signIn} style={{ marginTop: 24 }}>
+            <Icon name="mdi-microsoft" size={20} />
             {mode === 'login' ? 'Continue with UTORid' : 'Sign up with UTORid'}
           </Btn>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>
             <Divider />
             <span className="text--disabled" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-              ACCEPTED DOMAINS
+              OR WITH EMAIL
             </span>
             <Divider />
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <CredentialsForm key={mode} mode={mode} />
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 24 }}>
             <Chip small color="blue">
               @mail.utoronto.ca
             </Chip>
@@ -160,7 +259,7 @@ export default function SessionPage() {
             </Chip>
           </div>
 
-          <p className="text--disabled" style={{ fontSize: '0.8125rem', marginTop: 28, textAlign: 'center' }}>
+          <p className="text--disabled" style={{ fontSize: '0.8125rem', marginTop: 20, textAlign: 'center' }}>
             By continuing you agree that anything you mark public can be seen by anyone on the internet.
           </p>
         </div>

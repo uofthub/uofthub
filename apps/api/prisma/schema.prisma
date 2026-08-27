@@ -28,6 +28,8 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   name      String
+  /// scrypt hash; null for accounts that only ever signed in with Microsoft.
+  passwordHash String?
   faculty   String?
   program   String?
   classYear Int?

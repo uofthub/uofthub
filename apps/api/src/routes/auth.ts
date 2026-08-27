@@ -1,10 +1,34 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify'
 import { db } from '../db/client.js'
+import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/password.js'
 
 const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
 
 function getRole(email: string): 'STUDENT' | 'FACULTY' {
   return email.endsWith('@utoronto.ca') ? 'FACULTY' : 'STUDENT'
+}
+
+const isUofTEmail = (email: string) => UOFT_DOMAINS.some((domain) => email.endsWith(domain))
+
+/** Signs our JWT and attaches it as the session cookie. */
+function issueSession(
+  app: FastifyInstance,
+  reply: FastifyReply,
+  user: { id: string; email: string },
+) {
+  const token = app.jwt.sign({
+    sub: user.id,
+    email: user.email,
+    role: getRole(user.email),
+  })
+
+  reply.setCookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  })
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -46,35 +70,96 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const name = graphUser.displayName ?? email
 
     // Enforce U of T domain
-    if (!UOFT_DOMAINS.some((domain) => email.endsWith(domain))) {
+    if (!isUofTEmail(email)) {
       return reply
         .code(403)
         .send({ error: 'A University of Toronto account is required to sign in.' })
     }
 
-    // Upsert user in DB
+    // Upsert user in DB. Never touches passwordHash, so linking Microsoft to an
+    // existing password account leaves that password working.
     const user = await db.user.upsert({
       where: { email },
       update: { name },
       create: { email, name },
     })
 
-    // Issue our own JWT as an httpOnly cookie
-    const jwtToken = app.jwt.sign({
-      sub: user.id,
-      email: user.email,
-      role: getRole(email),
+    issueSession(app, reply, user)
+    return reply.redirect(process.env.WEB_URL ?? 'http://localhost:5173')
+  })
+
+  // POST /auth/register — email + password sign-up
+  app.post<{ Body: { email?: string; password?: string; name?: string } }>(
+    '/register',
+    async (request, reply) => {
+      const email = (request.body?.email ?? '').trim().toLowerCase()
+      const password = request.body?.password ?? ''
+      const name = (request.body?.name ?? '').trim()
+
+      if (!email || !password || !name) {
+        return reply.code(400).send({ error: 'Name, email and password are all required.' })
+      }
+      if (!isUofTEmail(email)) {
+        return reply
+          .code(403)
+          .send({ error: 'Sign up with your @mail.utoronto.ca or @utoronto.ca address.' })
+      }
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        return reply
+          .code(400)
+          .send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+      }
+
+      const existing = await db.user.findUnique({
+        where: { email },
+        select: { id: true, passwordHash: true },
+      })
+
+      if (existing?.passwordHash) {
+        return reply.code(409).send({ error: 'An account with that email already exists.' })
+      }
+
+      const passwordHash = await hashPassword(password)
+
+      // An account may already exist from a Microsoft sign-in. Setting a
+      // password on it links the two methods rather than colliding.
+      const user = existing
+        ? await db.user.update({ where: { email }, data: { passwordHash } })
+        : await db.user.create({ data: { email, name, passwordHash } })
+
+      issueSession(app, reply, user)
+      return reply.code(201).send({ id: user.id, email: user.email, name: user.name })
+    },
+  )
+
+  // POST /auth/login — email + password sign-in
+  app.post<{ Body: { email?: string; password?: string } }>('/login', async (request, reply) => {
+    const email = (request.body?.email ?? '').trim().toLowerCase()
+    const password = request.body?.password ?? ''
+
+    if (!email || !password) {
+      return reply.code(400).send({ error: 'Email and password are required.' })
+    }
+
+    const user = await db.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, name: true, passwordHash: true },
     })
 
-    reply
-      .setCookie('token', jwtToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      })
-      .redirect(process.env.WEB_URL ?? 'http://localhost:5173')
+    // Distinguishing "no password set" from "wrong password" is worth the small
+    // disclosure here: without it, OAuth users get stuck with no way to know why.
+    if (user && !user.passwordHash) {
+      return reply
+        .code(409)
+        .send({ error: 'That account signs in with Microsoft. Use the UTORid button instead.' })
+    }
+
+    if (!user || !(await verifyPassword(password, user.passwordHash!))) {
+      return reply.code(401).send({ error: 'Incorrect email or password.' })
+    }
+
+    issueSession(app, reply, user)
+    return { id: user.id, email: user.email, name: user.name }
   })
 
   // POST /auth/logout
