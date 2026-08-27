@@ -80,6 +80,11 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
     if (followerId === followingId) return reply.code(400).send({ error: 'Cannot follow yourself' })
 
+    // Without this, following a nonexistent id fails the foreign key and
+    // surfaces as a 500 rather than a 404.
+    const target = await db.user.findUnique({ where: { id: followingId }, select: { id: true } })
+    if (!target) return reply.code(404).send({ error: 'User not found' })
+
     const existing = await db.follow.findUnique({
       where: { followerId_followingId: { followerId, followingId } },
     })

@@ -80,6 +80,17 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!member) return reply.code(403).send({ error: 'Not a member of this org' })
 
+      // Only the project's owner may attach it: org membership alone must not
+      // let someone list another person's project under their group.
+      const project = await db.project.findUnique({
+        where: { id: request.body.projectId },
+        select: { ownerId: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Project not found' })
+      if (project.ownerId !== request.user.sub) {
+        return reply.code(403).send({ error: 'Only the project owner can link it to an org' })
+      }
+
       const link = await db.orgProject.upsert({
         where: { orgId_projectId: { orgId: org.id, projectId: request.body.projectId } },
         update: {},
@@ -102,7 +113,10 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       })
       if (requester?.role !== 'ADMIN') return reply.code(403).send({ error: 'Admins only' })
 
-      const user = await db.user.findUnique({ where: { email: request.body.email } })
+      // Emails are stored lowercased at sign-up, so normalize before lookup.
+      const user = await db.user.findUnique({
+        where: { email: (request.body.email ?? '').trim().toLowerCase() },
+      })
       if (!user) return reply.code(404).send({ error: 'User not found' })
 
       const member = await db.orgMember.upsert({

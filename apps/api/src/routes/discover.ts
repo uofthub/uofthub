@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/client.js'
+import { visibleProjectWhere } from '../lib/visibility.js'
 
 let anthropic: Anthropic | null = null
 
@@ -83,18 +84,26 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const projects = await db.project.findMany({
+      // AND-composed so the visibility OR and the search OR cannot clobber
+      // each other. This route is authenticated, so callerId is always set.
       where: {
-        visibility: 'PUBLIC',
-        ...(params.search && {
-          OR: [
-            { title: { contains: params.search, mode: 'insensitive' } },
-            { description: { contains: params.search, mode: 'insensitive' } },
-            { tags: { has: params.search } },
-          ],
-        }),
-        ...(params.faculty && {
-          owner: { faculty: { contains: params.faculty, mode: 'insensitive' } },
-        }),
+        AND: [
+          visibleProjectWhere(request.user.sub),
+          ...(params.search
+            ? [
+                {
+                  OR: [
+                    { title: { contains: params.search, mode: 'insensitive' as const } },
+                    { description: { contains: params.search, mode: 'insensitive' as const } },
+                    { tags: { has: params.search } },
+                  ],
+                },
+              ]
+            : []),
+          ...(params.faculty
+            ? [{ owner: { faculty: { contains: params.faculty, mode: 'insensitive' as const } } }]
+            : []),
+        ],
       },
       include: {
         owner: { select: { id: true, name: true, faculty: true } },

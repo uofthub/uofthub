@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
-import { canViewProject, canViewProjectId, getOptionalUserId } from '../lib/visibility.js'
+import {
+  canViewProject,
+  canViewProjectId,
+  getOptionalUserId,
+  visibleProjectWhere,
+} from '../lib/visibility.js'
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -8,6 +13,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     Querystring: { search?: string; faculty?: string; sort?: string; take?: string; skip?: string }
   }>('/', async (request) => {
     const { search, faculty, sort, take = '20', skip = '0' } = request.query
+    const callerId = await getOptionalUserId(request)
 
     const orderBy =
       sort === 'trending'
@@ -15,18 +21,26 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         : [{ createdAt: 'desc' as const }]
 
     const projects = await db.project.findMany({
+      // AND-composed: the visibility fragment also uses OR, so spreading it
+      // alongside the search OR would silently drop one of them.
       where: {
-        visibility: 'PUBLIC',
-        ...(search && {
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-            { tags: { has: search } },
-          ],
-        }),
-        ...(faculty && {
-          owner: { faculty: { equals: faculty, mode: 'insensitive' } },
-        }),
+        AND: [
+          visibleProjectWhere(callerId),
+          ...(search
+            ? [
+                {
+                  OR: [
+                    { title: { contains: search, mode: 'insensitive' as const } },
+                    { description: { contains: search, mode: 'insensitive' as const } },
+                    { tags: { has: search } },
+                  ],
+                },
+              ]
+            : []),
+          ...(faculty
+            ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
+            : []),
+        ],
       },
       include: {
         owner: { select: { id: true, name: true, faculty: true } },
@@ -63,17 +77,20 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: 'Not found' })
     }
 
-    // Increment view count and upsert daily analytics
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    await Promise.all([
-      db.project.update({ where: { id: project.id }, data: { viewCount: { increment: 1 } } }),
-      db.projectDailyView.upsert({
-        where: { projectId_date: { projectId: project.id, date: today } },
-        update: { count: { increment: 1 } },
-        create: { projectId: project.id, date: today, count: 1 },
-      }),
-    ])
+    // Count views from everyone except the owner, so analytics reflect real
+    // interest rather than the owner reloading their own page.
+    if (callerId !== project.ownerId) {
+      const today = new Date()
+      today.setUTCHours(0, 0, 0, 0)
+      await Promise.all([
+        db.project.update({ where: { id: project.id }, data: { viewCount: { increment: 1 } } }),
+        db.projectDailyView.upsert({
+          where: { projectId_date: { projectId: project.id, date: today } },
+          update: { count: { increment: 1 } },
+          create: { projectId: project.id, date: today, count: 1 },
+        }),
+      ])
+    }
 
     return project
   })
@@ -217,7 +234,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-      const invitee = await db.user.findUnique({ where: { email: request.body.email } })
+      // Emails are stored lowercased at sign-up, so normalize before lookup.
+      const invitee = await db.user.findUnique({
+        where: { email: (request.body.email ?? '').trim().toLowerCase() },
+      })
       if (!invitee) return reply.code(404).send({ error: 'User not found' })
       if (invitee.id === request.user.sub) return reply.code(400).send({ error: 'Cannot invite yourself' })
 
@@ -238,6 +258,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { id, userId } = request.params
       if (userId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      // Without this, responding to an invite that does not exist throws
+      // Prisma's P2025 and surfaces as a 500.
+      const invite = await db.projectCollaborator.findUnique({
+        where: { projectId_userId: { projectId: id, userId } },
+      })
+      if (!invite) return reply.code(404).send({ error: 'No invitation found' })
 
       const collab = await db.projectCollaborator.update({
         where: { projectId_userId: { projectId: id, userId } },
@@ -292,7 +319,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-      await db.projectLink.delete({ where: { id: request.params.linkId } })
+      // Scope the delete to this project: owning one project must not grant
+      // the ability to delete another project's link by id.
+      const { count } = await db.projectLink.deleteMany({
+        where: { id: request.params.linkId, projectId: project.id },
+      })
+      if (count === 0) return reply.code(404).send({ error: 'Link not found' })
+
       return { ok: true }
     }
   )
@@ -349,11 +382,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const original = await db.project.findUnique({
         where: { id: request.params.id },
-        include: { links: true },
+        include: {
+          links: true,
+          collaborators: { select: { userId: true, accepted: true } },
+        },
       })
       if (!original) return reply.code(404).send({ error: 'Not found' })
-      if (original.visibility === 'PRIVATE' && original.ownerId !== request.user.sub) {
-        return reply.code(403).send({ error: 'Cannot fork a private project' })
+
+      // Same rule as reading it, so collaborators can fork and a private id is
+      // not confirmed by a 403.
+      if (!canViewProject(original, request.user.sub)) {
+        return reply.code(404).send({ error: 'Not found' })
       }
 
       const fork = await db.project.create({
