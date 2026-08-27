@@ -105,7 +105,41 @@ TA/professor access is granted per-project by the student owner (generates a vie
 
 ## File storage
 
-> TBD. Likely object storage (S3-compatible). Size limits and file type restrictions TBD.
+Object storage (S3-compatible, provider TBD).
+
+**Allowed file types** — allowlisted by category rather than a short fixed list, so students aren't forced to convert files before uploading:
+
+| Category | Extensions |
+|---|---|
+| Docs | `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, `.csv`, `.txt`, `.md` |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` |
+| Video | `.mp4`, `.webm` |
+| Audio | `.mp3`, `.wav` |
+| Archives | `.zip` |
+
+Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a security boundary, not a friction one. Storage cost is controlled via per-file/per-project size limits, not by narrowing formats.
+
+**Limits**
+
+| Scope | Limit |
+|---|---|
+| Per-file (docs/images) | 25MB |
+| Per-file (video) | 250MB — larger videos should be hosted externally (YouTube, etc.) and attached via `ProjectLink` instead of uploaded |
+| Per-file (archives) | 100MB |
+| Per-account storage quota | 2GB total |
+| Per-project file count | 20 files (soft cap) |
+
+All checks (type and size) run server-side against the actual file, not the client-declared extension or MIME type.
+
+**Requesting more space**
+
+A student who needs more than the default quota or file-count cap (e.g. a large research dataset or media-heavy final project) can contact the team stating why. Requests are reviewed manually and get a response within 2 business days; approved requests raise that student's limits individually rather than raising the platform-wide default. This keeps defaults tight against misuse while not hard-blocking legitimate edge cases.
+
+**Abuse guardrails**
+
+- Rate-limit uploads per account (per minute/hour) to prevent scripted spam.
+- Server-side type/size validation on every upload, independent of client input.
+- Manual limit increases are per-account opt-in, not self-service, so quota can't be trivially bypassed.
 
 ---
 
