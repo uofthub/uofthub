@@ -14,36 +14,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
+      <header style={{ backgroundColor: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
+        className="sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 no-underline">
             <img src={uoftHubMark} alt="" aria-hidden="true" className="h-8 w-auto" />
-            <span className="font-bold text-[#002658] text-lg tracking-tight">uofthub</span>
+            <span className="font-medium text-white text-lg tracking-tight">uofthub</span>
           </Link>
 
           <nav className="flex items-center gap-4">
             {!loading && (
               user ? (
                 <>
-                  <Link
-                    to={`/u/${user.id}`}
-                    className="text-sm text-gray-700 hover:text-blue-900 font-medium"
-                  >
+                  <Link to={`/u/${user.id}`}
+                    className="text-sm text-[#aaa] hover:text-white font-medium no-underline transition-colors">
                     {user.name}
                   </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm text-gray-500 hover:text-gray-900"
-                  >
+                  <button onClick={handleLogout}
+                    className="text-sm text-[#666] hover:text-[#aaa] transition-colors cursor-pointer">
                     Sign out
                   </button>
                 </>
               ) : (
-                <a
-                  href={`${API_URL}/auth/microsoft`}
-                  className="text-sm bg-blue-900 text-white px-4 py-1.5 rounded-md hover:bg-blue-800 transition-colors"
-                >
+                <a href={`${API_URL}/auth/microsoft`}
+                  className="text-sm no-underline px-4 py-1.5 rounded-lg font-medium transition-colors"
+                  style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}>
                   Sign in with UofT
                 </a>
               )
@@ -52,11 +50,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
+      <main className="flex-1 max-w-6xl mx-auto px-6 py-8 w-full">
         {children}
       </main>
 
-      <footer className="border-t border-gray-200 py-6 text-center text-sm text-gray-400">
+      <footer style={{ borderTop: '1px solid var(--color-border)' }}
+        className="py-6 text-center text-sm text-[#555]">
         uofthub — open-source home for U of T student projects
       </footer>
     </div>

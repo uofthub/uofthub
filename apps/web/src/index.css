@@ -2,12 +2,32 @@
 
 @layer base {
   :root {
-    --color-primary: #00285e;
-    --color-primary-hover: #003c8f;
-    --color-accent: #007fa3;
+    --color-bg: #0f0f0f;
+    --color-surface: #1e1e1e;
+    --color-surface-2: #252525;
+    --color-border: #272727;
+    --color-text: #ffffff;
+    --color-text-secondary: #aaaaaa;
+    --color-primary: #2196f3;
+    --color-primary-hover: #1976d2;
+    --color-success: #06be7c;
+    --color-error: #bf1537;
   }
 
-  body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #333 #1e1e1e;
   }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #1e1e1e; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+  body {
+    @apply antialiased;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: 'Roboto', sans-serif;
+  }
+
+  a { color: var(--color-primary); }
 }
