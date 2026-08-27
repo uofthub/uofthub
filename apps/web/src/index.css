@@ -64,6 +64,12 @@
        rule on white; cards still read from their elevation shadow. */
     --field-border: rgba(0, 0, 0, 0.24);
     --divider: rgba(0, 0, 0, 0.12);
+
+    /* Mark fills. Navy artwork reads well on light surfaces. */
+    --mark-body: #002658;
+    --mark-accent: #0090f9;
+    --mark-clock-face: #aab7c9;
+    --mark-clock-hand: #002658;
     --overlay: rgba(33, 33, 33, 0.46);
     --hover-overlay: rgba(0, 0, 0, 0.04);
     --footer-bg: #f3f4f6;
@@ -122,6 +128,13 @@
     --text-disabled: rgba(255, 255, 255, 0.5);
     --field-border: var(--v-border-base);
     --divider: var(--v-border-base);
+
+    /* The navy body sits at 1.1-1.3:1 against every dark surface, so it goes
+       near-white here and keeps the accent block for brand recognition. */
+    --mark-body: #f2f6fb;
+    --mark-accent: #0090f9;
+    --mark-clock-face: #6b7d94;
+    --mark-clock-hand: #002658;
     --overlay: rgba(0, 0, 0, 0.6);
     --hover-overlay: rgba(255, 255, 255, 0.08);
     --footer-bg: #1a1a1a;
@@ -687,6 +700,15 @@
   .v-switch--active .v-switch__thumb {
     background: #fff;
     transform: translateX(16px);
+  }
+
+  /* Surfaces that are navy in both themes (drawer, sign-in panel) need the
+     light mark regardless of which theme is active. */
+  .on-navy {
+    --mark-body: #ffffff;
+    --mark-accent: var(--navy-accent);
+    --mark-clock-face: #7f93ad;
+    --mark-clock-hand: var(--navy);
   }
 
   /* ---------- Navigation drawer (sidebar) ---------- */

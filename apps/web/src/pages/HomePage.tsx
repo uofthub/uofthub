@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useUI } from '../lib/ui'
 import { Btn, Card, Divider, Icon, TextField } from '../components/ui'
 import { GITHUB_URL } from '../components/layout/nav'
-import mark from '../assets/uofthub-mark.svg'
+import Mark from '../components/Mark'
 import heroPreview from '../assets/hero.png'
 
 const SHAPES = ['purple', 'blue', 'light-blue', 'red', 'orange', 'cyan'] as const
@@ -105,7 +105,7 @@ function Hero() {
       )}
 
       <div className="contentMaxWidth" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
-        <img src={mark} alt="" aria-hidden="true" className="floating" style={{ height: 120, width: 'auto' }} />
+        <Mark size={113} className="floating" />
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 700, marginTop: 24 }}>
           Everything students build
           <br />
@@ -236,7 +236,7 @@ export default function HomePage() {
       {/* Commitment */}
       <section style={{ padding: '0 24px', textAlign: 'center' }}>
         <div className="contentMaxWidth" style={{ maxWidth: 750 }}>
-          <img src={mark} alt="" aria-hidden="true" style={{ height: 130, marginBottom: 40 }} />
+          <Mark size={122} className="mb-10" />
           <h2 style={{ marginBottom: 16 }}>Our Commitment</h2>
           <p>
             uofthub is open source and built by students, for students. It is not officially affiliated with the

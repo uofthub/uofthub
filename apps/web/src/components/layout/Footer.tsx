@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useUI } from '../../lib/ui'
 import { Divider, Icon } from '../ui'
 import { CONTACT_EMAIL, GITHUB_URL, navSections, type NavItem } from './nav'
-import mark from '../../assets/uofthub-mark.svg'
+import Mark from '../../components/Mark'
 
 function Social() {
   return (
@@ -35,7 +35,7 @@ export function LandingFooter() {
       <div className="contentMaxWidth" style={{ padding: '32px 0 12px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 32 }}>
           <div className="footerCol" style={{ flex: '1 1 240px' }}>
-            <img src={mark} alt="" aria-hidden="true" style={{ height: 64, width: 'auto' }} />
+            <Mark size={60} />
             <p className="heading accent--text" style={{ margin: '8px 0 0' }}>
               uofthub
             </p>

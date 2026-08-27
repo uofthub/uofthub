@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth'
 import { useUI } from '../lib/ui'
 import { api } from '../lib/api'
 import { Btn, Chip, Divider, ErrorText, Field, Icon, TextField, cx } from '../components/ui'
-import mark from '../assets/uofthub-mark.svg'
+import Mark from '../components/Mark'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
@@ -144,10 +144,10 @@ export default function SessionPage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
         }}
-        className="max-lg:hidden"
+        className="on-navy max-lg:hidden"
       >
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#fff' }}>
-          <img src={mark} alt="" aria-hidden="true" style={{ height: 34 }} />
+          <Mark size={32} />
           <span className="heading">uofthub</span>
         </Link>
 
@@ -197,7 +197,7 @@ export default function SessionPage() {
 
         <div style={{ width: '100%', maxWidth: 420 }}>
           <Link to="/" className="lg:hidden" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
-            <img src={mark} alt="" aria-hidden="true" style={{ height: 32 }} />
+            <Mark size={30} />
             <span className="heading" style={{ color: 'var(--v-text-base)' }}>
               uofthub
             </span>

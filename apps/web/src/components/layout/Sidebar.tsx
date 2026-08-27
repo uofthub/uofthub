@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useUI } from '../../lib/ui'
 import { Chip, Icon, Tooltip, cx } from '../ui'
 import { navSections, type NavItem } from './nav'
-import mark from '../../assets/uofthub-mark.svg'
+import Mark from '../../components/Mark'
 
 /**
  * Navy navigation drawer — a port of the `v-navigation-drawer` in App.vue.
@@ -21,6 +21,7 @@ export default function Sidebar() {
 
   return (
     <aside
+      className="on-navy"
       style={{
         position: 'fixed',
         insetBlock: 0,
@@ -47,7 +48,7 @@ export default function Sidebar() {
           color: '#fff',
         }}
       >
-        <img src={mark} alt="" aria-hidden="true" style={{ height: 30, width: 'auto' }} />
+        <Mark size={28} />
         {!collapsed && (
           <h1 className="heading" style={{ color: '#fff' }}>
             uofthub

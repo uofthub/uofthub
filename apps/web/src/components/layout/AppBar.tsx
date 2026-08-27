@@ -5,13 +5,13 @@ import { useUI } from '../../lib/ui'
 import { useCrumbs } from '../../lib/crumbs'
 import { Avatar, Breadcrumbs, Btn, Chip, Divider, Icon, Menu, Switch, Tooltip, cx } from '../ui'
 import { navSections } from './nav'
-import mark from '../../assets/uofthub-mark.svg'
+import Mark from '../../components/Mark'
 
 /** Brand lockup: the mark, then the wordmark in Jost — as on uoftindex.ca. */
 export function Brand({ onNavy }: { onNavy?: boolean }) {
   return (
     <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'inherit' }}>
-      <img src={mark} alt="" aria-hidden="true" style={{ height: 34, width: 'auto' }} />
+      <Mark size={32} />
       <h1 className="heading" style={{ color: onNavy ? '#fff' : 'var(--v-text-base)' }}>
         uofthub
       </h1>

@@ -1,7 +1,7 @@
 import { usePageCrumbs } from '../lib/crumbs'
 import { Btn, Card, Icon, PageHeader } from '../components/ui'
 import { CONTACT_EMAIL, GITHUB_URL } from '../components/layout/nav'
-import mark from '../assets/uofthub-mark.svg'
+import Mark from '../components/Mark'
 
 const PRINCIPLES = [
   {
@@ -38,7 +38,7 @@ export default function AboutPage() {
       <PageHeader title="About uofthub" subtitle="Why this exists and who it is for." />
 
       <Card style={{ padding: 32, display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-        <img src={mark} alt="" aria-hidden="true" style={{ height: 96 }} />
+        <Mark size={90} />
         <div style={{ flex: '1 1 320px' }}>
           <p style={{ margin: 0 }}>
             Student work at U of T is scattered across GitHub, Google Drive, Discord, Canvas and personal

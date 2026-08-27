@@ -4,7 +4,7 @@ import { useAuth } from '../../lib/auth'
 import { useUI } from '../../lib/ui'
 import { Btn, Chip, Divider, Icon, Switch } from '../ui'
 import { navSections, type NavItem } from './nav'
-import mark from '../../assets/uofthub-mark.svg'
+import Mark from '../../components/Mark'
 
 /** Fullscreen mobile drawer — the `v-dialog fullscreen` nav from App.vue. */
 export default function MobileNav() {
@@ -41,7 +41,7 @@ export default function MobileNav() {
           flexShrink: 0,
         }}
       >
-        <img src={mark} alt="" aria-hidden="true" style={{ height: 32 }} />
+        <Mark size={30} />
         <div style={{ flex: 1 }} />
         <Btn icon onClick={() => setMobileNav(false)} aria-label="Close navigation">
           <Icon name="mdi-close" size={24} />
