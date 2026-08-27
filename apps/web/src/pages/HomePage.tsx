@@ -1,225 +1,294 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { api, type ProjectSummary } from '../lib/api'
+import { useUI } from '../lib/ui'
+import { Btn, Card, Divider, Icon, TextField } from '../components/ui'
+import { GITHUB_URL } from '../components/layout/nav'
+import mark from '../assets/uofthub-mark.svg'
+import heroPreview from '../assets/hero.png'
 
-const surface = { backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }
+const SHAPES = ['purple', 'blue', 'light-blue', 'red', 'orange', 'cyan'] as const
 
-function AIDiscovery() {
+const FEATURES = [
+  {
+    title: 'Project Showcase',
+    text: 'Publish anything you built — a capstone, a hack, an essay, a studio piece — with tags, links, files and collaborators attached.',
+    icon: 'mdi-view-grid-outline',
+    colour: 'blue',
+    page: '/projects',
+  },
+  {
+    title: 'AI Discovery',
+    text: 'Ask in plain English. "Machine learning projects from Engineering" or "bioinformatics research this year" returns exactly that.',
+    icon: 'mdi-creation',
+    colour: 'purple',
+    page: '/discover',
+  },
+  {
+    title: 'Collaborators',
+    text: 'Invite the people you actually built it with. Every contributor gets the project on their own profile, credited properly.',
+    icon: 'mdi-account-multiple-plus-outline',
+    colour: 'mint',
+    page: '/projects/new',
+  },
+  {
+    title: 'Version History',
+    text: 'Snapshot a project as it evolves across a term. Look back at what changed between the pitch and the final submission.',
+    icon: 'mdi-history',
+    colour: 'orange',
+    page: '/projects',
+  },
+  {
+    title: 'Clubs & Labs',
+    text: 'Design teams, research labs and student clubs get a shared page collecting everything their members have shipped.',
+    icon: 'mdi-account-group-outline',
+    colour: 'pink',
+    page: '/orgs',
+  },
+  {
+    title: 'Analytics',
+    text: 'See who is finding your work — views over time, likes, comments and forks, on every project you own.',
+    icon: 'mdi-chart-line',
+    colour: 'red',
+    page: '/projects',
+  },
+]
+
+const STEPS = [
+  { icon: 'mdi-magnify', title: '1. Discover', text: 'Browse everything students across the three campuses have published.' },
+  { icon: 'mdi-upload-outline', title: '2. Publish', text: 'Add your project once — description, tags, links, files and credits.' },
+  { icon: 'mdi-account-multiple-outline', title: '3. Collaborate', text: 'Invite teammates, fork someone else’s work, leave feedback in comments.' },
+  { icon: 'mdi-share-variant-outline', title: '4. Share', text: 'Choose who sees it: just you, all of U of T, or the whole internet.' },
+]
+
+function Hero() {
+  const { liveAnimations, onDesktop } = useUI()
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [submitted, setSubmitted] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const { data, isFetching, isError, error } = useQuery({
-    queryKey: ['discover', submitted],
-    queryFn: () => api.discover.search(submitted),
-    enabled: !!submitted,
-  })
+  // '/' focuses the search bar, as it does on uoftindex.ca.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '/' && e.target !== inputRef.current) {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (query.trim()) setSubmitted(query.trim())
+    navigate(query.trim() ? `/projects?q=${encodeURIComponent(query.trim())}` : '/projects')
   }
 
   return (
-    <div className="mb-8 rounded-xl p-6" style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-[var(--color-primary)]">✦</span>
-        <h2 className="font-medium text-white text-sm">AI-powered discovery</h2>
-      </div>
-      <p className="text-[#666] text-sm mb-4">
-        Ask in plain English — "ML projects from Engineering" or "trending bioinformatics research"
-      </p>
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="What are you looking for?"
-          className="flex-1 rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none transition-colors"
-          style={{ backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-border)' }}
-          onFocus={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-          onBlur={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
-        />
-        <button type="submit" disabled={!query.trim() || isFetching}
-          className="text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 cursor-pointer transition-colors"
-          style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
-          onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)' }}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}>
-          {isFetching ? 'Searching…' : 'Search'}
-        </button>
-      </form>
-
-      {isError && <p className="text-red-400 text-sm mt-3">{(error as Error).message}</p>}
-
-      {data && (
-        <div className="mt-5">
-          {data.params && Object.keys(data.params).length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {Object.entries(data.params).map(([k, v]) => (
-                <span key={k} className="text-xs rounded-full px-2 py-0.5 text-[#aaa]"
-                  style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                  {k}: {String(v)}
-                </span>
-              ))}
-            </div>
-          )}
-          {data.projects.length === 0 ? (
-            <p className="text-[#555] text-sm">No projects matched this query.</p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.projects.map(p => (
-                <Link key={p.id} to={`/projects/${p.id}`}
-                  className="block rounded-lg p-3 no-underline transition-colors"
-                  style={{ backgroundColor: 'var(--color-surface-2)' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'transparent')}>
-                  <div className="font-medium text-sm text-white truncate">{p.title}</div>
-                  {p.owner && <div className="text-xs text-[#666] mt-0.5">{p.owner.name}</div>}
-                  <div className="flex gap-3 mt-1.5 text-xs text-[#555]">
-                    <span>♥ {p._count.likes}</span>
-                    <span>💬 {p._count.comments}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-const FACULTIES = ['Arts & Science', 'Engineering', 'Medicine', 'Law', 'Education', 'Rotman', 'Music', 'Architecture']
-
-function VisibilityChip({ v }: { v: string }) {
-  if (v === 'PUBLIC') return (
-    <span className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium"
-      style={{ backgroundColor: '#0a3320', color: 'var(--color-success)' }}>Public</span>
-  )
-  if (v === 'UOFT') return (
-    <span className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium"
-      style={{ backgroundColor: '#0d1e3a', color: '#7db9ee' }}>U of T</span>
-  )
-  return (
-    <span className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium"
-      style={{ backgroundColor: 'var(--color-surface-2)', color: '#666' }}>Private</span>
-  )
-}
-
-function ProjectCard({ project }: { project: ProjectSummary }) {
-  return (
-    <Link to={`/projects/${project.id}`}
-      className="block rounded-xl p-5 no-underline transition-all group"
-      style={surface}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="font-medium text-white truncate">{project.title}</h3>
-          {project.description && (
-            <p className="text-sm text-[#aaa] mt-1 line-clamp-2">{project.description}</p>
-          )}
-        </div>
-        <VisibilityChip v={project.visibility} />
-      </div>
-
-      {project.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {project.tags.map(tag => (
-            <span key={tag} className="text-xs px-2 py-0.5 rounded-full text-[#aaa]"
-              style={{ backgroundColor: 'var(--color-surface-2)' }}>{tag}</span>
+    <section
+      style={{
+        position: 'relative',
+        minHeight: 650,
+        height: '65vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0 24px',
+      }}
+    >
+      {liveAnimations && onDesktop && (
+        <div className="animatedShapes" aria-hidden="true">
+          {SHAPES.map(s => (
+            <span key={s} className={`shape-${s}`} />
           ))}
         </div>
       )}
 
-      <div className="flex items-center gap-4 mt-3 text-xs text-[#555]">
-        {project.owner && <span className="text-[#777]">{project.owner.name}</span>}
-        <span>♥ {project._count.likes}</span>
-        <span>💬 {project._count.comments}</span>
-        <span className="ml-auto">{new Date(project.createdAt).toLocaleDateString()}</span>
+      <div className="contentMaxWidth" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+        <img src={mark} alt="" aria-hidden="true" className="floating" style={{ height: 120, width: 'auto' }} />
+        <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 700, marginTop: 24 }}>
+          Everything students build
+          <br />
+          at U of T, in one place
+        </h1>
+        <form onSubmit={submit} style={{ maxWidth: 850, margin: '48px auto 0' }}>
+          <TextField
+            inputRef={inputRef}
+            rounded
+            prependIcon="mdi-magnify"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Project, course code, or keyword ( Press ' / ' )"
+            aria-label="Search projects"
+            appendIcon={
+              <Btn variant="accent" type="submit">
+                Search
+              </Btn>
+            }
+          />
+        </form>
       </div>
-    </Link>
+    </section>
+  )
+}
+
+function FeatureCards() {
+  const navigate = useNavigate()
+  return (
+    <div style={{ display: 'grid', gap: 32, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+      {FEATURES.map(feature => (
+        <Card key={feature.title} flat style={{ background: 'transparent', border: 'none', padding: '16px 8px' }}>
+          <div
+            className="rounded"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: `var(--v-${feature.colour}-base)`,
+            }}
+          >
+            <Icon name={feature.icon} size={30} color="#fff" />
+          </div>
+          <h3 style={{ fontSize: '1.375rem', fontWeight: 700, marginTop: 16 }}>{feature.title}</h3>
+          <p className="text--secondary" style={{ marginTop: 8 }}>
+            {feature.text}
+          </p>
+          <button
+            className="hover accent--text"
+            onClick={() => navigate(feature.page)}
+            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontWeight: 500 }}
+          >
+            Get started
+            <Icon name="mdi-chevron-right" size={16} />
+          </button>
+        </Card>
+      ))}
+    </div>
   )
 }
 
 export default function HomePage() {
   const { user } = useAuth()
-  const [search, setSearch] = useState('')
-  const [faculty, setFaculty] = useState('')
-  const [sort, setSort] = useState<'new' | 'trending'>('new')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects', debouncedSearch, faculty, sort],
-    queryFn: () => api.projects.list({ search: debouncedSearch || undefined, faculty: faculty || undefined, sort }),
-  })
-
-  const handleSearch = (val: string) => {
-    setSearch(val)
-    clearTimeout((window as unknown as { _st: ReturnType<typeof setTimeout> })._st)
-    ;(window as unknown as { _st: ReturnType<typeof setTimeout> })._st = setTimeout(() => setDebouncedSearch(val), 300)
-  }
 
   return (
     <div>
-      <AIDiscovery />
+      <Hero />
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-medium text-white mb-1">uofthub</h1>
-        <p className="text-[#666]">An open-source home for everything students build at U of T.</p>
-        {user && (
-          <Link to="/projects/new"
-            className="inline-block mt-4 px-5 py-2 rounded-lg text-sm font-medium no-underline transition-colors"
-            style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--color-primary)')}>
-            + Share a project
-          </Link>
-        )}
-      </div>
+      {/* Product preview */}
+      <section style={{ padding: '0 24px' }}>
+        <div className="contentMaxWidth">
+          <img
+            src={heroPreview}
+            alt="A project page on uofthub"
+            style={{
+              width: '100%',
+              borderRadius: 12,
+              border: '1px solid var(--v-border-base)',
+              boxShadow: 'var(--elevation-8)',
+            }}
+          />
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <input type="search" placeholder="Search projects…" value={search}
-          onChange={e => handleSearch(e.target.value)}
-          className="flex-1 min-w-48 rounded-lg px-3 py-2 text-sm text-white placeholder-[#555] outline-none transition-colors"
-          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-          onFocus={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-          onBlur={e => (e.currentTarget.style.borderColor = 'var(--color-border)')} />
+          <div style={{ maxWidth: 700, margin: '64px auto', textAlign: 'center' }}>
+            <h2>One place with all of the work</h2>
+            <p className="text--secondary">
+              Student work at U of T lives scattered across GitHub, Drive, Discord, Canvas and personal sites.
+              uofthub pulls it into a single searchable home — a living portfolio built out of what you actually
+              did while you were here.
+            </p>
+          </div>
 
-        <select value={faculty} onChange={e => setFaculty(e.target.value)}
-          className="rounded-lg px-3 py-2 text-sm text-white outline-none cursor-pointer"
-          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          <option value="">All faculties</option>
-          {FACULTIES.map(f => <option key={f} value={f}>{f}</option>)}
-        </select>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Divider style={{ maxWidth: 800 }} />
+          </div>
 
-        <div className="flex rounded-lg overflow-hidden text-sm"
-          style={{ border: '1px solid var(--color-border)' }}>
-          {(['new', 'trending'] as const).map(s => (
-            <button key={s} onClick={() => setSort(s)}
-              className="px-3 py-2 capitalize cursor-pointer transition-colors"
-              style={{
-                backgroundColor: sort === s ? 'var(--color-primary)' : 'var(--color-surface)',
-                color: sort === s ? '#fff' : '#aaa',
-              }}>
-              {s}
-            </button>
-          ))}
+          <div style={{ marginTop: 64 }}>
+            <h2 style={{ marginBottom: 32 }}>Features to Explore</h2>
+            <FeatureCards />
+          </div>
         </div>
-      </div>
+      </section>
 
-      {isLoading ? (
-        <div className="text-center py-16 text-[#555]">Loading…</div>
-      ) : projects.length === 0 ? (
-        <div className="text-center py-16 text-[#555]">
-          {debouncedSearch || faculty ? 'No projects match your filters.' : 'No public projects yet. Be the first to share one!'}
+      {/* Every step of the way */}
+      <section style={{ background: 'var(--v-border-base)', padding: '64px 24px', margin: '80px 0' }}>
+        <div className="contentMaxWidth" style={{ textAlign: 'center' }}>
+          <h2>Every Step of the Way</h2>
+          <p className="text--secondary" style={{ paddingBottom: 32 }}>
+            From the first idea to the thing you show a recruiter.
+          </p>
+          <div style={{ display: 'grid', gap: 32, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            {STEPS.map(step => (
+              <div key={step.title}>
+                <Icon name={step.icon} size={64} color="var(--v-accent-base)" />
+                <h3 style={{ marginTop: 16 }}>{step.title}</h3>
+                <p className="text--secondary" style={{ fontSize: '0.9375rem' }}>
+                  {step.text}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {projects.map(p => <ProjectCard key={p.id} project={p} />)}
+      </section>
+
+      {/* Commitment */}
+      <section style={{ padding: '0 24px', textAlign: 'center' }}>
+        <div className="contentMaxWidth" style={{ maxWidth: 750 }}>
+          <img src={mark} alt="" aria-hidden="true" style={{ height: 130, marginBottom: 40 }} />
+          <h2 style={{ marginBottom: 16 }}>Our Commitment</h2>
+          <p>
+            uofthub is open source and built by students, for students. It is not officially affiliated with the
+            University of Toronto. What we promise is an ad-free, clean place to keep your work, where you decide
+            exactly how much of it the world gets to see — private, U of T only, or fully public.
+          </p>
+          <p>
+            Anyone with a U of T email can sign in and publish. Everything else — the code, the roadmap, the open
+            issues — is on GitHub, and contributions are welcome.
+          </p>
+          <p style={{ margin: '32px 0', fontWeight: 500 }}>~ The uofthub team</p>
         </div>
-      )}
+      </section>
+
+      {/* CTA */}
+      <section style={{ padding: '48px 24px 64px' }}>
+        <div className="contentMaxWidth">
+          <Card
+            flat
+            style={{
+              background: '#003C85',
+              border: 'none',
+              borderRadius: 20,
+              padding: '48px 24px',
+              textAlign: 'center',
+            }}
+          >
+            <h2 style={{ color: '#fff', paddingBottom: 16 }}>Missing something?</h2>
+            <p style={{ color: '#fff', maxWidth: 700, margin: '0 auto' }}>
+              uofthub is early and shaped by the people using it. If something you need is missing — a file type,
+              an integration, a way to show your work — open an issue and tell us.
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
+              <Btn
+                size="large"
+                href={`${GITHUB_URL}/issues/new`}
+                target="_blank"
+                style={{ background: 'var(--v-warning-base)', color: '#fff', fontWeight: 700 }}
+              >
+                <Icon name="mdi-cake-variant" color="#fff" />
+                Request a feature
+              </Btn>
+              <Btn
+                size="large"
+                to={user ? '/projects/new' : '/session'}
+                style={{ background: '#fff', color: '#003C85', fontWeight: 700 }}
+              >
+                {user ? 'Share a project' : 'Get started'}
+              </Btn>
+            </div>
+          </Card>
+        </div>
+      </section>
     </div>
   )
 }

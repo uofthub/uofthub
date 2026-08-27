@@ -2,54 +2,32 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
+import { usePageCrumbs } from '../lib/crumbs'
 import { api } from '../lib/api'
+import { VisibilityChip } from '../components/ProjectCard'
+import {
+  Avatar,
+  Btn,
+  Card,
+  Chip,
+  Dialog,
+  DialogTitle,
+  Divider,
+  EmptyState,
+  ErrorText,
+  Field,
+  Icon,
+  SelectField,
+  Spinner,
+  TextArea,
+  TextField,
+} from '../components/ui'
 
-const surface: React.CSSProperties = { backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }
-const surfaceAlt: React.CSSProperties = { backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }
+/* -------------------------------------------------------------------------- */
+/* Dialogs                                                                    */
+/* -------------------------------------------------------------------------- */
 
-const inputStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  backgroundColor: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  color: '#fff',
-  borderRadius: '0.5rem',
-  padding: '8px 12px',
-  fontSize: '0.875rem',
-  outline: 'none',
-  marginTop: '4px',
-}
-
-function ModalShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
-      <div className="rounded-xl w-full max-w-lg p-6" style={surface}>{children}</div>
-    </div>
-  )
-}
-
-function PrimaryBtn({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className="text-sm px-5 py-2 rounded-lg disabled:opacity-40 cursor-pointer transition-colors font-medium"
-      style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
-      {children}
-    </button>
-  )
-}
-
-function GhostBtn({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
-  return (
-    <button onClick={onClick}
-      className="text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors text-[#aaa] hover:text-white"
-      style={{ border: '1px solid var(--color-border)' }}>
-      {children}
-    </button>
-  )
-}
-
-function EditProjectModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+function EditProjectDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const qc = useQueryClient()
   const { data: project } = useQuery({ queryKey: ['project', projectId], queryFn: () => api.projects.get(projectId) })
   const [form, setForm] = useState({
@@ -60,128 +38,148 @@ function EditProjectModal({ projectId, onClose }: { projectId: string; onClose: 
   })
 
   const mutation = useMutation({
-    mutationFn: () => api.projects.update(projectId, {
-      title: form.title,
-      description: form.description,
-      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      visibility: form.visibility,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project', projectId] }); onClose() },
+    mutationFn: () =>
+      api.projects.update(projectId, {
+        title: form.title,
+        description: form.description,
+        tags: form.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean),
+        visibility: form.visibility,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+      onClose()
+    },
   })
 
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
   return (
-    <ModalShell>
-      <h2 className="font-medium text-white text-lg mb-4">Edit project</h2>
-      <div className="space-y-3">
-        <label className="block">
-          <span className="text-sm font-medium text-[#aaa]">Title</span>
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={inputStyle} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#aaa]">Description</span>
-          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            rows={4} style={{ ...inputStyle, resize: 'none' }} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#aaa]">Tags (comma-separated)</span>
-          <input value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} style={inputStyle} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-[#aaa]">Visibility</span>
-          <select value={form.visibility} onChange={e => setForm(f => ({ ...f, visibility: e.target.value }))}
-            style={{ ...inputStyle, cursor: 'pointer' }}>
+    <Dialog onClose={onClose}>
+      <DialogTitle onClose={onClose}>Edit project</DialogTitle>
+      <div style={{ padding: 22, display: 'grid', gap: 16 }}>
+        <Field label="Title">
+          <TextField value={form.title} onChange={set('title')} />
+        </Field>
+        <Field label="Description">
+          <TextArea rows={5} value={form.description} onChange={set('description')} />
+        </Field>
+        <Field label="Tags" hint="Comma-separated.">
+          <TextField value={form.tags} onChange={set('tags')} />
+        </Field>
+        <Field label="Visibility">
+          <SelectField value={form.visibility} onChange={set('visibility')}>
             <option value="PRIVATE">Private</option>
             <option value="UOFT">U of T only</option>
             <option value="PUBLIC">Public</option>
-          </select>
-        </label>
+          </SelectField>
+        </Field>
+        {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
       </div>
-      <div className="flex gap-3 mt-5 justify-end">
-        <button onClick={onClose} className="text-sm text-[#666] hover:text-[#aaa] px-4 py-2 cursor-pointer transition-colors">Cancel</button>
-        <PrimaryBtn onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 22px 22px' }}>
+        <Btn onClick={onClose}>Cancel</Btn>
+        <Btn variant="accent" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
           {mutation.isPending ? 'Saving…' : 'Save'}
-        </PrimaryBtn>
+        </Btn>
       </div>
-      {mutation.isError && <p className="text-red-400 text-sm mt-2">{(mutation.error as Error).message}</p>}
-    </ModalShell>
+    </Dialog>
   )
 }
 
-function InviteModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+function InviteDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const [email, setEmail] = useState('')
-  const [success, setSuccess] = useState(false)
-  const mutation = useMutation({
-    mutationFn: () => api.projects.inviteCollaborator(projectId, email),
-    onSuccess: () => setSuccess(true),
-  })
+  const mutation = useMutation({ mutationFn: () => api.projects.inviteCollaborator(projectId, email) })
+
   return (
-    <ModalShell>
-      <h2 className="font-medium text-white text-lg mb-4">Invite collaborator</h2>
-      {success ? (
-        <div>
-          <p className="text-sm" style={{ color: 'var(--color-success)' }}>Invitation sent!</p>
-          <button onClick={onClose} className="mt-4 text-sm text-[#666] hover:text-[#aaa] cursor-pointer transition-colors">Close</button>
-        </div>
-      ) : (
-        <>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="student@mail.utoronto.ca" style={inputStyle} />
-          <div className="flex gap-3 mt-4 justify-end">
-            <button onClick={onClose} className="text-sm text-[#666] hover:text-[#aaa] px-4 py-2 cursor-pointer transition-colors">Cancel</button>
-            <PrimaryBtn onClick={() => mutation.mutate()} disabled={mutation.isPending || !email}>
-              {mutation.isPending ? 'Inviting…' : 'Invite'}
-            </PrimaryBtn>
-          </div>
-          {mutation.isError && <p className="text-red-400 text-sm mt-2">{(mutation.error as Error).message}</p>}
-        </>
-      )}
-    </ModalShell>
+    <Dialog onClose={onClose}>
+      <DialogTitle onClose={onClose}>Invite collaborator</DialogTitle>
+      <div style={{ padding: 22 }}>
+        {mutation.isSuccess ? (
+          <p style={{ color: 'var(--v-success-base)', margin: 0 }}>
+            <Icon name="mdi-check-circle-outline" /> Invitation sent.
+          </p>
+        ) : (
+          <Field label="U of T email">
+            <TextField
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="student@mail.utoronto.ca"
+            />
+          </Field>
+        )}
+        {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 22px 22px' }}>
+        <Btn onClick={onClose}>{mutation.isSuccess ? 'Close' : 'Cancel'}</Btn>
+        {!mutation.isSuccess && (
+          <Btn variant="accent" onClick={() => mutation.mutate()} disabled={!email || mutation.isPending}>
+            {mutation.isPending ? 'Inviting…' : 'Invite'}
+          </Btn>
+        )}
+      </div>
+    </Dialog>
   )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Panels                                                                     */
+/* -------------------------------------------------------------------------- */
 
 function AnalyticsPanel({ projectId }: { projectId: string }) {
-  const { data } = useQuery({
-    queryKey: ['analytics', projectId],
-    queryFn: () => api.projects.analytics(projectId),
-  })
-  if (!data) return <div className="text-sm text-[#555]">Loading analytics…</div>
+  const { data } = useQuery({ queryKey: ['analytics', projectId], queryFn: () => api.projects.analytics(projectId) })
+  if (!data) return null
 
-  const maxCount = Math.max(...data.dailyViews.map(d => d.count), 1)
+  const max = Math.max(...data.dailyViews.map(d => d.count), 1)
+  const stats = [
+    { label: 'Total views', value: data.totalViews, icon: 'mdi-eye-outline' },
+    { label: 'Likes', value: data.likes, icon: 'mdi-heart-outline' },
+    { label: 'Comments', value: data.comments, icon: 'mdi-comment-outline' },
+    { label: 'Forks', value: data.forks, icon: 'mdi-source-fork' },
+  ]
 
   return (
-    <div className="rounded-xl p-5 mb-4" style={surface}>
-      <h2 className="font-medium text-white mb-4">Analytics</h2>
-      <div className="grid grid-cols-4 gap-4 mb-5">
-        {[
-          { label: 'Total views', value: data.totalViews },
-          { label: 'Likes', value: data.likes },
-          { label: 'Comments', value: data.comments },
-          { label: 'Forks', value: data.forks },
-        ].map(({ label, value }) => (
-          <div key={label} className="text-center">
-            <div className="text-2xl font-medium" style={{ color: 'var(--color-primary)' }}>{value}</div>
-            <div className="text-xs text-[#555] mt-0.5">{label}</div>
+    <Card style={{ padding: 24, marginTop: 16 }}>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Analytics</h2>
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
+        {stats.map(s => (
+          <div key={s.label} style={{ textAlign: 'center' }}>
+            <Icon name={s.icon} size={20} color="var(--v-accent-base)" />
+            <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--v-accent-base)' }}>{s.value}</div>
+            <div className="text--disabled" style={{ fontSize: '0.75rem' }}>
+              {s.label}
+            </div>
           </div>
         ))}
       </div>
+
       {data.dailyViews.length > 0 && (
-        <div>
-          <p className="text-xs text-[#555] mb-2">Views — last 30 days</p>
-          <div className="flex items-end gap-0.5 h-16">
+        <div style={{ marginTop: 24 }}>
+          <p className="text--disabled" style={{ fontSize: '0.75rem', marginBottom: 8 }}>
+            Views — last 30 days
+          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 64 }}>
             {data.dailyViews.map(d => (
-              <div key={d.date} title={`${new Date(d.date).toLocaleDateString()}: ${d.count}`}
-                className="flex-1 rounded-sm transition-colors"
+              <div
+                key={d.date}
+                title={`${new Date(d.date).toLocaleDateString()}: ${d.count}`}
                 style={{
-                  backgroundColor: 'var(--color-primary)',
-                  opacity: 0.4 + (d.count / maxCount) * 0.6,
-                  height: `${(d.count / maxCount) * 100}%`,
-                  minHeight: '2px',
-                }} />
+                  flex: 1,
+                  borderRadius: 2,
+                  background: 'var(--v-accent-base)',
+                  opacity: 0.4 + (d.count / max) * 0.6,
+                  height: `${(d.count / max) * 100}%`,
+                  minHeight: 2,
+                }}
+              />
             ))}
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -191,8 +189,7 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
     queryKey: ['versions', projectId],
     queryFn: () => api.projects.versions(projectId),
   })
-
-  const createMutation = useMutation({
+  const create = useMutation({
     mutationFn: () => api.projects.createVersion(projectId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['versions', projectId] }),
   })
@@ -200,36 +197,49 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
   if (!isOwner && versions.length === 0) return null
 
   return (
-    <div className="rounded-xl p-5 mb-4" style={surface}>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-medium text-white">Version history</h2>
+    <Card style={{ padding: 24, marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 style={{ fontSize: '1.125rem' }}>Version history</h2>
         {isOwner && (
-          <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
-            className="text-sm px-3 py-1.5 rounded-lg disabled:opacity-40 cursor-pointer transition-colors"
-            style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
-            {createMutation.isPending ? 'Saving…' : '+ Save version'}
-          </button>
+          <Btn variant="accent" size="small" onClick={() => create.mutate()} disabled={create.isPending}>
+            <Icon name="mdi-content-save-outline" size={16} color="#fff" />
+            {create.isPending ? 'Saving…' : 'Save version'}
+          </Btn>
         )}
       </div>
       {versions.length === 0 ? (
-        <p className="text-sm text-[#555]">No versions saved yet.</p>
+        <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+          No versions saved yet.
+        </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="v-list" style={{ display: 'grid', gap: 10 }}>
           {versions.map(v => (
-            <li key={v.id} className="flex items-start gap-3 text-sm">
-              <span className="shrink-0 font-mono font-semibold w-8" style={{ color: 'var(--color-primary)' }}>v{v.versionNum}</span>
-              <div className="min-w-0">
-                <span className="text-white font-medium">{v.title}</span>
-                {v.description && <p className="text-[#666] text-xs mt-0.5 truncate">{v.description}</p>}
+            <li key={v.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: '0.9375rem' }}>
+              <Chip small color="accent" style={{ fontWeight: 700 }}>
+                v{v.versionNum}
+              </Chip>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 500 }}>{v.title}</div>
+                {v.description && (
+                  <p className="text--disabled overflow-ellipsis" style={{ fontSize: '0.8125rem', margin: 0 }}>
+                    {v.description}
+                  </p>
+                )}
               </div>
-              <span className="shrink-0 text-[#555] text-xs ml-auto">{new Date(v.createdAt).toLocaleDateString()}</span>
+              <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
+                {new Date(v.createdAt).toLocaleDateString()}
+              </span>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </Card>
   )
 }
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                       */
+/* -------------------------------------------------------------------------- */
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -245,13 +255,11 @@ export default function ProjectPage() {
     queryFn: () => api.projects.get(id!),
     enabled: !!id,
   })
-
   const { data: comments = [] } = useQuery({
     queryKey: ['comments', id],
     queryFn: () => api.projects.comments(id!),
     enabled: !!id,
   })
-
   const { data: likeState } = useQuery({
     queryKey: ['like', id],
     queryFn: () => api.projects.likedByMe(id!),
@@ -265,7 +273,6 @@ export default function ProjectPage() {
       qc.invalidateQueries({ queryKey: ['project', id] })
     },
   })
-
   const commentMutation = useMutation({
     mutationFn: () => api.projects.addComment(id!, comment),
     onSuccess: () => {
@@ -274,205 +281,231 @@ export default function ProjectPage() {
       qc.invalidateQueries({ queryKey: ['project', id] })
     },
   })
-
   const deleteMutation = useMutation({
     mutationFn: () => api.projects.delete(id!),
-    onSuccess: () => navigate('/'),
+    onSuccess: () => navigate('/projects'),
   })
-
   const forkMutation = useMutation({
     mutationFn: () => api.projects.fork(id!),
-    onSuccess: (fork) => navigate(`/projects/${fork.id}`),
+    onSuccess: fork => navigate(`/projects/${fork.id}`),
   })
+  const requestAccess = useMutation({ mutationFn: () => api.projects.requestAccess(id!) })
 
-  const requestAccessMutation = useMutation({
-    mutationFn: () => api.projects.requestAccess(id!),
-  })
+  usePageCrumbs([{ text: 'Projects', href: '/projects' }, { text: project?.title ?? 'Project' }])
 
-  if (isLoading) return <div className="text-center py-16 text-[#555]">Loading…</div>
-  if (!project) return <div className="text-center py-16 text-[#555]">Project not found.</div>
+  if (isLoading) return <Spinner />
+  if (!project) return <EmptyState icon="mdi-file-remove-outline" title="Project not found." />
 
   const isOwner = me?.id === project.ownerId
   const isFaculty = me?.role === 'FACULTY'
-
-  const visChip = project.visibility === 'PUBLIC'
-    ? { backgroundColor: '#0a3320', color: 'var(--color-success)' }
-    : project.visibility === 'UOFT'
-      ? { backgroundColor: '#0d1e3a', color: '#7db9ee' }
-      : { backgroundColor: 'var(--color-surface-2)', color: '#666' }
+  const liked = likeState?.liked
 
   return (
-    <div className="max-w-3xl">
-      {editOpen && <EditProjectModal projectId={id!} onClose={() => setEditOpen(false)} />}
-      {inviteOpen && <InviteModal projectId={id!} onClose={() => setInviteOpen(false)} />}
+    <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 900 }}>
+      {editOpen && <EditProjectDialog projectId={id!} onClose={() => setEditOpen(false)} />}
+      {inviteOpen && <InviteDialog projectId={id!} onClose={() => setInviteOpen(false)} />}
 
       {/* Header */}
-      <div className="rounded-xl p-6 mb-4" style={surface}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-medium text-white">{project.title}</h1>
+      <Card style={{ padding: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+            <h1 style={{ fontSize: '1.75rem' }}>{project.title}</h1>
             {project.forkedFromId && (
-              <p className="text-xs text-[#555] mt-0.5">
-                Forked from{' '}
-                <Link to={`/projects/${project.forkedFromId}`}
-                  className="hover:underline" style={{ color: 'var(--color-primary)' }}>
-                  another project
-                </Link>
+              <p className="text--disabled" style={{ fontSize: '0.8125rem', margin: '4px 0 0' }}>
+                <Icon name="mdi-source-fork" size={14} /> Forked from{' '}
+                <Link to={`/projects/${project.forkedFromId}`}>another project</Link>
               </p>
             )}
-            <div className="flex items-center gap-2 mt-1.5 text-sm text-[#666]">
-              <Link to={`/u/${project.ownerId}`}
-                className="hover:text-white no-underline transition-colors">
+            <div
+              className="text--secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: '0.9375rem', flexWrap: 'wrap' }}
+            >
+              <Link to={`/u/${project.ownerId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'inherit' }}>
+                <Avatar name={project.owner?.name} size={26} />
                 {project.owner?.name ?? 'Unknown'}
               </Link>
-              <span>·</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={visChip}>
-                {project.visibility === 'UOFT' ? 'U of T only' : project.visibility.charAt(0) + project.visibility.slice(1).toLowerCase()}
+              <VisibilityChip visibility={project.visibility} />
+              <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+                <Icon name="mdi-eye-outline" size={15} /> {project.viewCount} views
               </span>
-              <span>· {project.viewCount} views</span>
             </div>
           </div>
 
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {isOwner && (
               <>
-                <GhostBtn onClick={() => setEditOpen(true)}>Edit</GhostBtn>
-                <button onClick={() => { if (confirm('Delete this project?')) deleteMutation.mutate() }}
-                  className="text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors text-red-400 hover:text-red-300"
-                  style={{ border: '1px solid #3a1515' }}>
+                <Btn variant="outlined" onClick={() => setEditOpen(true)}>
+                  <Icon name="mdi-pencil-outline" size={18} />
+                  Edit
+                </Btn>
+                <Btn
+                  variant="outlined"
+                  onClick={() => confirm('Delete this project?') && deleteMutation.mutate()}
+                  style={{ color: 'var(--v-error-base)', borderColor: 'var(--v-error-base)' }}
+                >
+                  <Icon name="mdi-delete-outline" size={18} />
                   Delete
-                </button>
+                </Btn>
               </>
             )}
             {me && !isOwner && (
-              <GhostBtn onClick={() => forkMutation.mutate()}>
-                {forkMutation.isPending ? 'Forking…' : '⑂ Fork'}
-              </GhostBtn>
+              <Btn variant="outlined" onClick={() => forkMutation.mutate()} disabled={forkMutation.isPending}>
+                <Icon name="mdi-source-fork" size={18} />
+                {forkMutation.isPending ? 'Forking…' : 'Fork'}
+              </Btn>
             )}
             {isFaculty && !isOwner && (
-              <button onClick={() => requestAccessMutation.mutate()}
-                disabled={requestAccessMutation.isPending || requestAccessMutation.isSuccess}
-                className="text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors disabled:opacity-40"
-                style={{ border: '1px solid #0d2a4a', color: '#7db9ee' }}>
-                {requestAccessMutation.isSuccess ? 'Requested ✓' : 'Request access'}
-              </button>
+              <Btn
+                variant="outlined"
+                onClick={() => requestAccess.mutate()}
+                disabled={requestAccess.isPending || requestAccess.isSuccess}
+              >
+                {requestAccess.isSuccess ? 'Requested ✓' : 'Request access'}
+              </Btn>
             )}
           </div>
         </div>
 
-        {project.description && <p className="mt-4 text-[#aaa]">{project.description}</p>}
+        {project.description && (
+          <p style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{project.description}</p>
+        )}
 
         {project.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-4">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
             {project.tags.map(tag => (
-              <Link key={tag} to={`/courses/${encodeURIComponent(tag)}`}
-                className="text-xs px-2 py-0.5 rounded-full no-underline transition-colors text-[#aaa] hover:text-white"
-                style={{ backgroundColor: 'var(--color-surface-2)' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#333')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-2)')}>
-                {tag}
+              <Link key={tag} to={`/courses/${encodeURIComponent(tag)}`}>
+                <Chip small color="blue" clickable>
+                  {tag}
+                </Chip>
               </Link>
             ))}
           </div>
         )}
 
         {project.links.length > 0 && (
-          <div className="flex flex-wrap gap-3 mt-4">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
             {project.links.map(link => (
-              <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
-                className="text-sm hover:underline flex items-center gap-1 no-underline"
-                style={{ color: 'var(--color-primary)' }}>
-                ↗ {link.label}
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.9375rem' }}
+              >
+                <Icon name="mdi-open-in-new" size={16} />
+                {link.label}
               </a>
             ))}
           </div>
         )}
 
-        <div className="flex items-center gap-4 mt-5">
-          <button onClick={() => me && likeMutation.mutate()} disabled={!me || likeMutation.isPending}
-            className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg cursor-pointer transition-colors disabled:opacity-40"
-            style={likeState?.liked
-              ? { backgroundColor: '#3a0a15', border: '1px solid #5a1525', color: '#d25276' }
-              : { border: '1px solid var(--color-border)', color: '#aaa' }}>
-            ♥ {project._count.likes} {likeState?.liked ? 'Liked' : 'Like'}
-          </button>
-          {!me && <span className="text-xs text-[#555]">Sign in to like, comment, or fork</span>}
+        <Divider style={{ margin: '20px 0 16px' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Btn
+            variant="outlined"
+            onClick={() => me && likeMutation.mutate()}
+            disabled={!me || likeMutation.isPending}
+            style={liked ? { color: 'var(--v-red-base)', borderColor: 'var(--v-red-base)' } : undefined}
+          >
+            <Icon name={liked ? 'mdi-heart' : 'mdi-heart-outline'} size={18} />
+            {project._count.likes} {liked ? 'Liked' : 'Like'}
+          </Btn>
+          {!me && (
+            <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+              <Link to="/session">Sign in</Link> to like, comment or fork.
+            </span>
+          )}
         </div>
-      </div>
+      </Card>
 
       {isOwner && <AnalyticsPanel projectId={id!} />}
       <VersionsPanel projectId={id!} isOwner={isOwner} />
 
       {/* Collaborators */}
       {(project.collaborators.length > 0 || isOwner) && (
-        <div className="rounded-xl p-5 mb-4" style={surface}>
-          <h2 className="font-medium text-sm text-[#aaa] mb-3">Collaborators</h2>
-          <div className="flex flex-wrap gap-3">
+        <Card style={{ padding: 24, marginTop: 16 }}>
+          <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Collaborators</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
             {project.collaborators.map(c => (
-              <Link key={c.user.id} to={`/u/${c.user.id}`}
-                className="flex items-center gap-2 text-sm text-[#aaa] hover:text-white no-underline transition-colors">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                  style={{ backgroundColor: '#0d1e3a', color: '#7db9ee' }}>
-                  {c.user.name.charAt(0).toUpperCase()}
-                </div>
+              <Link
+                key={c.user.id}
+                to={`/u/${c.user.id}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: '0.9375rem' }}
+              >
+                <Avatar name={c.user.name} img={c.user.avatarUrl} size={28} />
                 {c.user.name}
               </Link>
             ))}
+            {project.collaborators.length === 0 && (
+              <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+                Just you so far.
+              </p>
+            )}
           </div>
           {isOwner && (
-            <button onClick={() => setInviteOpen(true)}
-              className="mt-3 text-sm cursor-pointer hover:underline transition-colors"
-              style={{ color: 'var(--color-primary)' }}>
-              + Invite collaborator
-            </button>
+            <Btn onClick={() => setInviteOpen(true)} style={{ color: 'var(--v-accent-base)', marginTop: 12, paddingLeft: 0 }}>
+              <Icon name="mdi-account-plus-outline" size={18} />
+              Invite collaborator
+            </Btn>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Comments */}
-      <div className="rounded-xl p-5" style={surface}>
-        <h2 className="font-medium text-white mb-4">Comments ({project._count.comments})</h2>
-        <div className="space-y-4 mb-6">
+      <Card style={{ padding: 24, marginTop: 16 }}>
+        <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Comments ({project._count.comments})</h2>
+
+        <div style={{ display: 'grid', gap: 20 }}>
           {comments.length === 0 ? (
-            <p className="text-sm text-[#555]">No comments yet.</p>
-          ) : comments.map(c => (
-            <div key={c.id} className="flex gap-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                style={{ backgroundColor: '#0d1e3a', color: '#7db9ee' }}>
-                {c.user?.name?.charAt(0).toUpperCase() ?? '?'}
-              </div>
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <Link to={`/u/${c.userId}`}
-                    className="text-sm font-medium text-white hover:text-[var(--color-primary)] no-underline transition-colors">
-                    {c.user?.name ?? 'Unknown'}
-                  </Link>
-                  <span className="text-xs text-[#555]">{new Date(c.createdAt).toLocaleDateString()}</span>
+            <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+              No comments yet.
+            </p>
+          ) : (
+            comments.map(c => (
+              <div key={c.id} style={{ display: 'flex', gap: 12 }}>
+                <Avatar name={c.user?.name} size={34} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <Link to={`/u/${c.userId}`} style={{ fontWeight: 500, color: 'var(--v-text-base)' }}>
+                      {c.user?.name ?? 'Unknown'}
+                    </Link>
+                    <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
+                      {new Date(c.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text--secondary" style={{ margin: '2px 0 0', fontSize: '0.9375rem' }}>
+                    {c.body}
+                  </p>
                 </div>
-                <p className="text-sm text-[#aaa] mt-0.5">{c.body}</p>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
+
         {me && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-              style={{ backgroundColor: '#0d1e3a', color: '#7db9ee' }}>
-              {me.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1">
-              <textarea value={comment} onChange={e => setComment(e.target.value)}
-                placeholder="Leave a comment…" rows={2}
-                style={{ ...inputStyle, resize: 'none' }} />
-              <button onClick={() => commentMutation.mutate()} disabled={!comment.trim() || commentMutation.isPending}
-                className="mt-2 text-sm px-4 py-1.5 rounded-lg disabled:opacity-40 cursor-pointer transition-colors"
-                style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+            <Avatar name={me.name} img={me.avatarUrl} size={34} />
+            <div style={{ flex: 1 }}>
+              <TextArea
+                rows={2}
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                placeholder="Leave a comment…"
+              />
+              <Btn
+                variant="accent"
+                size="small"
+                onClick={() => commentMutation.mutate()}
+                disabled={!comment.trim() || commentMutation.isPending}
+                style={{ marginTop: 10 }}
+              >
                 {commentMutation.isPending ? 'Posting…' : 'Post'}
-              </button>
+              </Btn>
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

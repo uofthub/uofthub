@@ -21,6 +21,7 @@ export interface Project {
   tags: string[]
   visibility: Visibility
   viewCount: number
+  forkedFromId?: string
   createdAt: string
   updatedAt: string
   owner?: Pick<User, 'id' | 'name' | 'faculty'>
