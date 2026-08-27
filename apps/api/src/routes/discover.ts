@@ -55,7 +55,15 @@ Examples:
 
 export const discoverRoutes: FastifyPluginAsync = async (app) => {
   // GET /discover?q=natural+language+query
-  app.get<{ Querystring: { q?: string } }>('/', async (request, reply) => {
+  // Each call spends Anthropic credits, so it requires a session and gets a
+  // tighter budget than ordinary reads.
+  app.get<{ Querystring: { q?: string } }>(
+    '/',
+    {
+      preHandler: [app.authenticate],
+      config: { rateLimit: { max: 20, timeWindow: '5 minutes' } },
+    },
+    async (request, reply) => {
     const { q } = request.query
 
     if (!q?.trim()) {
@@ -98,6 +106,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
       take: 20,
     })
 
-    return { params, projects }
-  })
+      return { params, projects }
+    },
+  )
 }

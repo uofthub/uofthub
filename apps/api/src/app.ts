@@ -5,6 +5,7 @@ import cookie from '@fastify/cookie'
 import jwt from '@fastify/jwt'
 import multipart from '@fastify/multipart'
 import oauth2 from '@fastify/oauth2'
+import rateLimit from '@fastify/rate-limit'
 import { authRoutes } from './routes/auth.js'
 import { projectRoutes } from './routes/projects.js'
 import { userRoutes } from './routes/users.js'
@@ -28,6 +29,13 @@ export async function buildApp() {
 
   await app.register(multipart, {
     limits: { fileSize: 50 * 1024 * 1024 },
+  })
+
+  // Generous global ceiling; the routes worth abusing set their own below.
+  await app.register(rateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
   })
 
   // Authority segment. A tenant GUID only admits users homed in that tenant, so

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { ProjectGrid } from '../components/ProjectCard'
 import { Btn, Card, Chip, EmptyState, ErrorText, Icon, PageHeader, Spinner, TextField } from '../components/ui'
@@ -15,18 +16,37 @@ const EXAMPLES = [
 /** Natural-language project search, backed by the /discover endpoint. */
 export default function DiscoverPage() {
   usePageCrumbs([{ text: 'Discover', href: '/discover' }])
+  const { user, loading } = useAuth()
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
 
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ['discover', submitted],
     queryFn: () => api.discover.search(submitted),
-    enabled: !!submitted,
+    enabled: !!submitted && !!user,
   })
 
   const run = (q: string) => {
     setQuery(q)
     setSubmitted(q)
+  }
+
+  // Discovery runs a language model per search, so the API requires a session.
+  if (!loading && !user) {
+    return (
+      <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 980 }}>
+        <PageHeader title="Discover" subtitle="Search for projects by describing what you want." />
+        <EmptyState
+          icon="mdi-creation"
+          title="Sign in with your U of T account to use AI discovery."
+          action={
+            <Btn variant="accent" to="/session" style={{ marginTop: 16 }}>
+              Sign in
+            </Btn>
+          }
+        />
+      </div>
+    )
   }
 
   return (

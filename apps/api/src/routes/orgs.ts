@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
+import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // GET /orgs
@@ -40,6 +41,8 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /orgs/:slug
   app.get<{ Params: { slug: string } }>('/:slug', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+
     const org = await db.organization.findUnique({
       where: { slug: request.params.slug },
       include: {
@@ -47,6 +50,8 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
           include: { user: { select: { id: true, name: true, avatarUrl: true, faculty: true } } },
         },
         projects: {
+          // Linking a private project to an org must not publish it.
+          where: { project: { is: visibleProjectWhere(callerId) } },
           include: {
             project: {
               include: {

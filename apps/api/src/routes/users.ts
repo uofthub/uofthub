@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
+import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/:id — public profile
@@ -24,19 +25,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /users/:id/projects
   app.get<{ Params: { id: string } }>('/:id/projects', async (request, reply) => {
-    // Try to get authenticated user to determine visibility rules
-    let callerId: string | null = null
-    try {
-      await request.jwtVerify()
-      callerId = request.user.sub
-    } catch {}
-
-    const isOwner = callerId === request.params.id
+    const callerId = await getOptionalUserId(request)
 
     const projects = await db.project.findMany({
       where: {
         ownerId: request.params.id,
-        visibility: isOwner ? undefined : 'PUBLIC',
+        // Signed-in viewers also see this user's UOFT projects, not just PUBLIC.
+        ...visibleProjectWhere(callerId),
       },
       include: {
         _count: { select: { likes: true, comments: true } },

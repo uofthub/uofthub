@@ -88,9 +88,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.redirect(process.env.WEB_URL ?? 'http://localhost:5173')
   })
 
+  // Credential endpoints are the ones worth brute-forcing, so they get a far
+  // tighter budget than the global ceiling.
+  const credentialRateLimit = {
+    rateLimit: { max: 10, timeWindow: '15 minutes' },
+  }
+
   // POST /auth/register — email + password sign-up
   app.post<{ Body: { email?: string; password?: string; name?: string } }>(
     '/register',
+    { config: credentialRateLimit },
     async (request, reply) => {
       const email = (request.body?.email ?? '').trim().toLowerCase()
       const password = request.body?.password ?? ''
@@ -133,7 +140,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   )
 
   // POST /auth/login — email + password sign-in
-  app.post<{ Body: { email?: string; password?: string } }>('/login', async (request, reply) => {
+  app.post<{ Body: { email?: string; password?: string } }>(
+    '/login',
+    { config: credentialRateLimit },
+    async (request, reply) => {
     const email = (request.body?.email ?? '').trim().toLowerCase()
     const password = request.body?.password ?? ''
 
@@ -158,9 +168,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: 'Incorrect email or password.' })
     }
 
-    issueSession(app, reply, user)
-    return { id: user.id, email: user.email, name: user.name }
-  })
+      issueSession(app, reply, user)
+      return { id: user.id, email: user.email, name: user.name }
+    },
+  )
 
   // POST /auth/logout
   app.post('/logout', async (request, reply) => {

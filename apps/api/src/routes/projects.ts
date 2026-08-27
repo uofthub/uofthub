@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
+import { canViewProject, canViewProjectId, getOptionalUserId } from '../lib/visibility.js'
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -40,6 +41,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /projects/:id
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+
     const project = await db.project.findUnique({
       where: { id: request.params.id },
       include: {
@@ -54,6 +57,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       },
     })
     if (!project) return reply.code(404).send({ error: 'Not found' })
+
+    // 404 rather than 403: a private project should not confirm its own id.
+    if (!canViewProject(project, callerId)) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
 
     // Increment view count and upsert daily analytics
     const today = new Date()
@@ -140,6 +148,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params
     const userId = request.user.sub
 
+    if (!(await canViewProjectId(id, userId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
     const existing = await db.projectLike.findUnique({
       where: { projectId_userId: { projectId: id, userId } },
     })
@@ -155,6 +167,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /projects/:id/comments
   app.get<{ Params: { id: string } }>('/:id/comments', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    if (!(await canViewProjectId(request.params.id, callerId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
     const comments = await db.comment.findMany({
       where: { projectId: request.params.id },
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },
@@ -170,6 +187,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { body } = request.body
       if (!body?.trim()) return reply.code(400).send({ error: 'Comment body is required' })
+
+      if (!(await canViewProjectId(request.params.id, request.user.sub))) {
+        return reply.code(404).send({ error: 'Not found' })
+      }
 
       const comment = await db.comment.create({
         data: { projectId: request.params.id, userId: request.user.sub, body: body.trim() },
@@ -280,6 +301,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /projects/:id/versions
   app.get<{ Params: { id: string } }>('/:id/versions', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    if (!(await canViewProjectId(request.params.id, callerId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
     const versions = await db.projectVersion.findMany({
       where: { projectId: request.params.id },
       orderBy: { versionNum: 'desc' },
