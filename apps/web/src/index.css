@@ -749,22 +749,22 @@
   animation: shape-purple 150s linear infinite alternate;
   border: 2px solid #7e57c2;
   border-radius: 100%;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   transform: translate3d(11vw, 27vh, 0);
 }
 .shape-purple::before {
   background: #7e57c2;
   border: 2px solid #7e57c2;
-  width: 115px;
-  height: 7px;
+  width: 140px;
+  height: 9px;
   transform: translate3d(-11vw, 20vh, 0) rotate(171deg);
   animation: shape-purple-pseudo 180s linear infinite alternate;
 }
 .shape-purple::after {
   border: 2px solid #7e57c2;
-  width: 14px;
-  height: 52px;
+  width: 17px;
+  height: 63px;
   transform: translate3d(-16vw, -3vh, 0) rotate(278deg);
   animation: shape-purple-pseudo 180s linear infinite alternate;
 }
@@ -788,22 +788,22 @@
   animation: shape-blue 150s linear infinite alternate;
   border: 2px solid #1e88e5;
   border-radius: 100%;
-  width: 45px;
-  height: 45px;
+  width: 55px;
+  height: 55px;
   transform: translate3d(64vw, 10vh, 0);
 }
 .shape-blue::before {
   background: #1e88e5;
   border: 2px solid #1e88e5;
-  width: 157px;
-  height: 87px;
+  width: 192px;
+  height: 106px;
   transform: translate3d(1vw, -43vh, 0) rotate(298deg);
   animation: shape-blue-pseudo 180s linear infinite alternate;
 }
 .shape-blue::after {
   border: 2px solid #1e88e5;
-  width: 13px;
-  height: 72px;
+  width: 16px;
+  height: 88px;
   transform: translate3d(-28vw, 29vh, 0) rotate(157deg);
   animation: shape-blue-pseudo 180s linear infinite alternate;
 }
@@ -827,22 +827,22 @@
   animation: shape-light-blue 150s linear infinite alternate;
   border: 2px solid #1b74c2;
   border-radius: 100%;
-  width: 43px;
-  height: 43px;
+  width: 52px;
+  height: 52px;
   transform: translate3d(69vw, 34vh, 0);
 }
 .shape-light-blue::before {
   background: #1b74c2;
   border: 2px solid #1b74c2;
-  width: 185px;
-  height: 99px;
+  width: 226px;
+  height: 121px;
   transform: translate3d(-6vw, 33vh, 0) rotate(107deg);
   animation: shape-light-blue-pseudo 180s linear infinite alternate;
 }
 .shape-light-blue::after {
   border: 2px solid #1b74c2;
-  width: 62px;
-  height: 41px;
+  width: 76px;
+  height: 50px;
   transform: translate3d(11vw, -19vh, 0) rotate(212deg);
   animation: shape-light-blue-pseudo 180s linear infinite alternate;
 }
@@ -866,22 +866,22 @@
   animation: shape-red 150s linear infinite alternate;
   border: 2px solid #bf1537;
   border-radius: 100%;
-  width: 22px;
-  height: 22px;
+  width: 27px;
+  height: 27px;
   transform: translate3d(15vw, 67vh, 0);
 }
 .shape-red::before {
   background: #bf1537;
   border: 2px solid #bf1537;
-  width: 76px;
-  height: 148px;
+  width: 93px;
+  height: 181px;
   transform: translate3d(24vw, 40vh, 0) rotate(58deg);
   animation: shape-red-pseudo 180s linear infinite alternate;
 }
 .shape-red::after {
   border: 2px solid #bf1537;
-  width: 34px;
-  height: 88px;
+  width: 41px;
+  height: 107px;
   transform: translate3d(-9vw, 55vh, 0) rotate(139deg);
   animation: shape-red-pseudo 180s linear infinite alternate;
 }
@@ -905,22 +905,22 @@
   animation: shape-orange 150s linear infinite alternate;
   border: 2px solid #d89648;
   border-radius: 100%;
-  width: 33px;
-  height: 33px;
+  width: 40px;
+  height: 40px;
   transform: translate3d(51vw, 61vh, 0);
 }
 .shape-orange::before {
   background: #d89648;
   border: 2px solid #d89648;
-  width: 44px;
-  height: 132px;
+  width: 54px;
+  height: 161px;
   transform: translate3d(-32vw, 12vh, 0) rotate(244deg);
   animation: shape-orange-pseudo 180s linear infinite alternate;
 }
 .shape-orange::after {
   border: 2px solid #d89648;
-  width: 89px;
-  height: 24px;
+  width: 109px;
+  height: 29px;
   transform: translate3d(-12vw, 47vh, 0) rotate(31deg);
   animation: shape-orange-pseudo 180s linear infinite alternate;
 }
@@ -944,22 +944,22 @@
   animation: shape-cyan 150s linear infinite alternate;
   border: 2px solid #78ffba;
   border-radius: 100%;
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   transform: translate3d(76vw, 77vh, 0);
 }
 .shape-cyan::before {
   background: #78ffba;
   border: 2px solid #78ffba;
-  width: 96px;
-  height: 38px;
+  width: 117px;
+  height: 46px;
   transform: translate3d(-25vw, -34vh, 0) rotate(126deg);
   animation: shape-cyan-pseudo 180s linear infinite alternate;
 }
 .shape-cyan::after {
   border: 2px solid #78ffba;
-  width: 51px;
-  height: 66px;
+  width: 62px;
+  height: 81px;
   transform: translate3d(9vw, -12vh, 0) rotate(19deg);
   animation: shape-cyan-pseudo 180s linear infinite alternate;
 }
