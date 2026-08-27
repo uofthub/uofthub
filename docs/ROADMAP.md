@@ -58,6 +58,21 @@ Goal: a working platform that a real U of T student can use to publish and share
 
 ---
 
+## Phase 3 — Student groups & integrations
+
+Full spec: [docs/student-groups.md](student-groups.md).
+
+**Student groups**
+- [ ] Group verification workflow — pending → review → verified/denied, 7-day auto-delete on timeout
+- [ ] Admin portal for reviewing group verification requests
+- [ ] Per-term group storage quota (10GB/term, stacking, same override process as individual accounts)
+- [ ] Org activities — lightweight posts (meetings, events, recaps) on `/orgs/:slug` pages
+
+**Integrations**
+- [ ] Discord — link a group's server on its org page
+
+---
+
 ## Later / Exploratory
 
 - File uploads (requires object storage: S3 or compatible)
@@ -66,6 +81,7 @@ Goal: a working platform that a real U of T student can use to publish and share
 - Privacy-preserving, aggregate research study on discovery/collaboration behavior (HCI angle)
 - Potential official U of T subdomain/hosting once there's real usage traction
 - Mobile app
+- GroupMe integration — same treatment as Discord, deferred until that ships
 
 ---
 

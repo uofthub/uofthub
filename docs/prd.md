@@ -80,6 +80,9 @@ Each project can include:
 - Invited TA/Professor — view-only access per project (opt-in, not automatic)
 - Visibility controls default to the most private setting; student explicitly opens it up
 
+### Student Groups (Clubs & Labs)
+Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual profiles: their own storage quota (larger, term-based, vs. a person's flat indefinite quota), a verification step before the page is public, and the ability to publish lightweight "activities" (events, meetings, recaps) alongside member projects. Full spec: [student-groups.md](student-groups.md).
+
 ---
 
 ## 7. Feature Set
@@ -181,3 +184,4 @@ Future graph extension: Students → Projects → People → Courses → Researc
 - Moderation policy for public projects
 - Whether/when to formalize the TA/professor access model
 - Timeline and criteria for approaching U of T about infrastructure support
+- What evidence counts as sufficient proof when verifying a student group's authorization (no official U of T club/lab registry API exists to check against) — see [student-groups.md](student-groups.md)
