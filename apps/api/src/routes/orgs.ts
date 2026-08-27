@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
+import { safeExternalUrl } from '../lib/url.js'
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // GET /orgs
@@ -21,13 +22,21 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
 
       const slugified = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
 
+      // Rendered as an <a href> on the org page, so http(s) only.
+      let safeWebsite: string | undefined
+      if (websiteUrl?.trim()) {
+        const parsed = safeExternalUrl(websiteUrl)
+        if (!parsed) return reply.code(400).send({ error: 'Website must be an http(s) URL' })
+        safeWebsite = parsed
+      }
+
       const org = await db.organization.create({
         data: {
           name: name.trim(),
           slug: slugified,
           type: type as 'CLUB' | 'LAB',
           description: description?.trim(),
-          websiteUrl: websiteUrl?.trim() || undefined,
+          websiteUrl: safeWebsite,
           members: { create: { userId: request.user.sub, role: 'ADMIN' } },
         },
         include: {

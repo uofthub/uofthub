@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
-import { api } from '../lib/api'
+import { api, safeUrl } from '../lib/api'
 import { VisibilityChip } from '../components/ProjectCard'
 import {
   Avatar,
@@ -384,18 +384,23 @@ export default function ProjectPage() {
 
         {project.links.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
-            {project.links.map(link => (
-              <a
-                key={link.id}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.9375rem' }}
-              >
-                <Icon name="mdi-open-in-new" size={16} />
-                {link.label}
-              </a>
-            ))}
+            {project.links.map(link => {
+              // Drop anything that is not http(s) rather than rendering the href.
+              const href = safeUrl(link.url)
+              if (!href) return null
+              return (
+                <a
+                  key={link.id}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.9375rem' }}
+                >
+                  <Icon name="mdi-open-in-new" size={16} />
+                  {link.label}
+                </a>
+              )
+            })}
           </div>
         )}
 

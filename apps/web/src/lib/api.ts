@@ -139,3 +139,18 @@ export const api = {
     followingMe: (id: string) => request<{ following: boolean }>(`/users/${id}/follow/me`),
   },
 }
+
+/**
+ * Guard for user-supplied links before they reach an `href`. React does not
+ * sanitize href, so a stored `javascript:` URL would execute on click. The API
+ * rejects these on write; this covers rows saved before that check existed.
+ */
+export function safeUrl(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = new URL(raw, window.location.origin)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined
+  } catch {
+    return undefined
+  }
+}

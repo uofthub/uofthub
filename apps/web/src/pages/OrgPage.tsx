@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
-import { api } from '../lib/api'
+import { api, safeUrl } from '../lib/api'
 import { Stat } from '../components/ProjectCard'
 import { Avatar, Btn, Card, Chip, Divider, EmptyState, ErrorText, Icon, Spinner, TextField } from '../components/ui'
 
@@ -75,9 +75,9 @@ export default function OrgPage() {
             {org.description}
           </p>
         )}
-        {org.websiteUrl && (
+        {safeUrl(org.websiteUrl) && (
           <a
-            href={org.websiteUrl}
+            href={safeUrl(org.websiteUrl)}
             target="_blank"
             rel="noopener noreferrer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 12, fontSize: '0.9375rem' }}

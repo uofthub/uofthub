@@ -6,6 +6,7 @@ import {
   getOptionalUserId,
   visibleProjectWhere,
 } from '../lib/visibility.js'
+import { safeExternalUrl } from '../lib/url.js'
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -103,6 +104,16 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
     if (!title?.trim()) return reply.code(400).send({ error: 'Title is required' })
 
+    // Reject javascript:/data: links up front rather than storing them.
+    const safeLinks: { label: string; url: string }[] = []
+    for (const link of links) {
+      const url = safeExternalUrl(link?.url)
+      if (!url) {
+        return reply.code(400).send({ error: `Link "${link?.label ?? ''}" must be an http(s) URL` })
+      }
+      safeLinks.push({ label: String(link.label ?? '').trim(), url })
+    }
+
     const project = await db.project.create({
       data: {
         ownerId: request.user.sub,
@@ -110,7 +121,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         description: description?.trim(),
         tags,
         visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC',
-        links: links.length ? { create: links } : undefined,
+        links: safeLinks.length ? { create: safeLinks } : undefined,
       },
       include: {
         owner: { select: { id: true, name: true, faculty: true } },
@@ -303,8 +314,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
+      const url = safeExternalUrl(request.body.url)
+      if (!url) return reply.code(400).send({ error: 'Link must be an http(s) URL' })
+
       const link = await db.projectLink.create({
-        data: { projectId: project.id, label: request.body.label, url: request.body.url },
+        data: { projectId: project.id, label: String(request.body.label ?? '').trim(), url },
       })
       return reply.code(201).send(link)
     }

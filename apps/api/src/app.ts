@@ -13,6 +13,12 @@ import { discoverRoutes } from './routes/discover.js'
 import { orgRoutes } from './routes/orgs.js'
 
 export async function buildApp() {
+  // A default secret is fine for local work but would silently ship forgeable
+  // sessions if the env var were missing in production, so refuse to boot.
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET must be set in production')
+  }
+
   const app = Fastify({ logger: true })
 
   await app.register(cors, {

@@ -10,24 +10,37 @@ function getRole(email: string): 'STUDENT' | 'FACULTY' {
 
 const isUofTEmail = (email: string) => UOFT_DOMAINS.some((domain) => email.endsWith(domain))
 
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7 // 7 days
+
+/**
+ * Upper bound on password length. scrypt cost scales with input, so an
+ * unbounded password lets one request burn CPU deliberately.
+ */
+const MAX_PASSWORD_LENGTH = 200
+
 /** Signs our JWT and attaches it as the session cookie. */
 function issueSession(
   app: FastifyInstance,
   reply: FastifyReply,
   user: { id: string; email: string },
 ) {
-  const token = app.jwt.sign({
-    sub: user.id,
-    email: user.email,
-    role: getRole(user.email),
-  })
+  // Expiry must be set on the token itself: the cookie's Max-Age is a client
+  // hint, so without this a copied token stays valid forever.
+  const token = app.jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      role: getRole(user.email),
+    },
+    { expiresIn: SESSION_MAX_AGE_SECONDS },
+  )
 
   reply.setCookie('token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: SESSION_MAX_AGE_SECONDS,
   })
 }
 
@@ -116,6 +129,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           .code(400)
           .send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
       }
+      if (password.length > MAX_PASSWORD_LENGTH) {
+        return reply
+          .code(400)
+          .send({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters.` })
+      }
 
       const existing = await db.user.findUnique({
         where: { email },
@@ -149,6 +167,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!email || !password) {
       return reply.code(400).send({ error: 'Email and password are required.' })
+    }
+    // Bound the work before hashing; a valid password can never be this long.
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return reply.code(401).send({ error: 'Incorrect email or password.' })
     }
 
     const user = await db.user.findUnique({
