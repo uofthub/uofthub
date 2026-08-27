@@ -148,5 +148,8 @@ apps/api/node_modules/.prisma
 # Build outputs
 apps/*/dist
 
+# Unrelated local directories
+uoftindex.ca/
+
 # pnpm lockfile (committed — don't ignore)
 # pnpm-lock.yaml
