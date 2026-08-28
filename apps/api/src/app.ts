@@ -32,8 +32,10 @@ export async function buildApp() {
     cookie: { cookieName: 'token', signed: false },
   })
 
+  // Matches the largest per-category cap (video, see lib/fileValidation.ts) so
+  // the stream isn't truncated before the tighter per-category checks run.
   await app.register(multipart, {
-    limits: { fileSize: 50 * 1024 * 1024 },
+    limits: { fileSize: 250 * 1024 * 1024 },
   })
 
   // Generous global ceiling; the routes worth abusing set their own below.

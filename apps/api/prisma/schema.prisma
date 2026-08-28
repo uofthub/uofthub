@@ -114,7 +114,9 @@ model ProjectFile {
   id         String   @id @default(uuid())
   projectId  String
   name       String
-  url        String
+  /// R2 object key, not a public URL — downloads go through a signed URL so
+  /// they still honour project visibility.
+  storageKey String
   sizeBytes  Int
   mimeType   String?
   uploadedAt DateTime @default(now())

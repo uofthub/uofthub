@@ -7,6 +7,12 @@ import {
   visibleProjectWhere,
 } from '../lib/visibility.js'
 import { safeExternalUrl } from '../lib/url.js'
+import { ACCOUNT_QUOTA_BYTES, PROJECT_FILE_COUNT_CAP, categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
+import { deleteObject, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
+
+// Upload/delete cost real storage and bandwidth, so they get a tighter budget
+// than the global ceiling — same pattern as auth.ts's credentialRateLimit.
+const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -66,7 +72,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           where: { accepted: true },
           include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
-        files: true,
+        // storageKey is an internal R2 pointer, never sent to the client —
+        // downloads go through the signed-URL route below instead.
+        files: { select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true } },
         links: true,
         _count: { select: { likes: true, comments: true } },
       },
@@ -343,6 +351,103 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return { ok: true }
     }
   )
+
+  // ── FILES ───────────────────────────────────────────────────────────────────
+
+  // POST /projects/:id/files — multipart upload, owner only
+  app.post<{ Params: { id: string } }>(
+    '/:id/files',
+    { preHandler: [app.authenticate], config: uploadRateLimit },
+    async (request, reply) => {
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      const data = await request.file()
+      if (!data) return reply.code(400).send({ error: 'No file uploaded' })
+
+      const ext = extOf(data.filename)
+      const category = categoryFor(ext)
+      if (!category) return reply.code(400).send({ error: `Unsupported file type: .${ext || '?'}` })
+
+      const buffer = await data.toBuffer()
+      // @fastify/multipart truncates rather than throwing when the stream
+      // exceeds the registered global limit (250MB) — buffer.length would
+      // otherwise look like a plausible, if large, file.
+      if (data.file.truncated) {
+        return reply.code(413).send({ error: 'File exceeds the 250MB upload limit' })
+      }
+      if (buffer.length > category.maxSizeBytes) {
+        return reply.code(413).send({
+          error: `File exceeds the ${category.name} size limit (${category.maxSizeBytes / (1024 * 1024)}MB)`,
+        })
+      }
+
+      // Checked against the actual bytes, not the client-declared filename or
+      // MIME type — this is what stops a renamed executable getting through.
+      if (!(await matchesDeclaredType(buffer, ext))) {
+        return reply.code(400).send({ error: 'File content does not match its extension' })
+      }
+
+      const [fileCount, usage] = await Promise.all([
+        db.projectFile.count({ where: { projectId: project.id } }),
+        db.projectFile.aggregate({ where: { project: { ownerId: project.ownerId } }, _sum: { sizeBytes: true } }),
+      ])
+      if (fileCount >= PROJECT_FILE_COUNT_CAP) {
+        return reply.code(400).send({ error: `This project already has the ${PROJECT_FILE_COUNT_CAP}-file limit` })
+      }
+      const usedBytes = usage._sum.sizeBytes ?? 0
+      if (usedBytes + buffer.length > ACCOUNT_QUOTA_BYTES) {
+        return reply.code(413).send({ error: 'This upload would exceed your storage quota' })
+      }
+
+      const key = objectKey(project.id, data.filename)
+      await putObject(key, buffer, data.mimetype)
+
+      const file = await db.projectFile.create({
+        data: { projectId: project.id, name: data.filename, storageKey: key, sizeBytes: buffer.length, mimeType: data.mimetype },
+        select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
+      })
+      return reply.code(201).send(file)
+    }
+  )
+
+  // DELETE /projects/:id/files/:fileId — owner only
+  app.delete<{ Params: { id: string; fileId: string } }>(
+    '/:id/files/:fileId',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      // Scope to this project, same reasoning as DELETE .../links/:linkId.
+      const file = await db.projectFile.findFirst({
+        where: { id: request.params.fileId, projectId: project.id },
+      })
+      if (!file) return reply.code(404).send({ error: 'File not found' })
+
+      await deleteObject(file.storageKey)
+      await db.projectFile.delete({ where: { id: file.id } })
+      return { ok: true }
+    }
+  )
+
+  // GET /projects/:id/files/:fileId/download — redirects to a short-lived signed URL
+  app.get<{ Params: { id: string; fileId: string } }>('/:id/files/:fileId/download', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    if (!(await canViewProjectId(request.params.id, callerId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
+    const file = await db.projectFile.findFirst({
+      where: { id: request.params.fileId, projectId: request.params.id },
+    })
+    if (!file) return reply.code(404).send({ error: 'File not found' })
+
+    const url = await signedDownloadUrl(file.storageKey, file.name)
+    return reply.redirect(url)
+  })
 
   // ── VERSIONING ─────────────────────────────────────────────────────────────
 
