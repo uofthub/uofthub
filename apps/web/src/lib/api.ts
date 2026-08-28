@@ -147,6 +147,12 @@ export const api = {
       request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
     follow: (id: string) => request<{ following: boolean }>(`/users/${id}/follow`, { method: 'POST' }),
     followingMe: (id: string) => request<{ following: boolean }>(`/users/${id}/follow/me`),
+    uploadAvatar: (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return request<MeUser>('/users/me/avatar', { method: 'POST', body: form })
+    },
+    deleteAvatar: () => request<{ ok: boolean }>('/users/me/avatar', { method: 'DELETE' }),
   },
 }
 

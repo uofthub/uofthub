@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
@@ -15,10 +15,118 @@ import {
   ErrorText,
   Field,
   Icon,
+  Menu,
   Spinner,
   TextArea,
   TextField,
 } from '../components/ui'
+
+function AvatarEditor({ name, img, size, hasAvatar }: { name?: string; img?: string; size: number; hasAvatar: boolean }) {
+  const { refetch } = useAuth()
+  const qc = useQueryClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const onChanged = () => {
+    setError(null)
+    refetch()
+    qc.invalidateQueries({ queryKey: ['profile'] })
+  }
+  const upload = useMutation({
+    mutationFn: (file: File) => api.users.uploadAvatar(file),
+    onSuccess: onChanged,
+    onError: (err: Error) => setError(err.message),
+  })
+  const remove = useMutation({
+    mutationFn: () => api.users.deleteAvatar(),
+    onSuccess: onChanged,
+    onError: (err: Error) => setError(err.message),
+  })
+  const busy = upload.isPending || remove.isPending
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <Avatar name={name} img={img} size={size} />
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        disabled={busy}
+        onChange={e => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) upload.mutate(file)
+        }}
+      />
+
+      <Menu
+        activator={({ toggle }) => (
+          <button
+            onClick={toggle}
+            aria-label="Change avatar"
+            disabled={busy}
+            className="pointer"
+            style={{
+              position: 'absolute',
+              bottom: -2,
+              right: -2,
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              background: 'var(--v-accent-base)',
+              border: '2px solid var(--v-component-base)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+            }}
+          >
+            <Icon name="mdi-camera-outline" size={14} color="#fff" />
+          </button>
+        )}
+      >
+        {close => (
+          <ul className="v-list" style={{ padding: '6px 0' }}>
+            <li>
+              <button
+                className="v-list-item"
+                onClick={() => {
+                  close()
+                  inputRef.current?.click()
+                }}
+              >
+                <Icon name="mdi-upload-outline" color="var(--v-accent-base)" />
+                {upload.isPending ? 'Uploading…' : 'Upload photo'}
+              </button>
+            </li>
+            {hasAvatar && (
+              <li>
+                <button
+                  className="v-list-item"
+                  onClick={() => {
+                    close()
+                    remove.mutate()
+                  }}
+                >
+                  <Icon name="mdi-delete-outline" color="var(--tone-error)" />
+                  Remove photo
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
+      </Menu>
+
+      {error && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, width: 200 }}>
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function EditProfileDialog({ onClose }: { onClose: () => void }) {
   const { user, refetch } = useAuth()
@@ -137,7 +245,11 @@ export default function ProfilePage() {
 
       <Card style={{ padding: 28 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-          <Avatar name={profile.name} img={profile.avatarUrl} size={72} />
+          {isOwn ? (
+            <AvatarEditor name={profile.name} img={profile.avatarUrl} size={72} hasAvatar={!!profile.avatarUrl} />
+          ) : (
+            <Avatar name={profile.name} img={profile.avatarUrl} size={72} />
+          )}
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <h1 style={{ fontSize: '1.5rem' }}>{profile.name}</h1>
             <div className="text--secondary" style={{ fontSize: '0.9375rem', marginTop: 4 }}>
