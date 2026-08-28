@@ -95,6 +95,7 @@ export type Org = {
   description?: string
   websiteUrl?: string
   discordUrl?: string
+  groupMeUrl?: string
   status: OrgStatus
   /** Members only — everyone else gets these fields stripped by the API. */
   contactEmail?: string
@@ -160,6 +161,15 @@ export type AdminReport = {
 }
 
 export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
+
+/** What `/discover` understood the query to mean. Every field may be null. */
+export type DiscoverFilters = {
+  search: string | null
+  faculty: string | null
+  tag: string | null
+  sort: 'new' | 'trending' | null
+  within: 'month' | 'term' | 'year' | null
+}
 
 export const api = {
   auth: {
@@ -230,6 +240,12 @@ export const api = {
         body: JSON.stringify(body),
       }),
   },
+  discover: {
+    search: (q: string) =>
+      request<{ filters: DiscoverFilters; interpreted: boolean; projects: ProjectSummary[] }>(
+        `/discover?q=${encodeURIComponent(q)}`
+      ),
+  },
   admin: {
     reports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminReport[]>(`/admin/reports?status=${status}`),
@@ -249,10 +265,14 @@ export const api = {
       description?: string
       websiteUrl?: string
       discordUrl?: string
+      groupMeUrl?: string
       contactEmail: string
       contactRole: string
     }) => request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
-    update: (slug: string, body: Partial<{ description: string; websiteUrl: string; discordUrl: string }>) =>
+    update: (
+      slug: string,
+      body: Partial<{ description: string; websiteUrl: string; discordUrl: string; groupMeUrl: string }>
+    ) =>
       request<Org>(`/orgs/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
     verify: (slug: string, note: string) =>
       request<Org>(`/orgs/${slug}/verify`, { method: 'POST', body: JSON.stringify({ note }) }),

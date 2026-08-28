@@ -19,6 +19,13 @@ const FEATURES = [
     page: '/projects',
   },
   {
+    title: 'AI Discovery',
+    text: 'Ask in plain English. "Machine learning projects from Engineering" or "what students built in CSC309 this year" returns exactly that.',
+    icon: 'mdi-creation',
+    colour: 'purple',
+    page: '/discover',
+  },
+  {
     title: 'Collaborators',
     text: 'Invite the people you actually built it with. Every contributor gets the project on their own profile, credited properly.',
     icon: 'mdi-account-multiple-plus-outline',

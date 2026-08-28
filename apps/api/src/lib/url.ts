@@ -20,16 +20,26 @@ export function safeExternalUrl(raw: string | undefined | null): string | null {
   return ALLOWED_PROTOCOLS.has(parsed.protocol) ? parsed.toString() : null
 }
 
+/**
+ * A link that has to actually point at the service it is labelled with.
+ * Stricter than `safeExternalUrl` on purpose: the org page renders these
+ * behind a service badge, so a link to somewhere else entirely would be a
+ * small piece of misdirection we'd be hosting.
+ */
+function safeUrlOnHosts(raw: string | undefined | null, hosts: Set<string>): string | null {
+  const url = safeExternalUrl(raw)
+  if (!url) return null
+  return hosts.has(new URL(url).hostname.toLowerCase()) ? url : null
+}
+
 /** Hosts a Discord invite can legitimately live on. */
 const DISCORD_HOSTS = new Set(['discord.gg', 'discord.com', 'www.discord.com', 'discordapp.com'])
 
-/**
- * A Discord invite, or null. Stricter than `safeExternalUrl` on purpose: the
- * org page renders this behind a Discord badge, so a link to somewhere else
- * entirely would be a small piece of misdirection we'd be hosting.
- */
-export function safeDiscordUrl(raw: string | undefined | null): string | null {
-  const url = safeExternalUrl(raw)
-  if (!url) return null
-  return DISCORD_HOSTS.has(new URL(url).hostname.toLowerCase()) ? url : null
-}
+/** Hosts a GroupMe group share link can legitimately live on. */
+const GROUPME_HOSTS = new Set(['groupme.com', 'www.groupme.com', 'app.groupme.com'])
+
+export const safeDiscordUrl = (raw: string | undefined | null): string | null =>
+  safeUrlOnHosts(raw, DISCORD_HOSTS)
+
+export const safeGroupMeUrl = (raw: string | undefined | null): string | null =>
+  safeUrlOnHosts(raw, GROUPME_HOSTS)

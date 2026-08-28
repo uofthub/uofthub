@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
-import { safeDiscordUrl, safeExternalUrl } from '../lib/url.js'
+import { safeDiscordUrl, safeExternalUrl, safeGroupMeUrl } from '../lib/url.js'
 import {
   canViewOrg,
   orgQuotaBytes,
@@ -40,11 +40,12 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       description?: string
       websiteUrl?: string
       discordUrl?: string
+      groupMeUrl?: string
       contactEmail?: string
       contactRole?: string
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { name, slug, type = 'CLUB', description, websiteUrl, discordUrl } = request.body
+    const { name, slug, type = 'CLUB', description, websiteUrl, discordUrl, groupMeUrl } = request.body
     if (!name?.trim() || !slug?.trim()) return reply.code(400).send({ error: 'name and slug are required' })
 
     const contactEmail = (request.body.contactEmail ?? '').trim().toLowerCase()
@@ -75,6 +76,13 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       safeDiscord = parsed
     }
 
+    let safeGroupMe: string | undefined
+    if (groupMeUrl?.trim()) {
+      const parsed = safeGroupMeUrl(groupMeUrl)
+      if (!parsed) return reply.code(400).send({ error: 'GroupMe link must be a groupme.com URL' })
+      safeGroupMe = parsed
+    }
+
     const org = await db.organization.create({
       data: {
         name: name.trim(),
@@ -83,6 +91,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         description: description?.trim(),
         websiteUrl: safeWebsite,
         discordUrl: safeDiscord,
+        groupMeUrl: safeGroupMe,
         contactEmail,
         contactRole,
         status: 'PENDING_VERIFICATION',
@@ -150,7 +159,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /orgs/:slug — admins edit the group's own details
   app.patch<{
     Params: { slug: string }
-    Body: { description?: string; websiteUrl?: string; discordUrl?: string }
+    Body: { description?: string; websiteUrl?: string; discordUrl?: string; groupMeUrl?: string }
   }>('/:slug', { preHandler: [app.authenticate] }, async (request, reply) => {
     const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
     if (!org) return reply.code(404).send({ error: 'Not found' })
@@ -160,7 +169,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     })
     if (member?.role !== 'ADMIN') return reply.code(403).send({ error: 'Admins only' })
 
-    const { description, websiteUrl, discordUrl } = request.body
+    const { description, websiteUrl, discordUrl, groupMeUrl } = request.body
 
     let safeWebsite: string | null | undefined
     if (websiteUrl !== undefined) {
@@ -178,12 +187,21 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    let safeGroupMe: string | null | undefined
+    if (groupMeUrl !== undefined) {
+      safeGroupMe = groupMeUrl.trim() ? safeGroupMeUrl(groupMeUrl) : null
+      if (groupMeUrl.trim() && !safeGroupMe) {
+        return reply.code(400).send({ error: 'GroupMe link must be a groupme.com URL' })
+      }
+    }
+
     const updated = await db.organization.update({
       where: { id: org.id },
       data: {
         ...(description !== undefined && { description: description.trim() || null }),
         ...(safeWebsite !== undefined && { websiteUrl: safeWebsite }),
         ...(safeDiscord !== undefined && { discordUrl: safeDiscord }),
+        ...(safeGroupMe !== undefined && { groupMeUrl: safeGroupMe }),
       },
     })
     return updated

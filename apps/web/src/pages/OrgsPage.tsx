@@ -39,6 +39,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
     description: '',
     websiteUrl: '',
     discordUrl: '',
+    groupMeUrl: '',
     contactEmail: '',
     contactRole: '',
   })
@@ -52,6 +53,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
         description: form.description || undefined,
         websiteUrl: form.websiteUrl || undefined,
         discordUrl: form.discordUrl || undefined,
+        groupMeUrl: form.groupMeUrl || undefined,
         contactEmail: form.contactEmail,
         contactRole: form.contactRole,
       }),
@@ -89,6 +91,9 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
         </Field>
         <Field label="Discord invite" hint="Optional. A discord.gg or discord.com link.">
           <TextField value={form.discordUrl} onChange={set('discordUrl')} placeholder="https://discord.gg/…" />
+        </Field>
+        <Field label="GroupMe" hint="Optional. A groupme.com share link.">
+          <TextField value={form.groupMeUrl} onChange={set('groupMeUrl')} placeholder="https://groupme.com/join_group/…" />
         </Field>
 
         <Divider />

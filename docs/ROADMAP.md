@@ -126,12 +126,15 @@ Goal: a group page stops being "anyone can claim it" and becomes something verif
 
 ## Later / Exploratory
 
-Deliberately last — these either need infrastructure the earlier phases don't (WebSockets, an LLM budget) or are speculative enough that building them now would mean designing against guesses instead of real usage.
+Deliberately last — these either need infrastructure the earlier phases don't (WebSockets, an LLM budget) or are speculative enough that building them now would mean designing against guesses instead of real usage. The two with clear specs and cleared prerequisites are now built; what remains below is genuinely gated on something other than engineering time.
 
-- Collaborative editing (requires WebSocket infrastructure)
-- AI-powered project discovery — natural language search via Claude. Was implemented (`/discover`, `ANTHROPIC_API_KEY`) and then pulled back out of the codebase to keep AI work scoped to this phase; spec preserved in [prd.md § 7](prd.md#7-feature-set) for whenever this phase starts
-- GroupMe integration — same treatment as Discord, deferred until that ships
-- Alumni-persistent portfolios (profile persists post-graduation)
+- [x] **AI-powered project discovery** — `GET /discover?q=`, natural-language search via Claude, and the `/discover` page behind it. The model never sees the database and never writes a query: it fills a closed set of fields (`search`, `faculty`, `tag`, `sort`, `within`) validated by a Zod schema, which the route then applies through the same `visibleProjectWhere` filter every other read uses. Its output is untrusted input, and the schema is what keeps a creative answer from becoming a creative query
+  - Without `ANTHROPIC_API_KEY` the route degrades to a plain keyword search and says so in the response (`interpreted: false`) rather than 503ing — same pattern as `lib/email.ts`, so local dev and a deploy with no AI budget both keep working
+  - Cost control: authenticated only, 20 searches/hour keyed by session (`lib/rateLimit.ts`, shared with the report route), query capped at 300 chars, `effort: 'low'`
+  - The interpreted filters come back to the client and render as chips, so an empty result is explainable ("faculty Engineering") instead of looking broken
+- [x] **GroupMe integration** — `groupMeUrl` on `Organization`, host-restricted to groupme.com the same way `discordUrl` is, with a badge on `OrgPage.tsx`. Its stated gate was "deferred until Discord ships", and Discord shipped in Phase 3
+- Collaborative editing (requires WebSocket infrastructure) — still unbuilt, and still needs a decision before it needs code: *what* is co-edited. A project description is a text field, not a document, so there is no obvious surface for it yet
+- Alumni-persistent portfolios (profile persists post-graduation) — nothing to build until there's a signal that someone has graduated; sign-in only proves the address still resolves
 - Privacy-preserving, aggregate research study on discovery/collaboration behavior (HCI angle)
 - Potential official U of T subdomain/hosting once there's real usage traction
 - Mobile app

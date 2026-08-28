@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import {
   canViewProject,
@@ -11,6 +11,7 @@ import { ACCOUNT_QUOTA_BYTES, PROJECT_FILE_COUNT_CAP, categoryFor, extOf, matche
 import { deleteObject, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { notify } from '../lib/notifications.js'
 import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
+import { bySession } from '../lib/rateLimit.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -18,19 +19,8 @@ const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
 
 // Every report costs a moderator's attention, so the budget is tighter still —
 // a genuine reporter never needs more than a handful in an hour. Keyed by
-// session rather than by IP (the default): most of campus shares a handful of
-// NAT addresses, so an IP budget would let one abuser mute everyone on the
-// same wifi. The rate limiter runs in onRequest, before `authenticate` has
-// verified anything, so the raw cookie — not request.user — is what's
-// available; an unauthenticated request falls back to the IP and gets its 401
-// from the preHandler regardless.
-const reportRateLimit = {
-  rateLimit: {
-    max: 5,
-    timeWindow: '1 hour',
-    keyGenerator: (request: FastifyRequest) => request.cookies?.token ?? request.ip,
-  },
-}
+// session rather than by IP; see lib/rateLimit.ts for why.
+const reportRateLimit = { rateLimit: { max: 5, timeWindow: '1 hour', keyGenerator: bySession } }
 
 const REPORT_REASONS = [
   'SPAM',

@@ -84,6 +84,7 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
     description: org.description ?? '',
     websiteUrl: org.websiteUrl ?? '',
     discordUrl: org.discordUrl ?? '',
+    groupMeUrl: org.groupMeUrl ?? '',
   })
   const mutation = useMutation({
     mutationFn: () => api.orgs.update(org.slug, form),
@@ -107,6 +108,9 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
         </Field>
         <Field label="Discord invite" hint="A discord.gg or discord.com link.">
           <TextField value={form.discordUrl} onChange={set('discordUrl')} placeholder="https://discord.gg/…" />
+        </Field>
+        <Field label="GroupMe" hint="A groupme.com share link.">
+          <TextField value={form.groupMeUrl} onChange={set('groupMeUrl')} placeholder="https://groupme.com/join_group/…" />
         </Field>
         {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
       </div>
@@ -379,6 +383,7 @@ export default function OrgPage() {
   const isAdmin = org.members.find(m => m.userId === me?.id)?.role === 'ADMIN'
   const lab = org.type === 'LAB'
   const discord = safeUrl(org.discordUrl)
+  const groupMe = safeUrl(org.groupMeUrl)
 
   return (
     <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 960 }}>
@@ -440,6 +445,14 @@ export default function OrgPage() {
               <Chip small color="purple" clickable>
                 <Icon name="mdi-discord" size={15} />
                 Join the Discord
+              </Chip>
+            </a>
+          )}
+          {groupMe && (
+            <a href={groupMe} target="_blank" rel="noopener noreferrer">
+              <Chip small color="mint" clickable>
+                <Icon name="mdi-message-text-outline" size={15} />
+                Join the GroupMe
               </Chip>
             </a>
           )}

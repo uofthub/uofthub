@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { safeDiscordUrl, safeExternalUrl } from './url.js'
+import { safeDiscordUrl, safeExternalUrl, safeGroupMeUrl } from './url.js'
 
 describe('safeExternalUrl', () => {
   it('accepts http and https', () => {
@@ -37,5 +37,20 @@ describe('safeDiscordUrl', () => {
 
   it('still rejects unsafe protocols', () => {
     expect(safeDiscordUrl('javascript:alert(1)')).toBeNull()
+  })
+})
+
+describe('safeGroupMeUrl', () => {
+  it('accepts a GroupMe share link', () => {
+    expect(safeGroupMeUrl('https://groupme.com/join_group/12345/abc')).toBe(
+      'https://groupme.com/join_group/12345/abc'
+    )
+    expect(safeGroupMeUrl('https://app.groupme.com/join_group/1/2')).toBe('https://app.groupme.com/join_group/1/2')
+  })
+
+  it('rejects a link to anywhere else, including a lookalike host', () => {
+    expect(safeGroupMeUrl('https://discord.gg/abc')).toBeNull()
+    expect(safeGroupMeUrl('https://groupme.com.evil.example/join')).toBeNull()
+    expect(safeGroupMeUrl('javascript:alert(1)')).toBeNull()
   })
 })

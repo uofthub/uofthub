@@ -90,7 +90,7 @@ Activities render on the group's `/orgs/:slug` page in reverse-chronological ord
 ## External integrations
 
 - **Discord** — near-term. A group can link its Discord server on its org page (an invite link, at minimum; a richer embed/widget is a nice-to-have, not a requirement). No two-way sync — e.g. auto-importing announcements as activities — is planned yet; that's a larger scope than a link and would need its own design pass.
-- **GroupMe** — same treatment, explicitly deferred. Do not build alongside Discord.
+- **GroupMe** — now built, on the same terms as Discord: `groupMeUrl` on the group, host-restricted to groupme.com, rendered as a badge. It was deferred until Discord shipped rather than built alongside it, so the pattern was settled once and then reused. Still no two-way sync on either.
 
 ---
 
@@ -103,7 +103,7 @@ Implemented across [orgs.ts](../apps/api/src/routes/orgs.ts) (create / gate / ve
 - **An unverified group's files bill the uploader, not nobody.** "Cannot upload files" is implemented as "has no group allowance": uploads fall back to the member's personal 2GB. Blocking the upload outright would have made joining an unverified group *reduce* what a student can store on their own projects.
 - **The billed group is stamped on the file.** `ProjectFile.orgId` is written at upload time rather than derived from the project's org links later, so quota already spent never moves between accounts when links change.
 - **Activity images are URLs, not uploads.** An upload would have to bill a quota, and an activity is meant to be lightweight.
-- **Discord links are host-restricted** to discord.gg / discord.com, since the link renders behind a Discord badge.
+- **Discord and GroupMe links are host-restricted** to their own domains, since each renders behind a service badge.
 - **The deadline is enforced in two places.** The sweep (`sweep-orgs`, run daily by cron) deletes expired groups, and `POST /orgs/:slug/verify` independently refuses a deadline that has passed — a missed cron run delays cleanup rather than quietly reopening the window.
 - **Groups created before verification existed were grandfathered as `VERIFIED`** by the migration. They were published under the old rule; retroactively hiding them behind a deadline they never had a chance to meet — and then sweeping them away — would have been wrong.
 

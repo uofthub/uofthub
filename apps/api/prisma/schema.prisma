@@ -258,6 +258,8 @@ model Organization {
   /// Invite link to the group's Discord server. Validated as a discord.gg /
   /// discord.com URL, not just any http(s) one.
   discordUrl  String?
+  /// Share link to the group's GroupMe. Same treatment as discordUrl.
+  groupMeUrl  String?
   status      OrgStatus @default(PENDING_VERIFICATION)
   /// Where the verification decision is sent. Required at creation — the
   /// roadmap scoped this as one freeform `contactInfo` field, but a decision
