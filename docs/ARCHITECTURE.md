@@ -72,6 +72,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 |---|---|---|
 | id | uuid | |
 | project_id | uuid | |
+| org_id | uuid? | the group these bytes are billed to, stamped at upload; null means the uploader's personal quota — see [File storage § group quotas](#limits--student-groups) |
 | name | string | |
 | storage_key | string | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
 | size_bytes | int | |
@@ -97,9 +98,39 @@ Clubs and research labs. Full verification/storage/activity policy in [student-g
 | type | enum | `CLUB`, `LAB` |
 | description | string | |
 | website_url | string | |
-| status | enum | `PENDING_VERIFICATION`, `IN_REVIEW`, `INFO_REQUESTED`, `VERIFIED` — not yet implemented, see student-groups.md |
-| contact_info | string | submitted at creation, used to notify on a verification decision — not yet implemented |
-| verification_deadline | timestamp | 7 days from creation/info-request; auto-delete on expiry — not yet implemented |
+| discord_url | string? | invite link; restricted to discord.gg / discord.com hosts, not just any http(s) URL |
+| status | enum | `PENDING_VERIFICATION`, `IN_REVIEW`, `INFO_REQUESTED`, `VERIFIED` |
+| contact_email | string? | where the verification decision is sent; required at creation |
+| contact_role | string? | the role the creator claims to hold, e.g. "president" |
+| verification_deadline | timestamp? | 7 days from creation/info-request; cleared on submission, auto-delete on expiry |
+| verification_note | text? | the group's most recent verification submission |
+| review_note | text? | the admin's note back — what was missing, or why it was denied |
+| verified_at | timestamp? | when it was approved; the start point for term storage grants |
+| created_at | timestamp | |
+
+### OrgStorageGrant
+One row per (group, academic term): the 10GB granted for that term. A ledger rather than a computed total, because allowances stack and the record of what was actually granted is the thing that has to survive.
+
+| Field | Type | Notes |
+|---|---|---|
+| org_id | uuid | |
+| term | string | term key, e.g. `2026F` — see `lib/terms.ts` |
+| bytes | bigint | |
+| granted_at | timestamp | |
+
+### OrgActivity
+A meeting, event, workshop or recap — lighter than a Project, rendered only on the group's own page.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| org_id | uuid | |
+| created_by_id | uuid | any member may post; the author or an org admin may delete |
+| title | string | |
+| description | text? | |
+| date | timestamp | defaults to now |
+| link | string? | http(s) only |
+| image_url | string? | http(s) only — a URL, not an upload, so an activity never bills anyone's quota |
 | created_at | timestamp | |
 
 ### Notification
@@ -222,7 +253,11 @@ Clubs and research labs (the `Organization` model) are metered separately from i
 | Per-term storage allowance | 10GB, granted fresh each academic term and stacking with prior terms — nothing is deleted when a term rolls over |
 | Eligibility | Only `VERIFIED` groups get the group quota |
 
-Full detail — the verification workflow gating that quota, the per-term stacking rule, and org-page activity publishing — is in [student-groups.md](student-groups.md). None of it is implemented yet; `POST /orgs` today creates and publicly lists a group immediately with no verification step.
+A file is billed to a group when its project is linked to a `VERIFIED` group the uploader belongs to; the group is stamped on `ProjectFile.org_id` at upload rather than derived from the project's org links at read time, so quota already spent cannot move between accounts when links change later. A project linked to several groups bills the one it was linked to first. An unverified group has no allowance at all, so its files simply fall back to the uploader's personal 2GB — group membership never *reduces* what an individual can store.
+
+Term boundaries live in `lib/terms.ts` (Fall/Winter/Summer, computed in UTC, key like `2026F`) and grants are made by `pnpm --filter @uofthub/api grant-term-storage`, which is idempotent on (group, term). Approving a group grants its current term immediately, so a group verified in week 3 can upload without waiting for a term boundary.
+
+Full detail — the verification workflow gating that quota, the per-term stacking rule, and org-page activity publishing — is in [student-groups.md](student-groups.md).
 
 All checks (type and size) run server-side against the actual file, not the client-declared extension or MIME type.
 
@@ -241,6 +276,19 @@ A student or group that needs more than the default quota or file-count cap (e.g
 - Rate-limit uploads per account (per minute/hour) to prevent scripted spam.
 - Server-side type/size validation on every upload, independent of client input.
 - Manual limit increases are per-account/per-group opt-in, not self-service, so quota can't be trivially bypassed.
+
+---
+
+## Scheduled jobs
+
+Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than timers inside the API process — a cron entry is one line of config, survives a deploy, and cannot double-fire across replicas the way a `setInterval` would.
+
+| Job | Command | Cadence | What it does |
+|---|---|---|---|
+| Verification sweep | `pnpm --filter @uofthub/api sweep-orgs` (`--dry` to list only) | daily | Deletes groups still `PENDING_VERIFICATION` / `INFO_REQUESTED` past their deadline. Not the only enforcement: `POST /orgs/:slug/verify` refuses an expired deadline too, so a missed run delays cleanup rather than reopening the window |
+| Term storage grants | `pnpm --filter @uofthub/api grant-term-storage` | monthly | Grants each verified group the 10GB for every term it is owed but hasn't received. Idempotent on (group, term) |
+
+`pnpm --filter @uofthub/api grant-admin <email>` is the third script, but it's operator-run, not scheduled — see [Moderation](#moderation).
 
 ---
 

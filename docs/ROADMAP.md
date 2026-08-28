@@ -90,37 +90,37 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 
 ## Phase 3 — Student groups & integrations
 
-Goal: a group page stops being "anyone can claim it" and becomes something verified, funded per term, and worth checking regularly. Full spec: [student-groups.md](student-groups.md). Today `orgs.ts` only has `GET /orgs` (list), `POST /orgs` (create + immediate publish), and member/project listing — none of the below exists yet.
+Goal: a group page stops being "anyone can claim it" and becomes something verified, funded per term, and worth checking regularly. Full spec: [student-groups.md](student-groups.md).
 
 **Verification workflow**
-- [ ] Schema — add `status` enum (`PENDING_VERIFICATION` / `IN_REVIEW` / `INFO_REQUESTED` / `VERIFIED`), `contactInfo`, `verificationDeadline`, `verificationNote` to `Organization`
-- [ ] `POST /orgs` — require contact info + claimed role at creation; set `status: PENDING_VERIFICATION` and a 7-day `verificationDeadline` instead of publishing immediately
-- [ ] Gate `GET /orgs` and `GET /orgs/:slug` — only `VERIFIED` groups are visible to anyone but the creator
-- [ ] `POST /orgs/:slug/verify` — creator submits verification material; moves `status` to `IN_REVIEW`, clears the deadline, emails the admin team
-- [ ] Scheduled sweep (cron) — auto-delete any group still `PENDING_VERIFICATION` or `INFO_REQUESTED` past its `verificationDeadline`
-- [ ] Email notifications — admin alert on submission; contact notified on approve / deny / request-info. Transport is now in place (`lib/email.ts`, Resend); this just needs the calls and the message copy
-- [ ] Frontend — creation form collects contact + role; creator sees a persistent "verify within 7 days" banner with countdown on their own unverified group
-- [ ] Frontend — verification submission form
+- [x] Schema — `status` enum (`PENDING_VERIFICATION` / `IN_REVIEW` / `INFO_REQUESTED` / `VERIFIED`), `verificationDeadline`, `verificationNote`, `verifiedAt` on `Organization`. The single `contactInfo` field this was scoped with became **`contactEmail` + `contactRole`**: a decision email needs a real address, and the claimed role is what an admin weighs the claim against — one freeform column would have made both unusable. `verificationNote` holds the group's submission; a separate `reviewNote` holds the admin's reply, since the two are written by different people and both need to survive a round trip
+- [x] `POST /orgs` — requires contact email + claimed role, sets `PENDING_VERIFICATION` and a 7-day deadline instead of publishing immediately
+- [x] Gate `GET /orgs` and `GET /orgs/:slug` — only `VERIFIED` groups are visible to anyone but the group's **members** (scoped as "the creator", but membership is the same set at creation and the wider rule is the one the data model can actually express). `GET /orgs` still returns the caller's own unverified groups, listed separately on the page: hiding them from their own members would leave nobody a route back to the page they have 7 days to verify. Contact details, the submission and the reviewer's note are stripped for non-members even on a verified page
+- [x] `POST /orgs/:slug/verify` — an org admin submits material; moves to `IN_REVIEW`, clears the deadline (the clock was on the group, and review has no deadline on them), emails the admin team. Refuses a deadline that has already passed rather than trusting the sweep to have run
+- [x] Scheduled sweep (cron) — `pnpm --filter @uofthub/api sweep-orgs` (`--dry` to list only). Deliberately a script rather than an in-process timer: a cron entry is one line of config and can't double-fire across replicas
+- [x] Email notifications — `lib/orgEmails.ts`: admin alert on submission (to every `isAdmin` account, so there's no separate admin address to keep in sync), contact notified on approve / request-info / deny. First real caller of `lib/email.ts`
+- [x] Frontend — creation form collects contact + role and explains the 7-day window; members see a status banner with a day countdown, the reviewer's note, and the submit button on their own unverified group
+- [x] Frontend — verification submission form, pre-filled with the previous submission when re-submitting after a request for more info
 
 **Admin portal**
 - [x] Reuses the admin flag/role added in Phase 2 § Trust & Safety — `User.isAdmin` and the `requireAdmin` preHandler in `lib/admin.ts` now exist; org verification just needs to register its routes behind the same gate
-- [ ] `GET /admin/orgs?status=IN_REVIEW` — list pending requests, admin-only
-- [ ] `POST /admin/orgs/:slug/decision` — approve / deny / request-info
-- [ ] Frontend — new admin-only page listing pending groups with the three decision actions
+- [x] `GET /admin/orgs?status=IN_REVIEW` — list pending requests, admin-only, oldest first
+- [x] `POST /admin/orgs/:slug/decision` — approve / deny / request-info. Approve also grants the current term's storage immediately, so a group approved mid-term can actually upload; request-info opens a fresh 7-day window; deny deletes the group and its data, per [student-groups.md](student-groups.md)
+- [x] Frontend — the `/admin` page gained a "Group verification" section alongside project reports, with the submitted evidence inline and the three decision actions. Deny takes two clicks, since it deletes
 
 **Per-term storage quota**
-- [ ] Blocked on Phase 1's File uploads shipping first — this reuses that upload endpoint, keyed to the org instead of the user
-- [ ] Schema — per-term allowance ledger (or computed total) on `Organization`
-- [ ] Define academic term boundaries (config, not user-facing) and a job that grants the fresh 10GB allowance each term, stacking on prior terms
-- [ ] Enforce group quota on the upload endpoint when the target is org-owned; only `VERIFIED` groups are eligible
+- [x] Blocked on Phase 1's File uploads shipping first — this reuses that upload endpoint, keyed to the org instead of the user
+- [x] Schema — `OrgStorageGrant` ledger, one row per (org, term). A ledger rather than a computed total because the stacking rule is "every term since verification", which needs a record of what was actually granted, not a multiplication
+- [x] `lib/terms.ts` defines the term calendar (Fall/Winter/Summer, UTC, key like `2026F`); `pnpm --filter @uofthub/api grant-term-storage` grants every term a verified group is owed but hasn't been given. Idempotent on (org, term), so it can run at any cadence and a group that went ungranted for two terms is caught up in one run
+- [x] Enforce group quota on the upload endpoint when the project is linked to a `VERIFIED` group the uploader belongs to; the chosen group is stamped on `ProjectFile.orgId` at upload time so quota already spent can't move between accounts when org links change later. A project linked to several groups bills the one it was linked to first. An **unverified** group has no allowance, so its files fall back to the uploader's personal 2GB rather than being blocked outright — the individual policy is explicitly unchanged by group membership
 
 **Org activities**
-- [ ] Schema — new `OrgActivity` model (title, description, date, link, image, orgId)
-- [ ] `POST` / `GET` / `DELETE /orgs/:slug/activities`
-- [ ] Frontend — activity feed section on `OrgPage.tsx`, create-activity form for org admins/members
+- [x] Schema — `OrgActivity` (title, description, date, link, imageUrl, orgId, createdById)
+- [x] `POST` / `GET` / `DELETE /orgs/:slug/activities` — any member can post; the author or an org admin can delete
+- [x] Frontend — activity feed section on `OrgPage.tsx` with a create form for members. The image is a URL rather than an upload: an upload would have to bill someone's quota, and an activity is a lightweight post — that's a deliberate line, not an omission
 
 **Integrations**
-- [ ] Discord — `discordUrl` field on `Organization` (same pattern as the existing `websiteUrl`, reusing `safeExternalUrl` for validation); link/badge on `OrgPage.tsx`
+- [x] Discord — `discordUrl` on `Organization`, set at creation or via `PATCH /orgs/:slug` (admins only — without the PATCH, groups verified before this shipped could never add one), with a badge on `OrgPage.tsx`. Validation is **stricter** than `safeExternalUrl`: the link sits behind a Discord badge, so it is restricted to discord.gg / discord.com hosts rather than any http(s) URL
 
 ---
 

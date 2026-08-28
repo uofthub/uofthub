@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { ReportStatus } from '@prisma/client'
+import type { OrgStatus, ReportStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
+import { grantMissingTermAllowances, verificationDeadlineFromNow } from '../lib/orgs.js'
+import { emailContactOfDecision } from '../lib/orgEmails.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 
@@ -121,6 +123,88 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         })
       }
 
+      return updated
+    }
+  )
+
+  // ── STUDENT GROUP VERIFICATION ──────────────────────────────────────────────
+
+  const ORG_STATUSES = ['PENDING_VERIFICATION', 'IN_REVIEW', 'INFO_REQUESTED', 'VERIFIED'] as const
+
+  // GET /admin/orgs?status=IN_REVIEW — groups waiting on a decision
+  app.get<{ Querystring: { status?: string } }>('/orgs', adminOnly, async (request, reply) => {
+    const status = request.query.status ?? 'IN_REVIEW'
+    if (status !== 'all' && !ORG_STATUSES.includes(status as OrgStatus)) {
+      return reply.code(400).send({ error: 'Unknown status' })
+    }
+
+    const orgs = await db.organization.findMany({
+      where: status === 'all' ? {} : { status: status as OrgStatus },
+      include: {
+        members: {
+          where: { role: 'ADMIN' },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
+        _count: { select: { members: true, projects: true, activities: true } },
+      },
+      // Oldest submission first — same queue discipline as the reports above.
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    })
+    return orgs
+  })
+
+  // POST /admin/orgs/:slug/decision — approve / request more info / deny
+  app.post<{ Params: { slug: string }; Body: { decision?: string; note?: string } }>(
+    '/orgs/:slug/decision',
+    adminOnly,
+    async (request, reply) => {
+      const decision = request.body?.decision
+      if (decision !== 'APPROVE' && decision !== 'REQUEST_INFO' && decision !== 'DENY') {
+        return reply.code(400).send({ error: 'Decision must be APPROVE, REQUEST_INFO or DENY' })
+      }
+      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+
+      const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
+      if (!org) return reply.code(404).send({ error: 'Not found' })
+      if (org.status === 'VERIFIED') {
+        return reply.code(409).send({ error: 'This group is already verified' })
+      }
+
+      if (decision === 'DENY') {
+        // Denial deletes the group and everything hanging off it — reserved
+        // for spam and clear-cut cases, per docs/student-groups.md. The email
+        // goes out before the row disappears, since it reads from it.
+        await emailContactOfDecision(org, 'DENY', note)
+        await db.organization.delete({ where: { id: org.id } })
+        return { ok: true, deleted: true }
+      }
+
+      if (decision === 'REQUEST_INFO') {
+        const updated = await db.organization.update({
+          where: { id: org.id },
+          // A fresh 7-day window, with the same auto-delete on timeout as a
+          // brand-new group: the clock is back on the group, not on us.
+          data: {
+            status: 'INFO_REQUESTED',
+            reviewNote: note,
+            verificationDeadline: verificationDeadlineFromNow(),
+          },
+        })
+        await emailContactOfDecision(updated, 'REQUEST_INFO', note)
+        return updated
+      }
+
+      const verifiedAt = new Date()
+      const updated = await db.organization.update({
+        where: { id: org.id },
+        data: { status: 'VERIFIED', verifiedAt, reviewNote: note, verificationDeadline: null },
+      })
+
+      // The current term's allowance lands immediately rather than at the next
+      // term boundary, so a group approved in week 3 can actually upload.
+      await grantMissingTermAllowances(org.id, verifiedAt, verifiedAt)
+      await emailContactOfDecision(updated, 'APPROVE', note)
       return updated
     }
   )

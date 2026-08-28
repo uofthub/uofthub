@@ -10,6 +10,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "grant-admin": "tsx src/scripts/grantAdmin.ts",
+    "sweep-orgs": "tsx src/scripts/sweepOrgs.ts",
+    "grant-term-storage": "tsx src/scripts/grantTermStorage.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"

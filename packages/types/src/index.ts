@@ -61,6 +61,22 @@ export interface Notification {
   createdAt: string
 }
 
+/** Verification lifecycle of a student group — see docs/student-groups.md. */
+export type OrgStatus = 'PENDING_VERIFICATION' | 'IN_REVIEW' | 'INFO_REQUESTED' | 'VERIFIED'
+
+export interface OrgActivity {
+  id: string
+  orgId: string
+  createdById: string
+  title: string
+  description?: string
+  date: string
+  link?: string
+  imageUrl?: string
+  createdAt: string
+  createdBy?: { id: string; name: string }
+}
+
 export type ReportReason =
   | 'SPAM'
   | 'HARASSMENT'

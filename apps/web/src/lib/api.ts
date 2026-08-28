@@ -4,6 +4,8 @@ import type {
   Comment,
   ProjectLink,
   Notification,
+  OrgActivity,
+  OrgStatus,
   ReportReason,
   ReportStatus,
   Visibility,
@@ -92,9 +94,49 @@ export type Org = {
   type: 'CLUB' | 'LAB'
   description?: string
   websiteUrl?: string
+  discordUrl?: string
+  status: OrgStatus
+  /** Members only — everyone else gets these fields stripped by the API. */
+  contactEmail?: string
+  contactRole?: string
+  verificationNote?: string
+  reviewNote?: string
+  verificationDeadline?: string
+  verifiedAt?: string
   createdAt: string
   _count?: { members: number; projects: number }
 }
+
+/** `GET /orgs/:slug` — the group page's full payload. */
+export type OrgDetail = Org & {
+  members: {
+    orgId: string
+    userId: string
+    role: string
+    user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
+  }[]
+  activities: OrgActivity[]
+  projects: {
+    orgId: string
+    projectId: string
+    project: Pick<Project, 'id' | 'title' | 'description'> & {
+      owner: Pick<User, 'id' | 'name'>
+      _count: { likes: number; comments: number }
+    }
+  }[]
+  /** Members only. */
+  storage?: OrgStorage
+}
+
+/** A group awaiting a decision, as the admin queue sees it. */
+export type AdminOrg = Org & {
+  members: { userId: string; role: string; user: Pick<User, 'id' | 'name' | 'email'> }[]
+  _count: { members: number; projects: number; activities: number }
+}
+
+export type OrgDecision = 'APPROVE' | 'REQUEST_INFO' | 'DENY'
+
+export type OrgStorage = { quotaBytes: number; usedBytes: number }
 
 /** A report as the moderation queue sees it — reporter and project inlined. */
 export type AdminReport = {
@@ -193,12 +235,34 @@ export const api = {
       request<AdminReport[]>(`/admin/reports?status=${status}`),
     decide: (id: string, body: { decision: ReportDecision; note?: string }) =>
       request<AdminReport>(`/admin/reports/${id}/decision`, { method: 'POST', body: JSON.stringify(body) }),
+    orgs: (status: OrgStatus | 'all' = 'IN_REVIEW') => request<AdminOrg[]>(`/admin/orgs?status=${status}`),
+    decideOrg: (slug: string, body: { decision: OrgDecision; note?: string }) =>
+      request<AdminOrg>(`/admin/orgs/${slug}/decision`, { method: 'POST', body: JSON.stringify(body) }),
   },
   orgs: {
     list: () => request<Org[]>('/orgs'),
-    get: (slug: string) => request<Org & { members: unknown[]; projects: unknown[] }>(`/orgs/${slug}`),
-    create: (body: { name: string; slug: string; type?: string; description?: string; websiteUrl?: string }) =>
-      request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
+    get: (slug: string) => request<OrgDetail>(`/orgs/${slug}`),
+    create: (body: {
+      name: string
+      slug: string
+      type?: string
+      description?: string
+      websiteUrl?: string
+      discordUrl?: string
+      contactEmail: string
+      contactRole: string
+    }) => request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
+    update: (slug: string, body: Partial<{ description: string; websiteUrl: string; discordUrl: string }>) =>
+      request<Org>(`/orgs/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    verify: (slug: string, note: string) =>
+      request<Org>(`/orgs/${slug}/verify`, { method: 'POST', body: JSON.stringify({ note }) }),
+    activities: (slug: string) => request<OrgActivity[]>(`/orgs/${slug}/activities`),
+    addActivity: (
+      slug: string,
+      body: { title: string; description?: string; date?: string; link?: string; imageUrl?: string }
+    ) => request<OrgActivity>(`/orgs/${slug}/activities`, { method: 'POST', body: JSON.stringify(body) }),
+    deleteActivity: (slug: string, id: string) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/activities/${id}`, { method: 'DELETE' }),
     addProject: (slug: string, projectId: string) =>
       request<unknown>(`/orgs/${slug}/projects`, { method: 'POST', body: JSON.stringify({ projectId }) }),
     addMember: (slug: string, email: string) =>

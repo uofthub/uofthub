@@ -24,6 +24,15 @@ enum OrgType {
   LAB
 }
 
+/// Verification lifecycle for a student group — see docs/student-groups.md.
+/// A group is invisible to everyone but its own members until VERIFIED.
+enum OrgStatus {
+  PENDING_VERIFICATION
+  IN_REVIEW
+  INFO_REQUESTED
+  VERIFIED
+}
+
 enum NotificationType {
   COLLABORATOR_INVITED
   COLLABORATOR_RESPONDED
@@ -84,6 +93,7 @@ model User {
   notifications  Notification[]
   reportsFiled   Report[]              @relation("Reporter")
   reportsReviewed Report[]             @relation("Reviewer")
+  orgActivities  OrgActivity[]
 }
 
 model Project {
@@ -179,6 +189,11 @@ model ProjectCollaborator {
 model ProjectFile {
   id         String   @id @default(uuid())
   projectId  String
+  /// The group this file's bytes are billed to, stamped at upload time rather
+  /// than derived from the project's org links: those links can change later,
+  /// and quota already spent must not silently move between accounts. Null
+  /// means it counts against the uploader's personal quota.
+  orgId      String?
   name       String
   /// R2 object key, not a public URL — downloads go through a signed URL so
   /// they still honour project visibility.
@@ -187,7 +202,8 @@ model ProjectFile {
   mimeType   String?
   uploadedAt DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  org     Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
 }
 
 model ProjectLink {
@@ -233,16 +249,73 @@ model Follow {
 }
 
 model Organization {
-  id          String   @id @default(uuid())
-  slug        String   @unique
+  id          String    @id @default(uuid())
+  slug        String    @unique
   name        String
-  type        OrgType  @default(CLUB)
+  type        OrgType   @default(CLUB)
   description String?
   websiteUrl  String?
+  /// Invite link to the group's Discord server. Validated as a discord.gg /
+  /// discord.com URL, not just any http(s) one.
+  discordUrl  String?
+  status      OrgStatus @default(PENDING_VERIFICATION)
+  /// Where the verification decision is sent. Required at creation — the
+  /// roadmap scoped this as one freeform `contactInfo` field, but a decision
+  /// email needs a real address, so the address and the claimed role are
+  /// separate columns. Nullable because groups created before verification
+  /// existed have neither.
+  contactEmail String?
+  /// The role the creator claims to hold, e.g. "president", "lab manager".
+  contactRole  String?
+  /// Auto-delete date while PENDING_VERIFICATION or INFO_REQUESTED; cleared
+  /// once material is submitted, since review has no deadline on the student.
+  verificationDeadline DateTime?
+  /// The creator's most recent verification submission.
+  verificationNote     String?
+  /// The admin's note back — what was missing, or why it was denied.
+  reviewNote           String?
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  members       OrgMember[]
+  projects      OrgProject[]
+  activities    OrgActivity[]
+  storageGrants OrgStorageGrant[]
+  files         ProjectFile[]
+}
+
+/// One row per academic term per group: the 10GB allowance granted for that
+/// term. Allowances stack — a group's quota is the sum of every grant it has
+/// ever received, and nothing is reclaimed when a term rolls over.
+model OrgStorageGrant {
+  orgId     String
+  /// Academic term key, e.g. `2026F` — see lib/terms.ts.
+  term      String
+  bytes     BigInt
+  grantedAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, term])
+}
+
+/// A meeting, event, workshop or recap — lighter than a Project, and only
+/// ever rendered on the group's own page.
+model OrgActivity {
+  id          String   @id @default(uuid())
+  orgId       String
+  createdById String
+  title       String
+  description String?
+  date        DateTime
+  link        String?
+  imageUrl    String?
   createdAt   DateTime @default(now())
 
-  members  OrgMember[]
-  projects OrgProject[]
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([orgId, date])
 }
 
 model OrgMember {

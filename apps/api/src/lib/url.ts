@@ -19,3 +19,17 @@ export function safeExternalUrl(raw: string | undefined | null): string | null {
 
   return ALLOWED_PROTOCOLS.has(parsed.protocol) ? parsed.toString() : null
 }
+
+/** Hosts a Discord invite can legitimately live on. */
+const DISCORD_HOSTS = new Set(['discord.gg', 'discord.com', 'www.discord.com', 'discordapp.com'])
+
+/**
+ * A Discord invite, or null. Stricter than `safeExternalUrl` on purpose: the
+ * org page renders this behind a Discord badge, so a link to somewhere else
+ * entirely would be a small piece of misdirection we'd be hosting.
+ */
+export function safeDiscordUrl(raw: string | undefined | null): string | null {
+  const url = safeExternalUrl(raw)
+  if (!url) return null
+  return DISCORD_HOSTS.has(new URL(url).hostname.toLowerCase()) ? url : null
+}

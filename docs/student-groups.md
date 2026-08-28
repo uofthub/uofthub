@@ -1,6 +1,6 @@
 # Student Groups
 
-This document specifies the verification, storage, and activity-publishing model for student groups (clubs and research labs) — the `Organization` entity in `schema.prisma` (`OrgType`: `CLUB` | `LAB`). It extends [ARCHITECTURE.md](ARCHITECTURE.md) and is **policy/design only** — nothing here is implemented yet. See [Not yet built](#not-yet-built).
+This document specifies the verification, storage, and activity-publishing model for student groups (clubs and research labs) — the `Organization` entity in `schema.prisma` (`OrgType`: `CLUB` | `LAB`). It extends [ARCHITECTURE.md](ARCHITECTURE.md). All of it is now implemented; where the build differs from what was specified here, the difference is called out inline and collected under [What shipped](#what-shipped).
 
 ---
 
@@ -94,6 +94,17 @@ Activities render on the group's `/orgs/:slug` page in reverse-chronological ord
 
 ---
 
-## Not yet built
+## What shipped
 
-Everything above is policy/design only. As of this writing, `POST /orgs` ([orgs.ts](../apps/api/src/routes/orgs.ts)) creates and publicly lists a group immediately, with no verification step, no per-org storage tracking, no activity model, and no admin portal. See [ROADMAP.md](ROADMAP.md) for sequencing.
+Implemented across [orgs.ts](../apps/api/src/routes/orgs.ts) (create / gate / verify / activities), [admin.ts](../apps/api/src/routes/admin.ts) (the review queue and decisions), [lib/orgs.ts](../apps/api/src/lib/orgs.ts) and [lib/terms.ts](../apps/api/src/lib/terms.ts) (the rules), [lib/orgEmails.ts](../apps/api/src/lib/orgEmails.ts) (the copy), and `OrgPage.tsx` / `OrgsPage.tsx` / `AdminPage.tsx` on the web side. Where the build reads differently from the spec above:
+
+- **Visible to members, not just "the creator".** Membership is the set the data model can express, and it is the same set at creation. A group's own members also still see it on `/orgs` — listed separately, under "Your groups, not yet public" — because hiding it from them entirely would leave nobody a route back to the page they have 7 days to verify.
+- **`contactEmail` + `contactRole`, not one `contactInfo` field.** A decision email needs a real address, and the claimed role is what a reviewer weighs the claim against; one freeform column made both unusable. The group's submission (`verificationNote`) and the admin's reply (`reviewNote`) are likewise separate — different authors, and both have to survive a round trip through "request more info".
+- **An unverified group's files bill the uploader, not nobody.** "Cannot upload files" is implemented as "has no group allowance": uploads fall back to the member's personal 2GB. Blocking the upload outright would have made joining an unverified group *reduce* what a student can store on their own projects.
+- **The billed group is stamped on the file.** `ProjectFile.orgId` is written at upload time rather than derived from the project's org links later, so quota already spent never moves between accounts when links change.
+- **Activity images are URLs, not uploads.** An upload would have to bill a quota, and an activity is meant to be lightweight.
+- **Discord links are host-restricted** to discord.gg / discord.com, since the link renders behind a Discord badge.
+- **The deadline is enforced in two places.** The sweep (`sweep-orgs`, run daily by cron) deletes expired groups, and `POST /orgs/:slug/verify` independently refuses a deadline that has passed — a missed cron run delays cleanup rather than quietly reopening the window.
+- **Groups created before verification existed were grandfathered as `VERIFIED`** by the migration. They were published under the old rule; retroactively hiding them behind a deadline they never had a chance to meet — and then sweeping them away — would have been wrong.
+
+Still open, and still policy rather than code: what evidence actually counts (the three questions under [Open questions](#open-questions) above are unchanged), and whether a `VERIFIED` group can be revoked later. Revocation has no path today — an approved group stays approved.

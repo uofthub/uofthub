@@ -10,6 +10,7 @@ import { safeExternalUrl } from '../lib/url.js'
 import { ACCOUNT_QUOTA_BYTES, PROJECT_FILE_COUNT_CAP, categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
 import { deleteObject, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { notify } from '../lib/notifications.js'
+import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -479,23 +480,49 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: 'File content does not match its extension' })
       }
 
-      const [fileCount, usage] = await Promise.all([
-        db.projectFile.count({ where: { projectId: project.id } }),
-        db.projectFile.aggregate({ where: { project: { ownerId: project.ownerId } }, _sum: { sizeBytes: true } }),
-      ])
+      const fileCount = await db.projectFile.count({ where: { projectId: project.id } })
       if (fileCount >= PROJECT_FILE_COUNT_CAP) {
         return reply.code(400).send({ error: `This project already has the ${PROJECT_FILE_COUNT_CAP}-file limit` })
       }
-      const usedBytes = usage._sum.sizeBytes ?? 0
-      if (usedBytes + buffer.length > ACCOUNT_QUOTA_BYTES) {
-        return reply.code(413).send({ error: 'This upload would exceed your storage quota' })
+
+      // A project linked to a VERIFIED group the uploader belongs to spends
+      // that group's per-term allowance instead of the uploader's personal
+      // 2GB (docs/student-groups.md § Storage policy). The choice is stamped
+      // on the row below so it can't drift as org links change later.
+      const billingOrgId = await billingOrgFor(project.id, request.user.sub)
+
+      if (billingOrgId) {
+        const [quotaBytes, usedBytes] = await Promise.all([
+          orgQuotaBytes(billingOrgId),
+          orgUsageBytes(billingOrgId),
+        ])
+        if (usedBytes + buffer.length > quotaBytes) {
+          return reply.code(413).send({ error: "This upload would exceed the group's storage allowance" })
+        }
+      } else {
+        // Scoped to files that aren't billed to a group, so a member's own
+        // quota isn't consumed by their club's uploads.
+        const usage = await db.projectFile.aggregate({
+          where: { project: { ownerId: project.ownerId }, orgId: null },
+          _sum: { sizeBytes: true },
+        })
+        if ((usage._sum.sizeBytes ?? 0) + buffer.length > ACCOUNT_QUOTA_BYTES) {
+          return reply.code(413).send({ error: 'This upload would exceed your storage quota' })
+        }
       }
 
       const key = objectKey(project.id, data.filename)
       await putObject(key, buffer, data.mimetype)
 
       const file = await db.projectFile.create({
-        data: { projectId: project.id, name: data.filename, storageKey: key, sizeBytes: buffer.length, mimeType: data.mimetype },
+        data: {
+          projectId: project.id,
+          orgId: billingOrgId,
+          name: data.filename,
+          storageKey: key,
+          sizeBytes: buffer.length,
+          mimeType: data.mimetype,
+        },
         select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
       })
       return reply.code(201).send(file)
