@@ -108,14 +108,25 @@ Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual p
 ### Phase 2 (Semester 2+)
 - Project versioning (v1 → v2 → v3)
 - Fork/remix ("Built from X's project")
-- Collaborative editing
 - Project analytics (views, engagement)
 - Course pages, club pages, research lab pages
 - TA/Professor invite-to-view workflow, formalized
+- Notifications (in-app + email) for invite/request flows that are currently silent
+- Trust & Safety: reporting/moderation for public projects, an admin role, a Terms of Service / IP-ownership page
+
+### Phase 3 (Student groups & integrations)
+Full spec: [student-groups.md](student-groups.md).
+- Group verification workflow (pending → review → verified/denied/info-requested, 7-day auto-delete on timeout)
+- Admin portal for reviewing group verification requests (shares the admin role built in Phase 2)
+- Per-term group storage quota (10GB/term, stacking, same manual-override process as individual accounts)
+- Org activities — lightweight posts (meetings, events, recaps) on org pages
+- Discord integration (link a group's server on its org page)
 
 ### Later / Exploratory
 AI features are deliberately last — see [ROADMAP.md § Later / Exploratory](ROADMAP.md#later--exploratory).
+- Collaborative editing (requires WebSocket infrastructure)
 - AI-powered project discovery ("show me AI projects built by U of T students in the last year")
+- GroupMe integration — same treatment as Discord, deferred until that ships
 - Research study on discovery/collaboration/publishing behavior (privacy-preserving, aggregate data)
 - Potential official U of T subdomain/hosting, once there's real traction
 - Alumni-persistent portfolios
@@ -182,7 +193,7 @@ Future graph extension: Students → Projects → People → Courses → Researc
 
 - Exact auth method for verifying U of T student status (domain-restricted email vs. OAuth vs. manual verification)
 - File storage/hosting approach and size limits
-- Moderation policy for public projects
+- Moderation policy for public projects — the mechanism (report → admin review → dismiss/takedown/warn) is now planned in [ROADMAP.md § Phase 2, Trust & Safety](ROADMAP.md), but what actually counts as a violation, and what happens on repeat offenses, is still undecided
 - Whether/when to formalize the TA/professor access model
 - Timeline and criteria for approaching U of T about infrastructure support
 - What evidence counts as sufficient proof when verifying a student group's authorization (no official U of T club/lab registry API exists to check against) — see [student-groups.md](student-groups.md)

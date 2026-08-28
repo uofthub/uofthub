@@ -66,8 +66,10 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | id | uuid | |
 | project_id | uuid | |
 | name | string | |
-| url | string | storage URL |
+| storage_key | string | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
 | size_bytes | int | |
+| mime_type | string? | client-declared, informational only — not trusted for validation |
+| uploaded_at | timestamp | |
 
 ### ProjectLink
 | Field | Type | Notes |
@@ -128,7 +130,7 @@ TA/professor access is granted per-project by the student owner (generates a vie
 
 ## File storage
 
-Object storage (S3-compatible, provider TBD).
+Object storage: Cloudflare R2 (S3-compatible). The bucket is private — files are never served from a public URL; every download goes through `GET /projects/:id/files/:fileId/download`, which checks project visibility and redirects to a signed URL that expires in 5 minutes.
 
 **Allowed file types** — allowlisted by category rather than a short fixed list, so students aren't forced to convert files before uploading:
 
@@ -193,7 +195,7 @@ A student or group that needs more than the default quota or file-count cap (e.g
 | Data fetching | TanStack Query | Server state management, caching, background refetch |
 | Auth | Google/Microsoft OAuth (domain-restricted) | Easiest student verification for `@mail.utoronto.ca` / `@utoronto.ca` |
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
-| File storage | S3-compatible (TBD provider) | Decoupled from compute; `@fastify/multipart` handles upload |
+| File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
 
 ---
 
