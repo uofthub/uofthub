@@ -22,7 +22,7 @@ Goal: a working platform that a real U of T student can use to publish and share
 - [x] Visibility control: Private / U of T only / Public (default: Private)
 - [x] Add collaborators (invite with accept/deny flow)
 - [x] Add external links (GitHub, demo, website)
-- [ ] File uploads — policy in [ARCHITECTURE.md § File storage](ARCHITECTURE.md#file-storage). Provider picked and the core project-file path is built; avatar upload is the one piece still open.
+- [x] File uploads — policy in [ARCHITECTURE.md § File storage](ARCHITECTURE.md#file-storage).
   - [x] Pick an S3-compatible storage provider — Cloudflare R2
   - [x] `apps/api/src/lib/storage.ts` — client wrapper: put/delete/signed-URL-for-download
   - [x] `POST /projects/:id/files` — allowlist + per-category size check against the actual bytes (magic-byte check via `file-type`/OLE2 signature/SVG sniff in `apps/api/src/lib/fileValidation.ts`, not the client-declared extension or MIME type — verified by hand: a `.exe` renamed to `.pdf` is rejected, a genuine file of the declared type is not), writes a `ProjectFile` row
@@ -32,7 +32,7 @@ Goal: a working platform that a real U of T student can use to publish and share
   - [x] Upload UI on `ProjectPage.tsx` — file input + list + owner-only delete. Not on `CreateProjectPage.tsx`: a file needs a real project id to attach to, so upload only becomes available once the project exists, same as invites and links today
   - [x] File list + download/delete actions on `ProjectPage.tsx` — downloads go through `GET .../files/:fileId/download`, which re-checks visibility and redirects to a signed URL, never a public bucket URL
   - [x] `api.ts` client methods for upload/delete
-  - [ ] Reuse the same storage client for avatar images — `avatarUrl` is still just a plain string field on `User`, set by pasting a URL (`PATCH /users/:id` in `users.ts`); no actual upload path exists for it yet
+  - [x] Reuse the same storage client for avatar images — `POST /users/me/avatar` (upload), `DELETE /users/me/avatar` (remove), `GET /users/:id/avatar` (public signed-URL redirect, inline disposition so it renders in an `<img>` rather than downloading). Microsoft sign-in also syncs the account's Graph photo as the avatar, but only on a brand-new signup, and only if the student hasn't already set their own (`User.avatarIsCustom`) — a manual upload always wins
 
 **Discovery**
 - [x] Search projects

@@ -38,7 +38,12 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | faculty | string | |
 | program | string | |
 | class_year | int | |
+| bio | string? | |
+| avatar_url | string? | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage) |
+| avatar_key | string? | R2 object key when the avatar lives in our bucket; internal, never sent to the client |
+| avatar_is_custom | bool | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it |
 | created_at | timestamp | |
+| updated_at | timestamp | |
 
 ### Project
 | Field | Type | Notes |
@@ -168,6 +173,12 @@ Clubs and research labs (the `Organization` model) are metered separately from i
 Full detail — the verification workflow gating that quota, the per-term stacking rule, and org-page activity publishing — is in [student-groups.md](student-groups.md). None of it is implemented yet; `POST /orgs` today creates and publicly lists a group immediately with no verification step.
 
 All checks (type and size) run server-side against the actual file, not the client-declared extension or MIME type.
+
+### Avatars
+
+Same storage client and content-validation as project files, restricted to the `images` category (25MB cap). One fixed key per user (`avatars/<id>`) — a new upload always overwrites the previous one rather than accumulating objects. Served via `GET /users/:id/avatar`, a public redirect to a signed URL with `Content-Disposition: inline` (renders in an `<img>`, unlike the project-file download route, which forces `attachment`).
+
+On a brand-new Microsoft sign-in, the account's Graph profile photo is synced in as the avatar automatically — best-effort, and never blocks sign-in if it fails or the account has no photo set. This only ever happens once, at signup: a student who has set their own avatar (`User.avatarIsCustom`) keeps it, and existing accounts linking Microsoft for the first time don't get resynced.
 
 ### Requesting more space
 
