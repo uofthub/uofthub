@@ -48,13 +48,19 @@ export async function deleteObject(key: string): Promise<void> {
  * Short-lived signed download URL. The bucket itself is never made public —
  * a signed URL is generated per request, after the caller's route has
  * already checked they may view the project, so file access still honours
- * project visibility.
+ * project visibility. `disposition: 'inline'` is for images rendered
+ * directly in an `<img>` (avatars) rather than saved to disk.
  */
-export async function signedDownloadUrl(key: string, filename: string): Promise<string> {
+export async function signedDownloadUrl(
+  key: string,
+  filename: string,
+  options: { disposition?: 'inline' | 'attachment' } = {},
+): Promise<string> {
+  const disposition = options.disposition ?? 'attachment'
   const command = new GetObjectCommand({
     Bucket: bucket(),
     Key: key,
-    ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, '')}"`,
+    ResponseContentDisposition: `${disposition}; filename="${filename.replace(/"/g, '')}"`,
   })
   return getSignedUrl(getClient(), command, { expiresIn: 300 })
 }

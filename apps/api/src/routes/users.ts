@@ -1,6 +1,25 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
+import { categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
+import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
+
+const ME_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  faculty: true,
+  program: true,
+  classYear: true,
+  bio: true,
+  avatarUrl: true,
+  createdAt: true,
+} as const
+
+// Avatars are small and infrequent — a lighter budget than project uploads,
+// same pattern as auth.ts's credentialRateLimit.
+const avatarRateLimit = { rateLimit: { max: 10, timeWindow: '10 minutes' } }
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/:id — public profile
@@ -56,21 +75,73 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         ...(program !== undefined && { program }),
         ...(classYear !== undefined && { classYear }),
         ...(bio !== undefined && { bio }),
-        ...(avatarUrl !== undefined && { avatarUrl }),
+        // A manually-pasted URL isn't backed by our storage, so avatarKey is
+        // cleared — and like an upload, it's now "custom", so the Microsoft
+        // sign-in avatar sync (which only ever runs once, at signup) would
+        // never have overwritten it anyway, but this keeps that rule explicit.
+        ...(avatarUrl !== undefined && { avatarUrl, avatarKey: null, avatarIsCustom: true }),
       },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        faculty: true,
-        program: true,
-        classYear: true,
-        bio: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
+      select: ME_SELECT,
     })
     return user
+  })
+
+  // POST /users/me/avatar — multipart upload
+  app.post(
+    '/me/avatar',
+    { preHandler: [app.authenticate], config: avatarRateLimit },
+    async (request, reply) => {
+      const data = await request.file()
+      if (!data) return reply.code(400).send({ error: 'No file uploaded' })
+
+      const ext = extOf(data.filename)
+      const category = categoryFor(ext)
+      if (!category || category.name !== 'images') {
+        return reply.code(400).send({ error: `Unsupported avatar type: .${ext || '?'}` })
+      }
+
+      const buffer = await data.toBuffer()
+      if (data.file.truncated || buffer.length > category.maxSizeBytes) {
+        return reply.code(413).send({ error: `Avatar exceeds the ${category.maxSizeBytes / (1024 * 1024)}MB limit` })
+      }
+      if (!(await matchesDeclaredType(buffer, ext))) {
+        return reply.code(400).send({ error: 'File content does not match its extension' })
+      }
+
+      const userId = request.user.sub
+      const key = avatarObjectKey(userId)
+      await putObject(key, buffer, data.mimetype)
+
+      const user = await db.user.update({
+        where: { id: userId },
+        data: { avatarKey: key, avatarIsCustom: true, avatarUrl: avatarUrlFor(userId) },
+        select: ME_SELECT,
+      })
+      return user
+    }
+  )
+
+  // DELETE /users/me/avatar
+  app.delete('/me/avatar', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const userId = request.user.sub
+    const existing = await db.user.findUnique({ where: { id: userId }, select: { avatarKey: true } })
+    if (existing?.avatarKey) await deleteObject(existing.avatarKey)
+
+    await db.user.update({
+      where: { id: userId },
+      data: { avatarKey: null, avatarUrl: null, avatarIsCustom: false },
+    })
+    return { ok: true }
+  })
+
+  // GET /users/:id/avatar — public redirect to a signed URL; avatars aren't
+  // visibility-gated the way project files are, so no auth check here.
+  app.get<{ Params: { id: string } }>('/:id/avatar', async (request, reply) => {
+    const user = await db.user.findUnique({ where: { id: request.params.id }, select: { avatarKey: true } })
+    if (!user?.avatarKey) return reply.code(404).send({ error: 'No avatar' })
+
+    const url = await signedDownloadUrl(user.avatarKey, 'avatar', { disposition: 'inline' })
+    return reply.redirect(url)
   })
 
   // POST /users/:id/follow — toggles follow

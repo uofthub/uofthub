@@ -34,6 +34,14 @@ model User {
   program   String?
   classYear Int?
   avatarUrl String?
+  /// R2 object key when the avatar lives in our bucket; null for no avatar or
+  /// an externally-pasted URL. Fixed per user (`avatars/<id>`) — a new
+  /// upload/sync always overwrites the previous one.
+  avatarKey String?
+  /// True once the student has set their own avatar (upload or manual URL) —
+  /// the Microsoft sign-in avatar sync only ever fires for a brand new
+  /// account, so it never overwrites this.
+  avatarIsCustom Boolean  @default(false)
   bio       String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

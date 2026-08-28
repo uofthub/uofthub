@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify'
 import { db } from '../db/client.js'
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/password.js'
+import { putObject } from '../lib/storage.js'
+import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
 
 const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
 
@@ -9,6 +11,37 @@ function getRole(email: string): 'STUDENT' | 'FACULTY' {
 }
 
 const isUofTEmail = (email: string) => UOFT_DOMAINS.some((domain) => email.endsWith(domain))
+
+/**
+ * Pulls the signed-in-user's photo from Microsoft Graph and stores it as
+ * their avatar. Only called for a brand new account (see the callback below)
+ * — that's what "on signup" means here, and it also means avatarIsCustom is
+ * guaranteed false, though the update is still scoped to it for the same
+ * reason the fileValidation checks run against real bytes: the guarantee
+ * should be explicit in the code, not just true by the caller's construction.
+ * Many accounts simply have no photo set, which Graph reports as a 404 —
+ * that's expected, not an error, and sign-in must never fail because of it.
+ */
+async function syncMicrosoftAvatar(userId: string, accessToken: string): Promise<void> {
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return
+
+    const buffer = Buffer.from(await res.arrayBuffer())
+    const key = avatarObjectKey(userId)
+    await putObject(key, buffer, res.headers.get('content-type') ?? undefined)
+
+    await db.user.updateMany({
+      where: { id: userId, avatarIsCustom: false },
+      data: { avatarKey: key, avatarUrl: avatarUrlFor(userId) },
+    })
+  } catch {
+    // Best-effort — a missing/misconfigured storage provider should never
+    // block sign-in over something as inconsequential as an avatar.
+  }
+}
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7 // 7 days
 
@@ -89,13 +122,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'A University of Toronto account is required to sign in.' })
     }
 
-    // Upsert user in DB. Never touches passwordHash, so linking Microsoft to an
-    // existing password account leaves that password working.
-    const user = await db.user.upsert({
-      where: { email },
-      update: { name },
-      create: { email, name },
-    })
+    // Checked separately from the write, rather than a single upsert, so a
+    // genuinely new account (and only that) can trigger the avatar sync below.
+    const existingUser = await db.user.findUnique({ where: { email }, select: { id: true } })
+
+    // Never touches passwordHash, so linking Microsoft to an existing
+    // password account leaves that password working.
+    const user = existingUser
+      ? await db.user.update({ where: { email }, data: { name } })
+      : await db.user.create({ data: { email, name } })
+
+    // Fire-and-forget: never blocks the redirect, and syncMicrosoftAvatar
+    // already swallows its own errors, so there is nothing to await here.
+    if (!existingUser) {
+      void syncMicrosoftAvatar(user.id, accessToken)
+    }
 
     issueSession(app, reply, user)
     return reply.redirect(process.env.WEB_URL ?? 'http://localhost:5173')

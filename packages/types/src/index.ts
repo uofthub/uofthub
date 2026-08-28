@@ -31,7 +31,6 @@ export interface ProjectFile {
   id: string
   projectId: string
   name: string
-  url: string
   sizeBytes: number
   mimeType?: string
   uploadedAt: string
