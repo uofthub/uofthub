@@ -310,6 +310,38 @@ Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than t
 | Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 | Tests | Vitest + `app.inject()` against a real Postgres | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
 | CI | GitHub Actions | `typecheck` + API tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
+| Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `apps/api/` |
+| Hosting (web) | Cloudflare Pages | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard |
+
+---
+
+## Deployment
+
+Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck` → tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
+
+| Piece | Where | How |
+|---|---|---|
+| API | Railway service | Builds `apps/api/Dockerfile` (repo root as context, per `railway.json`), healthcheck on `/health` |
+| Database | Railway Postgres | `DATABASE_URL` is injected by Railway; nothing else references the credentials |
+| Web | Cloudflare Pages | Build `pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`, output directory `apps/web/dist` |
+
+**Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the deploy and Railway keeps the previous container serving.
+
+**The API must live on a subdomain of the web domain** — `api.uofthub.com` alongside `uofthub.com`. The session cookie is `SameSite=Lax`, which browsers scope by registrable domain: a subdomain is same-site and the cookie rides along on every `credentials: 'include'` request, but an API on a different domain (a `*.railway.app` URL, say) is cross-site and the browser drops it. Every authenticated request would 401 with nothing obviously wrong in the code. Point a custom domain at the Railway service before treating auth as working.
+
+Environment variables in production — see `apps/api/.env.example` for the full list and shape:
+
+- `DATABASE_URL` — injected by Railway.
+- `JWT_SECRET` — required; `buildApp()` refuses to boot in production without it rather than silently signing forgeable sessions.
+- `WEB_URL` — the site's origin. Drives both the CORS allowlist and the post-OAuth redirect, so a wrong value looks like "sign-in does nothing".
+- `API_URL` — this API's own public base, used to build avatar URLs.
+- `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly.
+- `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
+- `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
+
+`PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
+
+The [scheduled jobs](#scheduled-jobs) are not part of the web service — run them as Railway cron jobs against the same image (`pnpm --filter @uofthub/api sweep-orgs`, `… grant-term-storage`). Until they are scheduled somewhere, expired unverified groups linger (invisible, but not deleted) and verified groups stop receiving new term allowances.
 
 ---
 
