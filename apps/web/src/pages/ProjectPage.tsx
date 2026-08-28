@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
-import { api, safeUrl } from '../lib/api'
+import { api, safeUrl, type ProjectFile } from '../lib/api'
 import { VisibilityChip } from '../components/ProjectCard'
 import {
   Avatar,
@@ -237,6 +237,80 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
   )
 }
 
+function FilesPanel({ projectId, files, isOwner }: { projectId: string; files: ProjectFile[]; isOwner: boolean }) {
+  const qc = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const upload = useMutation({
+    mutationFn: (file: File) => api.projects.uploadFile(projectId, file),
+    onSuccess: () => {
+      setError(null)
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+  const remove = useMutation({
+    mutationFn: (fileId: string) => api.projects.deleteFile(projectId, fileId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
+  })
+
+  if (!isOwner && files.length === 0) return null
+
+  return (
+    <Card style={{ padding: 24, marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 style={{ fontSize: '1.125rem' }}>Files</h2>
+        {isOwner && (
+          <label
+            className="pointer hover accent--text"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.875rem', fontWeight: 500 }}
+          >
+            <Icon name="mdi-upload-outline" size={18} />
+            {upload.isPending ? 'Uploading…' : 'Upload file'}
+            <input
+              type="file"
+              hidden
+              disabled={upload.isPending}
+              onChange={e => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) upload.mutate(file)
+              }}
+            />
+          </label>
+        )}
+      </div>
+
+      {error && <ErrorText>{error}</ErrorText>}
+
+      {files.length === 0 ? (
+        <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+          No files uploaded yet.
+        </p>
+      ) : (
+        <ul className="v-list" style={{ display: 'grid', gap: 10 }}>
+          {files.map(f => (
+            <li key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.9375rem' }}>
+              <Icon name="mdi-file-outline" size={18} color="var(--v-accent-base)" />
+              <a href={api.projects.downloadUrl(projectId, f.id)} className="overflow-ellipsis" style={{ flex: 1, minWidth: 0 }}>
+                {f.name}
+              </a>
+              <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
+                {(f.sizeBytes / (1024 * 1024)).toFixed(1)}MB
+              </span>
+              {isOwner && (
+                <Btn icon size="small" onClick={() => remove.mutate(f.id)} aria-label={`Delete ${f.name}`}>
+                  <Icon name="mdi-delete-outline" size={16} />
+                </Btn>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
 /* -------------------------------------------------------------------------- */
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -426,6 +500,7 @@ export default function ProjectPage() {
 
       {isOwner && <AnalyticsPanel projectId={id!} />}
       <VersionsPanel projectId={id!} isOwner={isOwner} />
+      <FilesPanel projectId={id!} files={project.files} isOwner={isOwner} />
 
       {/* Collaborators */}
       {(project.collaborators.length > 0 || isOwner) && (

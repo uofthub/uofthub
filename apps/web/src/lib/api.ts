@@ -1,11 +1,14 @@
 import type { User, Project, Comment, ProjectLink } from '@uofthub/types'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
+export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData sets its own multipart boundary in the Content-Type header —
+  // forcing application/json here would break the upload.
+  const isFormData = init?.body instanceof FormData
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: isFormData ? init?.headers : { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   })
   if (!res.ok) {
@@ -17,9 +20,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type MeUser = User & { role: 'STUDENT' | 'FACULTY' }
 
+export type ProjectFile = { id: string; name: string; sizeBytes: number; mimeType?: string; uploadedAt: string }
+
 export type ProjectDetail = Project & {
   collaborators: { user: Pick<User, 'id' | 'name' | 'avatarUrl'>; accepted: boolean }[]
-  files: { id: string; name: string; url: string; sizeBytes: number; mimeType?: string }[]
+  files: ProjectFile[]
   links: ProjectLink[]
   _count: { likes: number; comments: number }
 }
@@ -116,6 +121,14 @@ export const api = {
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
     requestAccess: (id: string) => request<{ ok: boolean }>(`/projects/${id}/request-access`, { method: 'POST', body: '{}' }),
     accessRequests: (id: string) => request<unknown[]>(`/projects/${id}/access-requests`),
+    uploadFile: (id: string, file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return request<ProjectFile>(`/projects/${id}/files`, { method: 'POST', body: form })
+    },
+    deleteFile: (id: string, fileId: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
+    downloadUrl: (id: string, fileId: string) => `${API_URL}/projects/${id}/files/${fileId}/download`,
   },
   orgs: {
     list: () => request<Org[]>('/orgs'),
