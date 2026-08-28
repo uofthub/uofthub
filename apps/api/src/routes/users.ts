@@ -178,4 +178,42 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     })
     return { following: !!row }
   })
+
+  // GET /users/me/notifications — most recent first, for the notification bell
+  app.get('/me/notifications', { preHandler: [app.authenticate] }, async (request) => {
+    const [notifications, unreadCount] = await Promise.all([
+      db.notification.findMany({
+        where: { userId: request.user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      db.notification.count({ where: { userId: request.user.sub, read: false } }),
+    ])
+    return { notifications, unreadCount }
+  })
+
+  // POST /users/me/notifications/:id/read
+  app.post<{ Params: { id: string } }>(
+    '/me/notifications/:id/read',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      // Scoped to the caller so one user can't mark another's notification
+      // read by guessing its id.
+      const { count } = await db.notification.updateMany({
+        where: { id: request.params.id, userId: request.user.sub },
+        data: { read: true },
+      })
+      if (count === 0) return reply.code(404).send({ error: 'Not found' })
+      return { ok: true }
+    }
+  )
+
+  // POST /users/me/notifications/read-all — bulk mark-read for opening the bell dropdown
+  app.post('/me/notifications/read-all', { preHandler: [app.authenticate] }, async (request) => {
+    await db.notification.updateMany({
+      where: { userId: request.user.sub, read: false },
+      data: { read: true },
+    })
+    return { ok: true }
+  })
 }

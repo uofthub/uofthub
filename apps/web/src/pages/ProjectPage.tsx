@@ -183,6 +183,63 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
   )
 }
 
+function AccessRequestsPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient()
+  const { data: requests = [] } = useQuery({
+    queryKey: ['access-requests', projectId],
+    queryFn: () => api.projects.accessRequests(projectId),
+  })
+  const onDecided = () => {
+    qc.invalidateQueries({ queryKey: ['access-requests', projectId] })
+    qc.invalidateQueries({ queryKey: ['project', projectId] })
+  }
+  const approve = useMutation({
+    mutationFn: (userId: string) => api.projects.approveAccessRequest(projectId, userId),
+    onSuccess: onDecided,
+  })
+  const deny = useMutation({
+    mutationFn: (userId: string) => api.projects.removeCollaborator(projectId, userId),
+    onSuccess: onDecided,
+  })
+
+  if (requests.length === 0) return null
+
+  return (
+    <Card style={{ padding: 24, marginTop: 16 }}>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Access requests</h2>
+      <div style={{ display: 'grid', gap: 12 }}>
+        {requests.map(r => (
+          <div key={r.userId} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar name={r.user.name} size={28} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.9375rem' }}>{r.user.name}</div>
+              <div className="text--disabled" style={{ fontSize: '0.75rem' }}>
+                {r.user.faculty ?? r.user.email} — wants viewer access
+              </div>
+            </div>
+            <Btn
+              variant="outlined"
+              size="small"
+              onClick={() => approve.mutate(r.userId)}
+              disabled={approve.isPending || deny.isPending}
+            >
+              Approve
+            </Btn>
+            <Btn
+              size="small"
+              onClick={() => deny.mutate(r.userId)}
+              disabled={approve.isPending || deny.isPending}
+              style={{ color: 'var(--tone-error)' }}
+            >
+              Deny
+            </Btn>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
   const qc = useQueryClient()
   const { data: versions = [] } = useQuery({
@@ -499,6 +556,7 @@ export default function ProjectPage() {
       </Card>
 
       {isOwner && <AnalyticsPanel projectId={id!} />}
+      {isOwner && <AccessRequestsPanel projectId={id!} />}
       <VersionsPanel projectId={id!} isOwner={isOwner} />
       <FilesPanel projectId={id!} files={project.files} isOwner={isOwner} />
 

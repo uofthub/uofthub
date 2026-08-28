@@ -100,6 +100,18 @@ Clubs and research labs. Full verification/storage/activity policy in [student-g
 | verification_deadline | timestamp | 7 days from creation/info-request; auto-delete on expiry — not yet implemented |
 | created_at | timestamp | |
 
+### Notification
+In-app feed only for now — no email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| user_id | uuid | recipient |
+| type | enum | `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED` |
+| payload | json | denormalized display data (project title, actor name, etc.) captured at creation time |
+| read | bool | |
+| created_at | timestamp | |
+
 ### OrgMember
 | Field | Type | Notes |
 |---|---|---|
@@ -207,6 +219,7 @@ A student or group that needs more than the default quota or file-count cap (e.g
 | Auth | Google/Microsoft OAuth (domain-restricted) | Easiest student verification for `@mail.utoronto.ca` / `@utoronto.ca` |
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
+| Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 
 ---
 

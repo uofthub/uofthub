@@ -65,13 +65,16 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Formalized TA / professor invite-to-view workflow — faculty users can request VIEWER access; owner approves via collaborator panel
 
 **Notifications**
-Every invite/request flow that exists today is pull-only — a collaborator finds out they were invited, or an owner finds out someone requested access, only by opening the right panel and looking. There's no `Notification` model and no email transport anywhere in the codebase (`grep -ri "nodemailer\|sendgrid\|resend\|smtp"` across `apps/api` returns nothing).
-- [ ] Pick an email transport (Resend, Postmark, SES — none chosen yet)
-- [ ] Schema — `Notification` model (`userId`, `type`, `payload`, `read`, `createdAt`) for an in-app feed
-- [ ] Backend — emit at each existing silent trigger: collaborator invited, invite accepted/declined (`projects.ts` collaborator routes), TA/professor access requested and approved (`projects.ts` access-request routes)
-- [ ] `GET /users/me/notifications`, `POST /users/me/notifications/:id/read`
-- [ ] Frontend — notification bell + dropdown in `AppBar.tsx`, unread badge
-- [ ] Phase 3's org-verification emails (admin alert on submission, contact notified on decision) reuse this same transport once it exists — that work is currently unblocked-looking in Phase 3 but actually depends on this shipping first
+- [x] Pick an email transport — Resend, wrapped in `apps/api/src/lib/email.ts`. No caller yet: it exists so Phase 3's org-verification emails aren't blocked on the decision. Sending no-ops with a warning when `RESEND_API_KEY` is unset, so local dev needs no account
+- [x] Schema — `Notification` model (`userId`, `type`, `payload`, `read`, `createdAt`) for an in-app feed. `payload` is JSON holding denormalized display data (project title, actor name) captured at creation, so the feed still reads correctly after the source row changes or is deleted
+- [x] Backend — emit at each previously-silent trigger via `lib/notifications.ts`: collaborator invited, invite accepted/declined, TA/professor access requested, and access request approved/denied (denial is the `DELETE .../collaborators/:userId` path, not a PATCH)
+- [x] `GET /users/me/notifications` (returns `unreadCount` alongside the list), `POST /users/me/notifications/:id/read`, plus `POST .../read-all` for the bell's open-to-clear behaviour
+- [x] `PATCH /projects/:id/collaborators/:userId` extended — previously only the invitee could respond about themselves, so the owner had no way to approve a TA/professor access request that `POST /request-access` had created. The owner may now decide a pending `VIEWER` row; everything else is still self-only
+- [x] Frontend — notification bell + dropdown in `AppBar.tsx` with an unread dot, polling every 30s (no WebSocket infrastructure — deliberately deferred, see Later / Exploratory). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
+- [x] Frontend — accept/decline lives *in the notification row*, not on the project page: a pending collaborator can't open a `PRIVATE` project yet, so a link there would 404 until they accept
+- [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
+- [ ] Phase 3's org-verification emails (admin alert on submission, contact notified on decision) now only need to call `sendEmail` — the transport decision is no longer blocking them
+- [ ] No notification is emailed yet — the in-app feed is the only delivery channel. Worth revisiting once there's real usage, since an invite is exactly the kind of thing a student won't see until their next visit
 
 **Trust & Safety**
 "Moderation policy for public projects" has been an open question since prd.md's first draft ([prd.md § 12](prd.md#12-open-questions)) and has no design or code behind it yet — anyone can currently publish a `public` project with no reporting path.
@@ -94,7 +97,7 @@ Goal: a group page stops being "anyone can claim it" and becomes something verif
 - [ ] Gate `GET /orgs` and `GET /orgs/:slug` — only `VERIFIED` groups are visible to anyone but the creator
 - [ ] `POST /orgs/:slug/verify` — creator submits verification material; moves `status` to `IN_REVIEW`, clears the deadline, emails the admin team
 - [ ] Scheduled sweep (cron) — auto-delete any group still `PENDING_VERIFICATION` or `INFO_REQUESTED` past its `verificationDeadline`
-- [ ] Email notifications — admin alert on submission; contact notified on approve / deny / request-info. Depends on the email transport picked in Phase 2 § Notifications
+- [ ] Email notifications — admin alert on submission; contact notified on approve / deny / request-info. Transport is now in place (`lib/email.ts`, Resend); this just needs the calls and the message copy
 - [ ] Frontend — creation form collects contact + role; creator sees a persistent "verify within 7 days" banner with countdown on their own unverified group
 - [ ] Frontend — verification submission form
 

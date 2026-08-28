@@ -9,6 +9,7 @@ import {
 import { safeExternalUrl } from '../lib/url.js'
 import { ACCOUNT_QUOTA_BYTES, PROJECT_FILE_COUNT_CAP, categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
 import { deleteObject, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { notify } from '../lib/notifications.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -249,7 +250,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     '/:id/collaborators',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: { owner: { select: { name: true } } },
+      })
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
@@ -266,29 +270,63 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         create: { projectId: project.id, userId: invitee.id, role: 'COLLABORATOR', accepted: false },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
+
+      await notify(invitee.id, 'COLLABORATOR_INVITED', {
+        projectId: project.id,
+        projectTitle: project.title,
+        inviterName: project.owner.name,
+      })
+
       return reply.code(201).send(collab)
     }
   )
 
-  // PATCH /projects/:id/collaborators/:userId — accept/deny invite
+  // PATCH /projects/:id/collaborators/:userId — accept/deny an invite (by the
+  // invitee), or approve/deny a pending VIEWER access request (by the owner)
   app.patch<{ Params: { id: string; userId: string }; Body: { accepted: boolean } }>(
     '/:id/collaborators/:userId',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const { id, userId } = request.params
-      if (userId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      const project = await db.project.findUnique({ where: { id }, select: { id: true, title: true, ownerId: true } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
 
       // Without this, responding to an invite that does not exist throws
       // Prisma's P2025 and surfaces as a 500.
       const invite = await db.projectCollaborator.findUnique({
         where: { projectId_userId: { projectId: id, userId } },
+        include: { user: { select: { name: true } } },
       })
       if (!invite) return reply.code(404).send({ error: 'No invitation found' })
+
+      const isSelf = userId === request.user.sub
+      // A VIEWER row is a TA/professor access request (see POST
+      // .../request-access) rather than an owner-issued invite, so it's the
+      // owner — not the requester — who decides it.
+      const isOwnerDecidingAccessRequest = !isSelf && request.user.sub === project.ownerId && invite.role === 'VIEWER'
+      if (!isSelf && !isOwnerDecidingAccessRequest) return reply.code(403).send({ error: 'Forbidden' })
 
       const collab = await db.projectCollaborator.update({
         where: { projectId_userId: { projectId: id, userId } },
         data: { accepted: request.body.accepted },
       })
+
+      if (isOwnerDecidingAccessRequest) {
+        await notify(userId, 'ACCESS_REQUEST_DECIDED', {
+          projectId: project.id,
+          projectTitle: project.title,
+          accepted: request.body.accepted,
+        })
+      } else if (project.ownerId !== userId) {
+        await notify(project.ownerId, 'COLLABORATOR_RESPONDED', {
+          projectId: project.id,
+          projectTitle: project.title,
+          userName: invite.user.name,
+          accepted: request.body.accepted,
+        })
+      }
+
       return collab
     }
   )
@@ -299,16 +337,33 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const { id, userId } = request.params
-      const project = await db.project.findUnique({ where: { id } })
+      const project = await db.project.findUnique({ where: { id }, select: { id: true, title: true, ownerId: true } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
 
       const isOwner = project.ownerId === request.user.sub
       const isSelf = userId === request.user.sub
       if (!isOwner && !isSelf) return reply.code(403).send({ error: 'Forbidden' })
 
+      const collab = await db.projectCollaborator.findUnique({
+        where: { projectId_userId: { projectId: id, userId } },
+      })
+      if (!collab) return reply.code(404).send({ error: 'Not found' })
+
       await db.projectCollaborator.delete({
         where: { projectId_userId: { projectId: id, userId } },
       })
+
+      // Owner denying a still-pending VIEWER access request (see
+      // POST .../request-access) — let the requester know rather than
+      // leaving the request to silently vanish.
+      if (isOwner && !isSelf && collab.role === 'VIEWER' && !collab.accepted) {
+        await notify(userId, 'ACCESS_REQUEST_DECIDED', {
+          projectId: project.id,
+          projectTitle: project.title,
+          accepted: false,
+        })
+      }
+
       return { ok: true }
     }
   )
@@ -586,9 +641,20 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       if (existing) return reply.code(409).send({ error: 'Access already requested or granted' })
 
-      await db.projectCollaborator.create({
-        data: { projectId: project.id, userId: request.user.sub, role: 'VIEWER', accepted: false },
+      const [requester] = await Promise.all([
+        db.user.findUnique({ where: { id: request.user.sub }, select: { name: true } }),
+        db.projectCollaborator.create({
+          data: { projectId: project.id, userId: request.user.sub, role: 'VIEWER', accepted: false },
+        }),
+      ])
+
+      await notify(project.ownerId, 'ACCESS_REQUESTED', {
+        projectId: project.id,
+        projectTitle: project.title,
+        requesterId: request.user.sub,
+        requesterName: requester?.name,
       })
+
       return { ok: true, message: 'Access request sent to project owner' }
     }
   )

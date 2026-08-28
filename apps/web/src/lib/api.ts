@@ -1,4 +1,4 @@
-import type { User, Project, Comment, ProjectLink } from '@uofthub/types'
+import type { User, Project, Comment, ProjectLink, Notification } from '@uofthub/types'
 
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
@@ -67,6 +67,15 @@ export type Analytics = {
   dailyViews: { date: string; count: number }[]
 }
 
+export type AccessRequest = {
+  projectId: string
+  userId: string
+  role: 'VIEWER'
+  accepted: boolean
+  invitedAt: string
+  user: Pick<User, 'id' | 'name' | 'email' | 'faculty'>
+}
+
 export type Org = {
   id: string
   slug: string
@@ -124,7 +133,15 @@ export const api = {
     fork: (id: string) => request<ProjectDetail>(`/projects/${id}/fork`, { method: 'POST', body: '{}' }),
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
     requestAccess: (id: string) => request<{ ok: boolean }>(`/projects/${id}/request-access`, { method: 'POST', body: '{}' }),
-    accessRequests: (id: string) => request<unknown[]>(`/projects/${id}/access-requests`),
+    accessRequests: (id: string) => request<AccessRequest[]>(`/projects/${id}/access-requests`),
+    approveAccessRequest: (id: string, userId: string) =>
+      request<unknown>(`/projects/${id}/collaborators/${userId}`, { method: 'PATCH', body: JSON.stringify({ accepted: true }) }),
+    // Same endpoint, answered by the invitee about themselves rather than by
+    // the owner about a requester.
+    respondToInvite: (id: string, myUserId: string, accepted: boolean) =>
+      request<unknown>(`/projects/${id}/collaborators/${myUserId}`, { method: 'PATCH', body: JSON.stringify({ accepted }) }),
+    removeCollaborator: (id: string, userId: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/collaborators/${userId}`, { method: 'DELETE' }),
     uploadFile: (id: string, file: File) => {
       const form = new FormData()
       form.append('file', file)
@@ -157,6 +174,11 @@ export const api = {
       return request<MeUser>('/users/me/avatar', { method: 'POST', body: form })
     },
     deleteAvatar: () => request<{ ok: boolean }>('/users/me/avatar', { method: 'DELETE' }),
+  },
+  notifications: {
+    list: () => request<{ notifications: Notification[]; unreadCount: number }>('/users/me/notifications'),
+    markRead: (id: string) => request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, { method: 'POST', body: '{}' }),
+    markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', { method: 'POST', body: '{}' }),
   },
 }
 

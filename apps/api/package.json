@@ -24,7 +24,8 @@
     "@prisma/client": "^5.20.0",
     "@uofthub/types": "workspace:*",
     "fastify": "^5.0.0",
-    "file-type": "^22.0.2"
+    "file-type": "^22.0.2",
+    "resend": "^6.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

@@ -6,6 +6,7 @@ import { useCrumbs } from '../../lib/crumbs'
 import { Avatar, Breadcrumbs, Btn, Chip, Divider, Icon, Menu, Switch, Tooltip, cx } from '../ui'
 import { navSections } from './nav'
 import Mark from '../../components/Mark'
+import NotificationBell from './NotificationBell'
 
 /** Brand lockup: the mark, then the wordmark in Jost — as on uoftindex.ca. */
 export function Brand({ onNavy }: { onNavy?: boolean }) {
@@ -165,6 +166,7 @@ export default function AppBar({ variant }: { variant: 'landing' | 'inner' }) {
           </Btn>
           <Brand />
           <div style={{ flex: 1 }} />
+          <NotificationBell />
           <ThemeToggle />
           <SettingsMenu />
         </div>
@@ -203,6 +205,7 @@ export default function AppBar({ variant }: { variant: 'landing' | 'inner' }) {
           <div style={{ flex: 1 }} />
 
           {variant === 'inner' && onDesktop && <CommandPanelChip />}
+          <NotificationBell />
           <AuthArea />
           <Divider vertical style={{ margin: '6px 8px' }} />
           <ThemeToggle />

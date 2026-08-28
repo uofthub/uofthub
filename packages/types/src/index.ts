@@ -43,6 +43,21 @@ export interface ProjectLink {
   url: string
 }
 
+export type NotificationType =
+  | 'COLLABORATOR_INVITED'
+  | 'COLLABORATOR_RESPONDED'
+  | 'ACCESS_REQUESTED'
+  | 'ACCESS_REQUEST_DECIDED'
+
+export interface Notification {
+  id: string
+  userId: string
+  type: NotificationType
+  payload: Record<string, unknown>
+  read: boolean
+  createdAt: string
+}
+
 export interface Comment {
   id: string
   projectId: string

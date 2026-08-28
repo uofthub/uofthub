@@ -24,6 +24,13 @@ enum OrgType {
   LAB
 }
 
+enum NotificationType {
+  COLLABORATOR_INVITED
+  COLLABORATOR_RESPONDED
+  ACCESS_REQUESTED
+  ACCESS_REQUEST_DECIDED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -53,6 +60,7 @@ model User {
   following      Follow[]              @relation("Following")
   followers      Follow[]              @relation("Followers")
   orgMemberships OrgMember[]
+  notifications  Notification[]
 }
 
 model Project {
@@ -196,6 +204,22 @@ model OrgMember {
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([orgId, userId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  /// Denormalized display data (project title, actor name, etc.) captured at
+  /// creation time, so the feed still reads correctly after the source row
+  /// changes or is deleted.
+  payload   Json
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
 }
 
 model OrgProject {
