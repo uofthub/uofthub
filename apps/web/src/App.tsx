@@ -12,6 +12,7 @@ import OrgsPage from './pages/OrgsPage.tsx'
 import OrgPage from './pages/OrgPage.tsx'
 import AboutPage from './pages/AboutPage.tsx'
 import TermsPage from './pages/TermsPage.tsx'
+import PrivacyPage from './pages/PrivacyPage.tsx'
 import AdminPage from './pages/AdminPage.tsx'
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/courses/:tag" element={<CoursePage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

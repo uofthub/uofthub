@@ -33,13 +33,25 @@ See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond.
 
 Your work stays yours. The platform does not claim any rights to uploaded content. Visibility defaults to private and is always student-controlled. TA/professor access is opt-in per project, never automatic.
 
-See [docs/prd.md](docs/prd.md) §9 for the full privacy policy design.
+The live pages are `/terms` (ownership, acceptable use, how moderation works) and `/privacy` (what is collected, and which third parties see any of it). The design behind them is [docs/prd.md](docs/prd.md) §9.
 
 ---
 
 ## Tech Stack
 
-> TBD — stack decisions will be documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) as they are made.
+A pnpm workspace with two apps and one shared package.
+
+| | |
+|---|---|
+| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. A small Vuetify-flavoured component kit in `src/components/ui`, no UI framework dependency |
+| **API** (`apps/api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
+| **Shared** (`packages/types`) | Types crossing the API boundary |
+| **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
+| **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password |
+| **Email** | Resend · **AI search** OpenAI · **Errors** [Clueline](https://clueline.dev) — each degrades to a no-op when its key is unset |
+| **Tests / CI** | Vitest against a real Postgres, GitHub Actions on every PR |
+
+Every decision above, with the reasoning: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -47,24 +59,56 @@ See [docs/prd.md](docs/prd.md) §9 for the full privacy policy design.
 
 ### Prerequisites
 
-> Prerequisites will be listed here once the stack is finalized.
+- Node 22+ and pnpm 10 (`corepack enable` picks up the pinned version)
+- Docker, for the local PostgreSQL
 
 ### Getting started
 
 ```bash
 git clone https://github.com/renfrrd-ai/uofthub.git
 cd uofthub
-# setup instructions coming soon
+pnpm install
+
+docker compose up -d                  # PostgreSQL on :5432
+cp apps/api/.env.example apps/api/.env # then fill in what you need
+cp apps/web/.env.example apps/web/.env
+
+pnpm dev                              # API on :3001, web on :5173
 ```
+
+`pnpm dev` applies any pending migrations before the API starts. The `.env` you just copied works as-is for everything except sign-in: Microsoft OAuth needs real credentials, so use email + password locally unless you have them. **Every other integration is optional** — with no keys, file uploads fail, email and error reporting no-op with a warning, and AI search falls back to keyword search. Nothing else is blocked.
+
+### The commands CI runs
+
+```bash
+pnpm typecheck
+pnpm --filter @uofthub/api test   # needs the Postgres above running
+pnpm build
+pnpm lint
+```
+
+The API tests create their own `_test` database and refuse to run against any database whose name doesn't end that way — see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+
+### Where things are
+
+| Path | |
+|---|---|
+| `apps/api/src/routes` | HTTP surface — projects, users, orgs, admin, discover, auth |
+| `apps/api/src/lib` | The rules: visibility, moderation, org verification, storage, terms |
+| `apps/api/prisma/schema.prisma` | The data model |
+| `apps/web/src/pages` | One file per route |
+| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [student groups](docs/student-groups.md) |
 
 ---
 
 ## Contributing
 
-uofthub is open source and contributions are welcome. Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) before opening a PR.
+Contributions are welcome — please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) before opening a PR. Anything touching auth, uploads, visibility or user data should say so in the PR description.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+Not yet decided, and deliberately not MIT. Until a licence is chosen and added to this repository, the source is publicly readable but **all rights are reserved** — no permission to use, copy, modify or redistribute it is granted by its being on GitHub.
+
+This does not affect your own work: projects, files and everything else students publish on uofthub stay theirs, as [/terms](docs/prd.md) sets out. The licence question is about this codebase only.

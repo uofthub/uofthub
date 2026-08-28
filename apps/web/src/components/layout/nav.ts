@@ -46,6 +46,7 @@ export const navSections: NavSection[] = [
     icon: 'mdi-package-variant',
     options: [
       { page: 'Terms & Ownership', icon: 'mdi-shield-check-outline', link: '/terms', internal: 1 },
+      { page: 'Privacy', icon: 'mdi-shield-lock-outline', link: '/privacy', internal: 1 },
       { page: 'Source Code', icon: 'mdi-github', link: GITHUB_URL, internal: 0 },
       { page: 'Read the Docs', icon: 'mdi-file-document-outline', link: `${GITHUB_URL}#readme`, internal: 0 },
     ],

@@ -23,6 +23,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1120.0
         version: 3.1120.0
+      '@clueline/core':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@fastify/cookie':
         specifier: ^11.0.0
         version: 11.1.2
@@ -81,6 +84,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@clueline/react':
+        specifier: ^0.2.0
+        version: 0.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@mdi/font':
         specifier: ^7.4.47
         version: 7.4.47
@@ -210,6 +216,15 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
+
+  '@clueline/core@0.2.0':
+    resolution: {integrity: sha512-j49NPD6tzz+hYAD/U8/S7wIUpOvL5Um3ziAuBHNOqXKSnnwcXfyztCNMdGgGZs1DNYfiR8z3UCkaJ3Lo3bJC9A==}
+
+  '@clueline/react@0.2.0':
+    resolution: {integrity: sha512-S/p8pQmVxWzIMORwoN0AJq8bEAZM9hGLP/EdZ94G6dlvNyVj59Msiza4/6Z8Al3/95Fh1DQg8Wq+YGnedXAA/g==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -1824,6 +1839,14 @@ snapshots:
   '@aws/lambda-invoke-store@0.3.0': {}
 
   '@borewit/text-codec@0.2.2': {}
+
+  '@clueline/core@0.2.0': {}
+
+  '@clueline/react@0.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@clueline/core': 0.2.0
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

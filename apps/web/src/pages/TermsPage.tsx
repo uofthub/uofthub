@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { usePageCrumbs } from '../lib/crumbs'
 import { Card, Icon, PageHeader } from '../components/ui'
 import { CONTACT_EMAIL } from '../components/layout/nav'
@@ -167,6 +168,7 @@ export default function TermsPage() {
       ))}
 
       <p className="text--disabled" style={{ fontSize: '0.8125rem', margin: '40px 0 32px' }}>
+        What we collect and who else sees it is covered separately, on <Link to="/privacy">Privacy</Link>.
         Questions about any of this? <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
     </div>

@@ -33,6 +33,8 @@ const FALLBACK_LABELS: Record<string, string> = {
   orgs: 'Clubs & Labs',
   courses: 'Tags',
   about: 'About',
+  terms: 'Terms & ownership',
+  privacy: 'Privacy',
   u: 'People',
   new: 'Share a project',
 }

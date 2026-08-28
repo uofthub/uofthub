@@ -12,6 +12,7 @@ import { userRoutes } from './routes/users.js'
 import { orgRoutes } from './routes/orgs.js'
 import { adminRoutes } from './routes/admin.js'
 import { discoverRoutes } from './routes/discover.js'
+import { reportRequestError } from './lib/monitoring.js'
 
 export async function buildApp() {
   // A default secret is fine for local work but would silently ship forgeable
@@ -76,6 +77,13 @@ export async function buildApp() {
     startRedirectPath: '/auth/microsoft',
     callbackUri: process.env.MICROSOFT_REDIRECT_URI ?? 'http://localhost:3001/auth/callback',
     scope: ['openid', 'profile', 'email', 'https://graph.microsoft.com/User.Read'],
+  })
+
+  // Ships 5xx failures to Clueline. An onError hook rather than
+  // setErrorHandler: it observes the error without taking over the response,
+  // so Fastify's own error serialization is untouched.
+  app.addHook('onError', async (request, reply, error) => {
+    reportRequestError(request, reply, error)
   })
 
   app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
