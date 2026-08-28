@@ -200,7 +200,9 @@ TA/professor access is granted per-project by the student owner (generates a vie
 
 The model's only job is to fill five fields: `search`, `faculty`, `tag`, `sort`, `within`. It never sees the database and never produces a query. The response is constrained by a Zod schema (`lib/discovery.ts`) with enums for faculty, sort and time window; the route then applies those fields through Prisma, inside the same `visibleProjectWhere` filter every other read uses. **The model's output is untrusted input** — the schema is the boundary that keeps a creative answer from becoming a creative query, and no amount of prompt injection in the query text can widen what a caller is allowed to see.
 
-Without `ANTHROPIC_API_KEY` the route runs the raw query as a keyword search and returns `interpreted: false`, which the page shows as a one-line note. Same degradation as email: nothing breaks, the feature is just less clever. Cost control is a session-keyed 20/hour limit (`lib/rateLimit.ts`), a 300-character query cap, `effort: 'low'`, and the endpoint requiring a session at all — an anonymous visitor can still use the free keyword search on `/projects`.
+Without `OPENAI_API_KEY` the route runs the raw query as a keyword search and returns `interpreted: false`, which the page shows as a one-line note. Same degradation as email: nothing breaks, the feature is just less clever. Cost control is a session-keyed 20/hour limit (`lib/rateLimit.ts`), a 300-character query cap, a 2048-token output ceiling, and the endpoint requiring a session at all — an anonymous visitor can still use the free keyword search on `/projects`.
+
+The model is `gpt-5.6-luna` unless `OPENAI_MODEL` overrides it, so pinning a different model is a deployment variable rather than a code change. The provider lives entirely inside `lib/discovery.ts` — the route only ever sees `parseQuery()` returning filters or null, so swapping providers touches one function.
 
 The interpreted filters are returned to the client and rendered as chips. This is a UX decision worth keeping: a student who sees "about machine learning · faculty Engineering" understands why they got nothing back, where a black box returning an empty grid just looks broken.
 
@@ -319,7 +321,7 @@ Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than t
 | Auth | Google/Microsoft OAuth (domain-restricted) | Easiest student verification for `@mail.utoronto.ca` / `@utoronto.ca` |
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
-| AI discovery | Anthropic API (`claude-opus-5`) via `@anthropic-ai/sdk`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `apps/api/src/lib/discovery.ts` falls back to keyword search with a warning if `ANTHROPIC_API_KEY` is unset, so no route depends on an AI budget existing |
+| AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `apps/api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
 | Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 | Tests | Vitest + `app.inject()` against a real Postgres | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
 | CI | GitHub Actions | `typecheck` + API tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
@@ -351,6 +353,7 @@ Environment variables in production — see `apps/api/.env.example` for the full
 - `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly.
 - `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
+- `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
 

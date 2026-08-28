@@ -6,7 +6,7 @@ import { bySession } from '../lib/rateLimit.js'
 
 const QUERY_MAX = 300
 
-// Each search spends Anthropic credits, so the budget is per session rather
+// Each search spends model credits, so the budget is per session rather
 // than per IP (see lib/rateLimit.ts) and tighter than the global ceiling.
 const discoverRateLimit = { rateLimit: { max: 20, timeWindow: '1 hour', keyGenerator: bySession } }
 
@@ -27,7 +27,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
       } catch (err) {
         // A failed or unconfigured model call degrades to keyword search
         // rather than an error page: an imperfect result beats none.
-        app.log.error(err, 'Claude query parsing failed; falling back to keyword search')
+        app.log.error(err, 'Model query parsing failed; falling back to keyword search')
       }
 
       const interpreted = filters ?? { ...EMPTY_FILTERS, search: q }

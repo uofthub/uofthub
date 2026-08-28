@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify'
 
 /**
  * Rate-limit key for routes where the cost lands on *us* per person — a
- * moderator's attention, or Anthropic credits — rather than on the server per
+ * moderator's attention, or model credits — rather than on the server per
  * connection.
  *
  * The default key is the IP, which is wrong here: most of campus shares a

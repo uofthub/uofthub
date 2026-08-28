@@ -4,7 +4,7 @@ import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/h
 beforeEach(resetDb)
 
 /**
- * The suite runs with no ANTHROPIC_API_KEY (see vitest.config.ts), so these
+ * The suite runs with no OPENAI_API_KEY (see vitest.config.ts), so these
  * cover the path that matters most for correctness: what /discover does when
  * the model is unavailable. It must still search, still honour visibility,
  * and still say that it did not interpret anything.

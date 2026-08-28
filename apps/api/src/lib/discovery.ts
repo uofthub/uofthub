@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import OpenAI from 'openai'
+import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 
 /**
@@ -10,6 +10,10 @@ import { z } from 'zod'
  * fixed, closed set of fields, which the route then applies through Prisma.
  * That is the whole security model here: its output is untrusted input, so the
  * schema below is what stops a creative answer from becoming a creative query.
+ *
+ * Provider is OpenAI, model configurable per deployment (`OPENAI_MODEL`).
+ * Nothing outside this module knows which provider is behind it — swapping one
+ * in is a change to `parseQuery`, not to the route.
  */
 
 /** Faculties the model may choose from. Anything else is dropped by the schema. */
@@ -70,15 +74,20 @@ Examples:
 - "cool stuff from med students lately" → faculty: "Medicine", sort: "new"
 - "what's popular right now" → sort: "trending"`
 
-let client: Anthropic | null | undefined
+/** Overridable per deployment; this is the default when `OPENAI_MODEL` is unset. */
+export const DEFAULT_MODEL = 'gpt-5.6-luna'
 
-function getClient(): Anthropic | null {
+export const discoveryModel = (): string => process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL
+
+let client: OpenAI | null | undefined
+
+function getClient(): OpenAI | null {
   if (client === undefined) {
     // Same degradation as lib/email.ts: no key means the feature quietly
     // becomes its non-AI equivalent rather than the route 503ing. Local dev
-    // and a deploy without an Anthropic budget both keep working.
-    client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
-    if (!client) console.warn('ANTHROPIC_API_KEY is not set — /discover falls back to keyword search')
+    // and a deploy without an AI budget both keep working.
+    client = process.env.OPENAI_API_KEY ? new OpenAI() : null
+    if (!client) console.warn('OPENAI_API_KEY is not set — /discover falls back to keyword search')
   }
   return client
 }
@@ -91,22 +100,22 @@ export const isAiConfigured = (): boolean => getClient() !== null
  * a search that returns something imperfect beats an error page.
  */
 export async function parseQuery(query: string): Promise<DiscoverFilters | null> {
-  const anthropic = getClient()
-  if (!anthropic) return null
+  const openai = getClient()
+  if (!openai) return null
 
-  const response = await anthropic.messages.parse({
-    model: 'claude-opus-5',
-    // Extraction into five fields: thinking stays on (disabling it on Opus 5
-    // has its own failure modes) but at the cheapest effort, and the output is
-    // a handful of tokens.
-    max_tokens: 2048,
-    output_config: { effort: 'low', format: zodOutputFormat(DiscoverFilters) },
-    system: SYSTEM,
-    messages: [{ role: 'user', content: query }],
+  const response = await openai.responses.parse({
+    model: discoveryModel(),
+    instructions: SYSTEM,
+    input: query,
+    // Extraction into five fields — the answer is a handful of tokens. The cap
+    // is generous enough to leave room for a reasoning model's hidden tokens
+    // without letting a runaway response bill for long.
+    max_output_tokens: 2048,
+    text: { format: zodTextFormat(DiscoverFilters, 'discover_filters') },
   })
 
-  // parsed_output is null when the response didn't validate against the schema.
-  return response.parsed_output ?? null
+  // output_parsed is null when the response didn't validate against the schema.
+  return response.output_parsed ?? null
 }
 
 /** Start of the window a `within` value names, or null for "no bound". */

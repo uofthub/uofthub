@@ -19,7 +19,6 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
     "@aws-sdk/client-s3": "^3.1120.0",
     "@aws-sdk/s3-request-presigner": "^3.1120.0",
     "@fastify/cookie": "^11.0.0",
@@ -32,6 +31,7 @@
     "@uofthub/types": "workspace:*",
     "fastify": "^5.0.0",
     "file-type": "^22.0.2",
+    "openai": "^7.8.0",
     "resend": "^6.24.0",
     "zod": "^4.4.3"
   },

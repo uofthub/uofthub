@@ -1,7 +1,28 @@
-import { describe, expect, it } from 'vitest'
-import { windowStart } from './discovery.js'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_MODEL, discoveryModel, windowStart } from './discovery.js'
 
 const now = new Date(Date.UTC(2026, 7, 28))
+
+describe('discoveryModel', () => {
+  afterEach(() => {
+    delete process.env.OPENAI_MODEL
+  })
+
+  it('defaults to the model compiled in', () => {
+    expect(discoveryModel()).toBe(DEFAULT_MODEL)
+    expect(DEFAULT_MODEL).toBe('gpt-5.6-luna')
+  })
+
+  it('lets the environment override it', () => {
+    process.env.OPENAI_MODEL = 'gpt-5.6-mini'
+    expect(discoveryModel()).toBe('gpt-5.6-mini')
+  })
+
+  it('ignores a blank or whitespace override rather than sending an empty model', () => {
+    process.env.OPENAI_MODEL = '   '
+    expect(discoveryModel()).toBe(DEFAULT_MODEL)
+  })
+})
 
 describe('windowStart', () => {
   it('is null when the query bounds no time window', () => {
