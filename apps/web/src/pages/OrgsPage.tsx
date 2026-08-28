@@ -58,7 +58,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
         <Field label="Name">
           <TextField value={form.name} onChange={set('name')} placeholder="UofT Robotics Association" />
         </Field>
-        <Field label="URL slug" hint={`uofthub.ca/orgs/${form.slug || slugify(form.name) || '…'}`}>
+        <Field label="URL slug" hint={`uofthub.com/orgs/${form.slug || slugify(form.name) || '…'}`}>
           <TextField value={form.slug} onChange={set('slug')} placeholder={slugify(form.name) || 'uofT-robotics'} />
         </Field>
         <Field label="Type">

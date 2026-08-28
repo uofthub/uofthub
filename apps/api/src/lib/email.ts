@@ -21,7 +21,7 @@ export async function sendEmail(options: { to: string; subject: string; html: st
   const resend = getClient()
   if (!resend) return
 
-  const from = process.env.EMAIL_FROM ?? 'uofthub <notifications@uofthub.ca>'
+  const from = process.env.EMAIL_FROM ?? 'uofthub <notifications@uofthub.com>'
   const { error } = await resend.emails.send({ from, to: options.to, subject: options.subject, html: options.html })
   if (error) console.error('Failed to send email:', error)
 }
