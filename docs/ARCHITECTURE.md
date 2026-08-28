@@ -308,6 +308,8 @@ Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than t
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
 | Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
+| Tests | Vitest + `app.inject()` against a real Postgres | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
+| CI | GitHub Actions | `typecheck` + API tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
 
 ---
 

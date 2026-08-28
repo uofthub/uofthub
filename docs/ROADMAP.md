@@ -142,9 +142,9 @@ Deliberately last — these either need infrastructure the earlier phases don't 
 
 Not phase-scoped — these are gaps in build/ship confidence rather than user-facing features, and belong alongside whichever phase is currently active rather than after it.
 
-- [ ] No tests exist anywhere in the repo (`find apps -iname "*.test.*" -o -iname "*.spec.*"` returns nothing) — pick a runner (Vitest fits the existing Vite/TS stack cleanly) and start with the routes that carry real logic: fork, versioning, visibility filtering
-- [ ] No CI — add a GitHub Actions workflow running `typecheck` and `build` for both `apps/api` and `apps/web` on every PR; there's currently nothing gating what merges into `main`
-- [ ] No deployment/hosting decision recorded — [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md) has no row for where any of this actually runs in production
+- [x] Tests — Vitest, `pnpm --filter @uofthub/api test`. 62 across 8 files: the routes that carry real logic (fork, versioning, visibility filtering, org verification, moderation decisions) plus the pure rules they lean on (`visibility.ts`, `terms.ts`, `url.ts`). Route tests go through `app.inject()` against a **real Postgres**, not a mock — the rules being tested are Prisma queries, and a mock would only prove the query builder was called. The suite creates and migrates its own database, whose name must end in `_test`, so a stray `DATABASE_URL` can't point the truncate-between-tests at development data
+- [x] CI — `.github/workflows/ci.yml` runs install, `prisma generate`, `typecheck`, the API tests (against a Postgres service container), `build` and `lint` on every PR and every push to `main`
+- [ ] No deployment/hosting decision recorded — [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md) has no row for where any of this actually runs in production. Unlike the two above, this isn't work to be done but a call to be made: it commits real money and an account, so it's the owner's to pick
 
 ---
 

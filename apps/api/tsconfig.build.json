@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "comment": "Production build only. Tests are still typechecked (tsconfig.json includes them); they just have no business in dist/.",
+  "exclude": ["src/**/*.test.ts", "src/test"]
+}

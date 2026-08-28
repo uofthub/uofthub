@@ -19,7 +19,9 @@ export async function buildApp() {
     throw new Error('JWT_SECRET must be set in production')
   }
 
-  const app = Fastify({ logger: true })
+  // Request logs are the first thing you want in dev and production, and the
+  // last thing you want interleaved with test output.
+  const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
 
   // `methods` defaults to GET,HEAD,POST, which fails the preflight for every
   // PATCH and DELETE route the web app calls (project edit, profile edit,

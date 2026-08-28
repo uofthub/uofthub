@@ -22,6 +22,23 @@ Thanks for your interest in contributing. uofthub is an open-source project buil
 
 ---
 
+## Running the checks
+
+The same four commands CI runs, from the repo root:
+
+```bash
+pnpm typecheck
+pnpm --filter @uofthub/api test   # needs the Postgres in docker-compose.yml running
+pnpm build
+pnpm lint
+```
+
+The API tests create their own database — your `DATABASE_URL`'s name with `_test` appended — apply the migrations to it, and truncate every table between cases. A database whose name doesn't end in `_test` is refused outright, so the suite can't wipe your development data. Override the target with `TEST_DATABASE_URL` if you need to.
+
+Add a test with the change when you touch a route that decides who can see or do something. `src/routes/projects.visibility.test.ts` is the pattern to copy: real requests through `app.inject()`, real database, assertions on status codes rather than on internals.
+
+---
+
 ## Pull request process
 
 1. Keep PRs focused — one logical change per PR.
