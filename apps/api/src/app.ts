@@ -20,9 +20,13 @@ export async function buildApp() {
 
   const app = Fastify({ logger: true })
 
+  // `methods` defaults to GET,HEAD,POST, which fails the preflight for every
+  // PATCH and DELETE route the web app calls (project edit, profile edit,
+  // deleting a project/link/file, deciding a collaborator invite).
   await app.register(cors, {
     origin: process.env.WEB_URL ?? 'http://localhost:5173',
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'],
   })
 
   await app.register(cookie)
