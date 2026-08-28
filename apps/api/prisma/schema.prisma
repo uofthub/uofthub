@@ -29,6 +29,23 @@ enum NotificationType {
   COLLABORATOR_RESPONDED
   ACCESS_REQUESTED
   ACCESS_REQUEST_DECIDED
+  PROJECT_MODERATED
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  ACADEMIC_INTEGRITY
+  INTELLECTUAL_PROPERTY
+  PRIVACY
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  DISMISSED
+  WARNED
+  TAKEN_DOWN
 }
 
 model User {
@@ -50,6 +67,10 @@ model User {
   /// account, so it never overwrites this.
   avatarIsCustom Boolean  @default(false)
   bio       String?
+  /// Platform moderator. Set directly in the database (see
+  /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
+  /// grants it, so it can't be escalated to through the API.
+  isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -61,6 +82,8 @@ model User {
   followers      Follow[]              @relation("Followers")
   orgMemberships OrgMember[]
   notifications  Notification[]
+  reportsFiled   Report[]              @relation("Reporter")
+  reportsReviewed Report[]             @relation("Reviewer")
 }
 
 model Project {
@@ -72,6 +95,10 @@ model Project {
   visibility   Visibility @default(PRIVATE)
   viewCount    Int        @default(0)
   forkedFromId String?
+  /// Set when a moderator takes the project down: visibility is forced back to
+  /// PRIVATE and the owner cannot re-open it while this is set. Null for every
+  /// project that has never been actioned.
+  takenDownAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -84,8 +111,31 @@ model Project {
   versions      ProjectVersion[]
   dailyViews    ProjectDailyView[]
   orgProjects   OrgProject[]
+  reports       Report[]
   forkedFrom    Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
   forks         Project[]             @relation("ProjectForks")
+}
+
+model Report {
+  id         String       @id @default(uuid())
+  reporterId String
+  projectId  String
+  reason     ReportReason
+  /// Optional free text from the reporter — the reason enum is what the queue
+  /// sorts on, this is the context a moderator actually needs to decide.
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  /// Set together when a moderator decides the report.
+  reviewedAt DateTime?
+  reviewedById String?
+  reviewNote String?
+
+  reporter   User    @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("Reviewer", fields: [reviewedById], references: [id])
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 
 model ProjectVersion {

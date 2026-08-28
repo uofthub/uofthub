@@ -4,7 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { api, safeUrl, type ProjectFile } from '../lib/api'
+import { REPORT_REASONS } from '../lib/moderation'
+import type { ReportReason } from '@uofthub/types'
 import { VisibilityChip } from '../components/ProjectCard'
+import { CONTACT_EMAIL } from '../components/layout/nav'
 import {
   Avatar,
   Btn,
@@ -118,6 +121,57 @@ function InviteDialog({ projectId, onClose }: { projectId: string; onClose: () =
         {!mutation.isSuccess && (
           <Btn variant="accent" onClick={() => mutation.mutate()} disabled={!email || mutation.isPending}>
             {mutation.isPending ? 'Inviting…' : 'Invite'}
+          </Btn>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
+function ReportDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [reason, setReason] = useState<ReportReason>(REPORT_REASONS[0].value)
+  const [details, setDetails] = useState('')
+  const mutation = useMutation({
+    mutationFn: () => api.projects.report(projectId, { reason, details: details.trim() || undefined }),
+  })
+
+  return (
+    <Dialog onClose={onClose}>
+      <DialogTitle onClose={onClose}>Report this project</DialogTitle>
+      <div style={{ padding: 22, display: 'grid', gap: 16 }}>
+        {mutation.isSuccess ? (
+          <p style={{ color: 'var(--tone-success)', margin: 0 }}>
+            <Icon name="mdi-check-circle-outline" /> Thanks — a moderator will review this.
+          </p>
+        ) : (
+          <>
+            <Field label="What is wrong with it?">
+              <SelectField value={reason} onChange={e => setReason(e.target.value as ReportReason)}>
+                {REPORT_REASONS.map(r => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </SelectField>
+            </Field>
+            <Field label="Anything else we should know?" hint="Optional, but it is what a moderator reads first.">
+              <TextArea
+                rows={4}
+                maxLength={1000}
+                value={details}
+                onChange={e => setDetails(e.target.value)}
+                placeholder="Which part of the project, and why…"
+              />
+            </Field>
+          </>
+        )}
+        {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 22px 22px' }}>
+        <Btn onClick={onClose}>{mutation.isSuccess ? 'Close' : 'Cancel'}</Btn>
+        {!mutation.isSuccess && (
+          <Btn variant="accent" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {mutation.isPending ? 'Sending…' : 'Send report'}
           </Btn>
         )}
       </div>
@@ -379,6 +433,7 @@ export default function ProjectPage() {
   const qc = useQueryClient()
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [comment, setComment] = useState('')
 
   const { data: project, isLoading } = useQuery({
@@ -435,6 +490,23 @@ export default function ProjectPage() {
     <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 900 }}>
       {editOpen && <EditProjectDialog projectId={id!} onClose={() => setEditOpen(false)} />}
       {inviteOpen && <InviteDialog projectId={id!} onClose={() => setInviteOpen(false)} />}
+      {reportOpen && <ReportDialog projectId={id!} onClose={() => setReportOpen(false)} />}
+
+      {/* Only the owner and accepted collaborators can still load a taken-down
+          project — it is forced back to PRIVATE — so this banner is for them. */}
+      {project.takenDownAt && (
+        <Card style={{ padding: 20, marginBottom: 16, borderLeft: '4px solid var(--tone-error)' }}>
+          <h2 style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="mdi-alert-octagon-outline" size={20} color="var(--tone-error)" />
+            Taken down by a moderator
+          </h2>
+          <p className="text--secondary" style={{ margin: '8px 0 0', fontSize: '0.9375rem' }}>
+            This project was reported and reviewed on {new Date(project.takenDownAt).toLocaleDateString()}. It is
+            private to you now and its visibility cannot be changed. Nothing has been deleted — your files and
+            history are intact. Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to appeal.
+          </p>
+        </Card>
+      )}
 
       {/* Header */}
       <Card style={{ padding: 28 }}>
@@ -492,6 +564,14 @@ export default function ProjectPage() {
                 disabled={requestAccess.isPending || requestAccess.isSuccess}
               >
                 {requestAccess.isSuccess ? 'Requested ✓' : 'Request access'}
+              </Btn>
+            )}
+            {/* A PRIVATE project has no audience beyond the owner and the
+                collaborators who accepted, so there is nothing to report. */}
+            {me && !isOwner && project.visibility !== 'PRIVATE' && (
+              <Btn onClick={() => setReportOpen(true)} className="text--disabled" aria-label="Report this project">
+                <Icon name="mdi-flag-outline" size={18} />
+                Report
               </Btn>
             )}
           </div>

@@ -77,13 +77,14 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [ ] No notification is emailed yet — the in-app feed is the only delivery channel. Worth revisiting once there's real usage, since an invite is exactly the kind of thing a student won't see until their next visit
 
 **Trust & Safety**
-"Moderation policy for public projects" has been an open question since prd.md's first draft ([prd.md § 12](prd.md#12-open-questions)) and has no design or code behind it yet — anyone can currently publish a `public` project with no reporting path.
-- [ ] Schema — `Report` model (`reporterId`, `projectId`, `reason`, `status`, `createdAt`)
-- [ ] `POST /projects/:id/report` — any authenticated user, rate-limited
-- [ ] Admin flag/role on `User` — doesn't exist yet anywhere in the codebase; this is the shared foundation Phase 3's org-verification admin portal also needs, so it only needs building once
-- [ ] `GET /admin/reports`, `POST /admin/reports/:id/decision` (dismiss / take down / warn owner)
-- [ ] Frontend — "Report" action on `uoft`/`public`-visibility projects; admin review page
-- [ ] A real Terms of Service / IP-ownership page — [prd.md § 9](prd.md#9-privacy-ip--academic-integrity-critical--design-from-day-1) requires "clear terms around ownership/IP" and nothing covers this yet (`AboutPage.tsx` doesn't touch it)
+"Moderation policy for public projects" was an open question from prd.md's first draft ([prd.md § 12](prd.md#12-open-questions)) until the report → review → decision mechanism below shipped. What counts as a violation, and what happens on repeat offenses, is still a policy question rather than a code one.
+- [x] Schema — `Report` model (`reporterId`, `projectId`, `reason`, `status`, `createdAt`), plus `details` (the reporter's free text, capped at 1000 chars — the reason enum sorts the queue, this is what a moderator actually reads) and `reviewedAt`/`reviewedById`/`reviewNote`
+- [x] `POST /projects/:id/report` — any authenticated user, rate-limited to 5/hour and **keyed by session cookie, not IP** (the rate limiter's default): most of campus shares a handful of NAT addresses, so an IP budget would let one abuser mute everyone on the same wifi. Rejects reporting your own project, a `PRIVATE` one (nobody outside it can see it), and a second open report on a project you have already reported
+- [x] Admin flag/role on `User` — `isAdmin`, checked against the database on every admin request (`lib/admin.ts`) rather than carried in the JWT: sessions last 7 days, so a token minted while the flag was set would otherwise outlive its revocation. Granted only by `pnpm --filter @uofthub/api grant-admin <email>`, never through the API. This is the shared foundation Phase 3's org-verification admin portal also needs
+- [x] `GET /admin/reports`, `POST /admin/reports/:id/decision` (dismiss / take down / warn owner). Take-down forces the project back to `PRIVATE` and stamps `Project.takenDownAt`, which `PATCH /projects/:id` then refuses to let the owner re-open and `POST /projects/:id/fork` refuses to copy — without those two guards the decision is one click away from being undone. Nothing is deleted: the owner keeps the project, its files and its history. A take-down also closes every other open report on the same project, so a much-reported project notifies its owner once rather than once per report
+- [x] Frontend — "Report" action on `uoft`/`public`-visibility projects (a dialog with the reason list + free text); `/admin` review queue, oldest-first, with the three decisions and a note field. The nav entry only appears for `isAdmin` accounts; the API gate is the real one
+- [x] Frontend — take-down banner on `ProjectPage.tsx`, since the owner is the only person who can still load the project, and `PROJECT_MODERATED` notifications for warn/take-down (a dismissal notifies nobody — the owner never learns a dismissed report existed)
+- [x] A real Terms of Service / IP-ownership page — `/terms`, linked from the Resources nav section. Covers what [prd.md § 9](prd.md#9-privacy-ip--academic-integrity-critical--design-from-day-1) requires ("clear terms around ownership/IP"), the visibility guarantees, what you may not publish, and how the report → review → decision flow above actually works
 
 ---
 
@@ -102,7 +103,7 @@ Goal: a group page stops being "anyone can claim it" and becomes something verif
 - [ ] Frontend — verification submission form
 
 **Admin portal**
-- [ ] Reuses the admin flag/role added in Phase 2 § Trust & Safety — build that once, use it for both org verification and project moderation
+- [x] Reuses the admin flag/role added in Phase 2 § Trust & Safety — `User.isAdmin` and the `requireAdmin` preHandler in `lib/admin.ts` now exist; org verification just needs to register its routes behind the same gate
 - [ ] `GET /admin/orgs?status=IN_REVIEW` — list pending requests, admin-only
 - [ ] `POST /admin/orgs/:slug/decision` — approve / deny / request-info
 - [ ] Frontend — new admin-only page listing pending groups with the three decision actions

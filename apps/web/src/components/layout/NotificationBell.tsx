@@ -19,6 +19,13 @@ function messageFor(n: Notification): { text: string; to: string } {
       return { text: `${p.requesterName} requested viewer access to "${p.projectTitle}"`, to }
     case 'ACCESS_REQUEST_DECIDED':
       return { text: `Your access request for "${p.projectTitle}" was ${p.accepted ? 'approved' : 'denied'}`, to }
+    case 'PROJECT_MODERATED': {
+      const action =
+        p.action === 'TAKEN_DOWN'
+          ? `"${p.projectTitle}" was taken down after a report`
+          : `A moderator reviewed a report about "${p.projectTitle}"`
+      return { text: p.note ? `${action}: ${p.note}` : action, to }
+    }
   }
 }
 

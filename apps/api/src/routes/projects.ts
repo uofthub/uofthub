@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { db } from '../db/client.js'
 import {
   canViewProject,
@@ -14,6 +14,33 @@ import { notify } from '../lib/notifications.js'
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
 const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
+
+// Every report costs a moderator's attention, so the budget is tighter still —
+// a genuine reporter never needs more than a handful in an hour. Keyed by
+// session rather than by IP (the default): most of campus shares a handful of
+// NAT addresses, so an IP budget would let one abuser mute everyone on the
+// same wifi. The rate limiter runs in onRequest, before `authenticate` has
+// verified anything, so the raw cookie — not request.user — is what's
+// available; an unauthenticated request falls back to the IP and gets its 401
+// from the preHandler regardless.
+const reportRateLimit = {
+  rateLimit: {
+    max: 5,
+    timeWindow: '1 hour',
+    keyGenerator: (request: FastifyRequest) => request.cookies?.token ?? request.ip,
+  },
+}
+
+const REPORT_REASONS = [
+  'SPAM',
+  'HARASSMENT',
+  'ACADEMIC_INTEGRITY',
+  'INTELLECTUAL_PROPERTY',
+  'PRIVACY',
+  'OTHER',
+] as const
+
+const REPORT_DETAILS_MAX = 1000
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -152,6 +179,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
     const { title, description, tags, visibility } = request.body
+
+    // A take-down would be worth nothing if the owner could just set the
+    // project public again; only a moderator can clear `takenDownAt`.
+    if (visibility !== undefined && project.takenDownAt) {
+      return reply
+        .code(403)
+        .send({ error: 'This project was taken down by a moderator. Contact the team to appeal.' })
+    }
 
     const updated = await db.project.update({
       where: { id: project.id },
@@ -569,6 +604,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: 'Not found' })
       }
 
+      // The owner can still see a taken-down project, and a fork of it would
+      // come back with a clean `takenDownAt` — a one-click way around the
+      // moderation decision.
+      if (original.takenDownAt) {
+        return reply.code(403).send({ error: 'This project was taken down and cannot be forked.' })
+      }
+
       const fork = await db.project.create({
         data: {
           ownerId: request.user.sub,
@@ -672,4 +714,53 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     })
     return requests
   })
+
+  // ── MODERATION ──────────────────────────────────────────────────────────────
+
+  // POST /projects/:id/report — any signed-in user flags a project for review
+  app.post<{ Params: { id: string }; Body: { reason?: string; details?: string } }>(
+    '/:id/report',
+    { preHandler: [app.authenticate], config: reportRateLimit },
+    async (request, reply) => {
+      const reason = request.body?.reason
+      if (!reason || !REPORT_REASONS.includes(reason as (typeof REPORT_REASONS)[number])) {
+        return reply.code(400).send({ error: 'A valid reason is required' })
+      }
+
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, ownerId: true, visibility: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+
+      // Reporting exists for work that has an audience. A PRIVATE project is
+      // only visible to its owner and accepted collaborators, so there is
+      // nothing for a moderator to act on.
+      if (project.visibility === 'PRIVATE') {
+        return reply.code(403).send({ error: 'Only U of T-visible or public projects can be reported' })
+      }
+      if (project.ownerId === request.user.sub) {
+        return reply.code(400).send({ error: 'You cannot report your own project' })
+      }
+
+      // One open report per person per project: a second one adds nothing to
+      // the queue, and re-reporting is only useful once the first was decided.
+      const existing = await db.report.findFirst({
+        where: { projectId: project.id, reporterId: request.user.sub, status: 'OPEN' },
+        select: { id: true },
+      })
+      if (existing) return reply.code(409).send({ error: 'You have already reported this project' })
+
+      const report = await db.report.create({
+        data: {
+          projectId: project.id,
+          reporterId: request.user.sub,
+          reason: reason as (typeof REPORT_REASONS)[number],
+          details: (request.body.details ?? '').trim().slice(0, REPORT_DETAILS_MAX) || null,
+        },
+        select: { id: true, reason: true, status: true, createdAt: true },
+      })
+      return reply.code(201).send(report)
+    }
+  )
 }

@@ -254,6 +254,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         classYear: true,
         avatarUrl: true,
         bio: true,
+        isAdmin: true,
         createdAt: true,
       },
     })

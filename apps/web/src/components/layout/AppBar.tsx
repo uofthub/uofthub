@@ -101,6 +101,16 @@ function AuthArea() {
               Share a Project
             </Link>
           </li>
+          {/* Moderators only — the queue is a staff surface, not a nav item
+              everyone should see. The API gate is the real one. */}
+          {user.isAdmin && (
+            <li>
+              <Link to="/admin" className="v-list-item" onClick={close}>
+                <Icon name="mdi-flag-outline" color="var(--v-accent-base)" />
+                Moderation
+              </Link>
+            </li>
+          )}
           <li>
             <Divider style={{ margin: '6px 0' }} />
           </li>

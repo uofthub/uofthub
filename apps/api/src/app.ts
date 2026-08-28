@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth.js'
 import { projectRoutes } from './routes/projects.js'
 import { userRoutes } from './routes/users.js'
 import { orgRoutes } from './routes/orgs.js'
+import { adminRoutes } from './routes/admin.js'
 
 export async function buildApp() {
   // A default secret is fine for local work but would silently ship forgeable
@@ -86,6 +87,7 @@ export async function buildApp() {
   await app.register(projectRoutes, { prefix: '/projects' })
   await app.register(userRoutes, { prefix: '/users' })
   await app.register(orgRoutes, { prefix: '/orgs' })
+  await app.register(adminRoutes, { prefix: '/admin' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

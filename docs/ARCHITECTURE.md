@@ -42,6 +42,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | avatar_url | string? | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage) |
 | avatar_key | string? | R2 object key when the avatar lives in our bucket; internal, never sent to the client |
 | avatar_is_custom | bool | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it |
+| is_admin | bool | platform moderator — see [Moderation](#moderation). Set only from the database (`pnpm --filter @uofthub/api grant-admin <email>`); no route grants it |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
@@ -54,6 +55,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | description | text | |
 | tags | string[] | course, faculty, topic |
 | visibility | enum | `private`, `uoft`, `public` |
+| taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility or fork the project — see [Moderation](#moderation) |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
@@ -107,7 +109,7 @@ In-app feed only for now — no email is sent for these yet. See [ROADMAP.md § 
 |---|---|---|
 | id | uuid | |
 | user_id | uuid | recipient |
-| type | enum | `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED` |
+| type | enum | `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED` |
 | payload | json | denormalized display data (project title, actor name, etc.) captured at creation time |
 | read | bool | |
 | created_at | timestamp | |
@@ -118,6 +120,22 @@ In-app feed only for now — no email is sent for these yet. See [ROADMAP.md § 
 | org_id | uuid | |
 | user_id | uuid | |
 | role | string | e.g. `ADMIN`, `MEMBER` |
+
+### Report
+One row per person per project per open complaint. See [Moderation](#moderation).
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| reporter_id | uuid | FK → User |
+| project_id | uuid | FK → Project |
+| reason | enum | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `OTHER` |
+| details | text? | reporter's free text, capped at 1000 chars |
+| status | enum | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself |
+| created_at | timestamp | |
+| reviewed_at | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides |
+| reviewed_by_id | uuid? | FK → User (the moderator) |
+| review_note | text? | shown to the owner on a warning or take-down |
 
 ---
 
@@ -142,6 +160,28 @@ Projects have three visibility levels:
 Default: `private`. Students must explicitly open visibility up.
 
 TA/professor access is granted per-project by the student owner (generates a view-only invite link), never platform-wide.
+
+---
+
+## Moderation
+
+Anyone signed in can report a project whose visibility is `uoft` or `public`. A `private` project is unreportable — nobody outside the owner and its accepted collaborators can see it, so there is nothing for a moderator to act on. Self-reports are rejected, as is a second open report on a project the same person has already reported.
+
+`POST /projects/:id/report` is rate-limited to 5 per hour, **keyed by session cookie rather than by IP**. This is the one place that deviates from the IP-keyed default the upload routes use: campus wifi puts thousands of students behind a handful of NAT addresses, and an IP budget would let one abuser exhaust reporting for everyone on the same network. The limiter runs in `onRequest`, before `authenticate` has verified the JWT, so the raw cookie — not `request.user` — is what's available as a key.
+
+Moderators are `User.is_admin` accounts. The flag is checked against the database on every admin request (`lib/admin.ts`), not read from the JWT: sessions last 7 days, so a token minted while the flag was set would otherwise keep moderator powers until it expired. It is granted only from the database — `pnpm --filter @uofthub/api grant-admin <email>` — because the first moderator has to come from outside the app and no route should be able to hand out the flag. This is the same gate Phase 3's org-verification portal will register behind.
+
+`GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide). `POST /admin/reports/:id/decision` takes one of three decisions:
+
+| Decision | Effect | Owner told? |
+|---|---|---|
+| `DISMISS` | Closes the report. | No — the owner never learns a dismissed report existed |
+| `WARN` | Project stays up. | Yes, with the moderator's note |
+| `TAKE_DOWN` | Visibility forced to `private`, `taken_down_at` stamped. | Yes, with the moderator's note |
+
+A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, and `POST /projects/:id/fork` refuses to copy the project at all — a fork would otherwise come back with a clean `taken_down_at` and be one click from public again. Only a moderator can clear it.
+
+Deciding a take-down also closes every other open report on the same project with the same decision. A project that drew one report usually drew several, and without this the owner is notified once per duplicate.
 
 ---
 

@@ -10,6 +10,8 @@ import CoursePage from './pages/CoursePage.tsx'
 import OrgsPage from './pages/OrgsPage.tsx'
 import OrgPage from './pages/OrgPage.tsx'
 import AboutPage from './pages/AboutPage.tsx'
+import TermsPage from './pages/TermsPage.tsx'
+import AdminPage from './pages/AdminPage.tsx'
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
         <Route path="/u/:id" element={<ProfilePage />} />
         <Route path="/courses/:tag" element={<CoursePage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

@@ -193,7 +193,7 @@ Future graph extension: Students → Projects → People → Courses → Researc
 
 - Exact auth method for verifying U of T student status (domain-restricted email vs. OAuth vs. manual verification)
 - File storage/hosting approach and size limits
-- Moderation policy for public projects — the mechanism (report → admin review → dismiss/takedown/warn) is now planned in [ROADMAP.md § Phase 2, Trust & Safety](ROADMAP.md), but what actually counts as a violation, and what happens on repeat offenses, is still undecided
+- Moderation policy for public projects — the mechanism (report → admin review → dismiss/takedown/warn) is now built, and the categories a project can be reported under are written down on `/terms`; what happens on *repeat* offenses is still undecided (there is no strike count, and a suspension has no implementation behind it yet)
 - Whether/when to formalize the TA/professor access model
 - Timeline and criteria for approaching U of T about infrastructure support
 - What evidence counts as sufficient proof when verifying a student group's authorization (no official U of T club/lab registry API exists to check against) — see [student-groups.md](student-groups.md)

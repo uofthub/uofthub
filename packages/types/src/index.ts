@@ -22,6 +22,8 @@ export interface Project {
   visibility: Visibility
   viewCount: number
   forkedFromId?: string
+  /** Set only when a moderator has taken the project down. */
+  takenDownAt?: string
   createdAt: string
   updatedAt: string
   owner?: Pick<User, 'id' | 'name' | 'faculty'>
@@ -48,6 +50,7 @@ export type NotificationType =
   | 'COLLABORATOR_RESPONDED'
   | 'ACCESS_REQUESTED'
   | 'ACCESS_REQUEST_DECIDED'
+  | 'PROJECT_MODERATED'
 
 export interface Notification {
   id: string
@@ -56,6 +59,27 @@ export interface Notification {
   payload: Record<string, unknown>
   read: boolean
   createdAt: string
+}
+
+export type ReportReason =
+  | 'SPAM'
+  | 'HARASSMENT'
+  | 'ACADEMIC_INTEGRITY'
+  | 'INTELLECTUAL_PROPERTY'
+  | 'PRIVACY'
+  | 'OTHER'
+
+/** `OPEN` until a moderator decides it; the rest are the decision taken. */
+export type ReportStatus = 'OPEN' | 'DISMISSED' | 'WARNED' | 'TAKEN_DOWN'
+
+export interface Report {
+  id: string
+  reason: ReportReason
+  details?: string
+  status: ReportStatus
+  createdAt: string
+  reviewedAt?: string
+  reviewNote?: string
 }
 
 export interface Comment {

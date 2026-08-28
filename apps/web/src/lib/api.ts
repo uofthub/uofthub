@@ -1,4 +1,13 @@
-import type { User, Project, Comment, ProjectLink, Notification } from '@uofthub/types'
+import type {
+  User,
+  Project,
+  Comment,
+  ProjectLink,
+  Notification,
+  ReportReason,
+  ReportStatus,
+  Visibility,
+} from '@uofthub/types'
 
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
@@ -22,7 +31,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
-export type MeUser = User & { role: 'STUDENT' | 'FACULTY' }
+export type MeUser = User & { role: 'STUDENT' | 'FACULTY'; isAdmin: boolean }
 
 export type ProjectFile = { id: string; name: string; sizeBytes: number; mimeType?: string; uploadedAt: string }
 
@@ -87,6 +96,29 @@ export type Org = {
   _count?: { members: number; projects: number }
 }
 
+/** A report as the moderation queue sees it — reporter and project inlined. */
+export type AdminReport = {
+  id: string
+  reason: ReportReason
+  details?: string
+  status: ReportStatus
+  createdAt: string
+  reviewedAt?: string
+  reviewNote?: string
+  reporter: Pick<User, 'id' | 'name' | 'email'>
+  reviewedBy?: { id: string; name: string }
+  project: {
+    id: string
+    title: string
+    description?: string
+    visibility: Visibility
+    takenDownAt?: string
+    owner: Pick<User, 'id' | 'name' | 'email'>
+  }
+}
+
+export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
+
 export const api = {
   auth: {
     me: () => request<MeUser>('/auth/me'),
@@ -150,6 +182,17 @@ export const api = {
     deleteFile: (id: string, fileId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
     downloadUrl: (id: string, fileId: string) => `${API_URL}/projects/${id}/files/${fileId}/download`,
+    report: (id: string, body: { reason: ReportReason; details?: string }) =>
+      request<{ id: string; status: ReportStatus }>(`/projects/${id}/report`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
+  admin: {
+    reports: (status: ReportStatus | 'all' = 'OPEN') =>
+      request<AdminReport[]>(`/admin/reports?status=${status}`),
+    decide: (id: string, body: { decision: ReportDecision; note?: string }) =>
+      request<AdminReport>(`/admin/reports/${id}/decision`, { method: 'POST', body: JSON.stringify(body) }),
   },
   orgs: {
     list: () => request<Org[]>('/orgs'),
