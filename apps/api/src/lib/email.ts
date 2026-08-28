@@ -6,6 +6,14 @@ import { Resend } from 'resend'
  * succeeding — so a missing API key logs and no-ops instead of throwing.
  * The Phase 3 org-verification flow will be the first real caller.
  */
+/**
+ * Where a recipient can reach a human — the address our outbound mail tells
+ * people to write to. Must be a real monitored inbox on our own domain, not
+ * the unattended `notifications@` sender. Mirrored client-side in
+ * `apps/web/src/components/layout/nav.ts`; change both together.
+ */
+export const CONTACT_EMAIL = 'hello@uofthub.com'
+
 let client: Resend | null | undefined
 
 function getClient(): Resend | null {

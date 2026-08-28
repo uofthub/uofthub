@@ -1,6 +1,6 @@
 import type { Organization } from '@prisma/client'
 import { db } from '../db/client.js'
-import { sendEmail } from './email.js'
+import { CONTACT_EMAIL, sendEmail } from './email.js'
 import { VERIFICATION_WINDOW_DAYS } from './orgs.js'
 
 /**
@@ -75,7 +75,7 @@ ${noteHtml}
       subject: `${org.name} was not verified on uofthub`,
       body: `<p>We could not verify that <strong>${escape(org.name)}</strong> is an authorized U of T group, so the page and its data have been deleted.</p>
 ${noteHtml}
-<p>If this was a mistake, reply to this email and a person will look at it again.</p>`,
+<p>If this was a mistake, write to <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and a person will look at it again.</p>`,
     },
   }
 
