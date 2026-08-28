@@ -3,12 +3,16 @@ import type { User, Project, Comment, ProjectLink } from '@uofthub/types'
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // FormData sets its own multipart boundary in the Content-Type header —
-  // forcing application/json here would break the upload.
+  // Only set Content-Type: application/json when there's actually a JSON
+  // body to send. FormData sets its own multipart boundary — forcing this
+  // header would break the upload. And a bodyless call (logout, like,
+  // follow, delete) sending this header anyway trips Fastify's default JSON
+  // parser, which rejects an empty body under application/json with a 400.
   const isFormData = init?.body instanceof FormData
+  const hasJsonBody = init?.body !== undefined && !isFormData
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
-    headers: isFormData ? init?.headers : { 'Content-Type': 'application/json', ...init?.headers },
+    headers: hasJsonBody ? { 'Content-Type': 'application/json', ...init?.headers } : init?.headers,
     ...init,
   })
   if (!res.ok) {
