@@ -490,6 +490,52 @@ export function DialogTitle({ children, onClose }: { children: ReactNode; onClos
 }
 
 /* -------------------------------------------------------------------------- */
+/* Tabs                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export type TabItem = {
+  value: string
+  label: string
+  icon?: string
+  /** Count shown beside the label. Zero renders nothing rather than a "0". */
+  badge?: number
+}
+
+export function Tabs({
+  items,
+  value,
+  onChange,
+  className,
+}: {
+  items: TabItem[]
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}) {
+  return (
+    <div className={cx('v-tabs', className)} role="tablist">
+      {items.map(item => {
+        const active = item.value === value
+        return (
+          <button
+            key={item.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={cx('v-tab', active && 'v-tab--active')}
+            onClick={() => onChange(item.value)}
+          >
+            {item.icon && <Icon name={item.icon} size={18} />}
+            {item.label}
+            {!!item.badge && <span className="v-tab__badge">{item.badge}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
 /* Breadcrumbs                                                                */
 /* -------------------------------------------------------------------------- */
 

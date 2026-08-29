@@ -26,6 +26,32 @@ export const FILE_CATEGORIES: FileCategory[] = [
 export const ACCOUNT_QUOTA_BYTES = 2 * 1024 * MB
 export const PROJECT_FILE_COUNT_CAP = 20
 
+/**
+ * How a browser can display a file, if at all. Anything absent from the map is
+ * download-only — .docx, .xlsx, .pptx and .zip need an application to open,
+ * and nothing here pretends otherwise.
+ */
+export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'text'
+
+const PREVIEW_KINDS: Record<PreviewKind, string[]> = {
+  image: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
+  pdf: ['pdf'],
+  video: ['mp4', 'webm'],
+  audio: ['mp3', 'wav'],
+  text: ['txt', 'md', 'csv'],
+}
+
+export function previewKindFor(ext: string): PreviewKind | undefined {
+  return (Object.keys(PREVIEW_KINDS) as PreviewKind[]).find(kind => PREVIEW_KINDS[kind].includes(ext))
+}
+
+/**
+ * Cap on the bytes a text preview reads back out of storage. A 25MB .csv is a
+ * legal upload but not something to hand a browser to syntax-highlight — the
+ * viewer shows the head of it and points at the download for the rest.
+ */
+export const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
+
 export function extOf(filename: string): string {
   return (filename.split('.').pop() ?? '').toLowerCase()
 }

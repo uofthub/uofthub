@@ -45,6 +45,20 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 /**
+ * The first `maxBytes` of an object. Ranged rather than whole-object because
+ * the only caller is the text preview, which shows the head of a file and has
+ * no reason to pull 25MB through the API to throw most of it away. A range
+ * past the end of a short object just returns the object.
+ */
+export async function getObjectHead(key: string, maxBytes: number): Promise<Buffer> {
+  const res = await getClient().send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key, Range: `bytes=0-${maxBytes - 1}` })
+  )
+  const bytes = await res.Body!.transformToByteArray()
+  return Buffer.from(bytes)
+}
+
+/**
  * Short-lived signed download URL. The bucket itself is never made public —
  * a signed URL is generated per request, after the caller's route has
  * already checked they may view the project, so file access still honours

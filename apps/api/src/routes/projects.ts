@@ -7,8 +7,16 @@ import {
   visibleProjectWhere,
 } from '../lib/visibility.js'
 import { safeExternalUrl } from '../lib/url.js'
-import { ACCOUNT_QUOTA_BYTES, PROJECT_FILE_COUNT_CAP, categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
-import { deleteObject, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
+import {
+  ACCOUNT_QUOTA_BYTES,
+  PROJECT_FILE_COUNT_CAP,
+  TEXT_PREVIEW_MAX_BYTES,
+  categoryFor,
+  extOf,
+  matchesDeclaredType,
+  previewKindFor,
+} from '../lib/fileValidation.js'
+import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { notify } from '../lib/notifications.js'
 import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
 import { bySession } from '../lib/rateLimit.js'
@@ -554,6 +562,48 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
     const url = await signedDownloadUrl(file.storageKey, file.name)
     return reply.redirect(url)
+  })
+
+  // GET /projects/:id/files/:fileId/preview — what the in-app viewer renders
+  //
+  // Deliberately JSON rather than a redirect like /download. The session cookie
+  // is SameSite=Lax, so it rides a top-level navigation (clicking a download
+  // link) but not a subresource load — an <img>/<iframe>/<video> pointed at
+  // this API would arrive signed out and 404 on anything not public. Fetching
+  // the signed URL here instead, over a credentialed XHR, lets the browser then
+  // load the bytes straight from storage where no cookie is needed.
+  app.get<{ Params: { id: string; fileId: string } }>('/:id/files/:fileId/preview', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    if (!(await canViewProjectId(request.params.id, callerId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
+    const file = await db.projectFile.findFirst({
+      where: { id: request.params.fileId, projectId: request.params.id },
+    })
+    if (!file) return reply.code(404).send({ error: 'File not found' })
+
+    const kind = previewKindFor(extOf(file.name))
+    if (!kind) return reply.code(415).send({ error: 'This file type cannot be previewed' })
+
+    // Text is returned inline: reading it in the page would otherwise need a
+    // cross-origin fetch of the storage URL, and the bucket sends no CORS
+    // headers. Media is handed over as a URL for the browser to stream itself.
+    if (kind === 'text') {
+      const head = await getObjectHead(file.storageKey, TEXT_PREVIEW_MAX_BYTES)
+      return {
+        kind,
+        name: file.name,
+        text: head.toString('utf8'),
+        truncated: file.sizeBytes > head.length,
+      }
+    }
+
+    return {
+      kind,
+      name: file.name,
+      url: await signedDownloadUrl(file.storageKey, file.name, { disposition: 'inline' }),
+    }
   })
 
   // ── VERSIONING ─────────────────────────────────────────────────────────────

@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
-import { api, safeUrl, type ProjectFile } from '../lib/api'
+import { api, safeUrl, type MeUser, type ProjectDetail, type ProjectFile } from '../lib/api'
+import { formatBytes, lookFor, previewKindFor } from '../lib/files'
 import { REPORT_REASONS } from '../lib/moderation'
 import type { ReportReason } from '@uofthub/types'
 import { VisibilityChip } from '../components/ProjectCard'
+import FileViewer from '../components/FileViewer'
 import { CONTACT_EMAIL } from '../components/layout/nav'
 import {
   Avatar,
@@ -22,8 +24,10 @@ import {
   Icon,
   SelectField,
   Spinner,
+  Tabs,
   TextArea,
   TextField,
+  type TabItem,
 } from '../components/ui'
 
 /* -------------------------------------------------------------------------- */
@@ -185,7 +189,7 @@ function ReportDialog({ projectId, onClose }: { projectId: string; onClose: () =
 
 function AnalyticsPanel({ projectId }: { projectId: string }) {
   const { data } = useQuery({ queryKey: ['analytics', projectId], queryFn: () => api.projects.analytics(projectId) })
-  if (!data) return null
+  if (!data) return <Spinner />
 
   const max = Math.max(...data.dailyViews.map(d => d.count), 1)
   const stats = [
@@ -196,7 +200,7 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
   ]
 
   return (
-    <Card style={{ padding: 24, marginTop: 16 }}>
+    <Card style={{ padding: 24 }}>
       <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Analytics</h2>
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
         {stats.map(s => (
@@ -259,7 +263,7 @@ function AccessRequestsPanel({ projectId }: { projectId: string }) {
   if (requests.length === 0) return null
 
   return (
-    <Card style={{ padding: 24, marginTop: 16 }}>
+    <Card style={{ padding: 24 }}>
       <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Access requests</h2>
       <div style={{ display: 'grid', gap: 12 }}>
         {requests.map(r => (
@@ -305,10 +309,8 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
     onSuccess: () => qc.invalidateQueries({ queryKey: ['versions', projectId] }),
   })
 
-  if (!isOwner && versions.length === 0) return null
-
   return (
-    <Card style={{ padding: 24, marginTop: 16 }}>
+    <Card style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ fontSize: '1.125rem' }}>Version history</h2>
         {isOwner && (
@@ -319,9 +321,14 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
         )}
       </div>
       {versions.length === 0 ? (
-        <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
-          No versions saved yet.
-        </p>
+        <EmptyState
+          icon="mdi-history"
+          title={
+            isOwner
+              ? 'No versions saved yet — snapshot the project to keep a record of where it stood.'
+              : 'No versions saved yet.'
+          }
+        />
       ) : (
         <ul className="v-list" style={{ display: 'grid', gap: 10 }}>
           {versions.map(v => (
@@ -348,9 +355,86 @@ function VersionsPanel({ projectId, isOwner }: { projectId: string; isOwner: boo
   )
 }
 
+function FileRow({
+  file,
+  projectId,
+  isOwner,
+  onOpen,
+  onDelete,
+}: {
+  file: ProjectFile
+  projectId: string
+  isOwner: boolean
+  onOpen?: () => void
+  onDelete: () => void
+}) {
+  const look = lookFor(file.name)
+
+  return (
+    <li
+      className="v-list-item"
+      style={{ gap: 14, padding: '10px 12px', borderRadius: 8, cursor: onOpen ? 'pointer' : 'default' }}
+      onClick={onOpen}
+    >
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 40,
+          height: 40,
+          borderRadius: 8,
+          flexShrink: 0,
+          background: `color-mix(in srgb, var(--tone-${look.color}) 15%, transparent)`,
+        }}
+      >
+        <Icon name={look.icon} size={22} color={`var(--tone-${look.color})`} />
+      </span>
+
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span className="overflow-ellipsis" style={{ display: 'block' }}>
+          {file.name}
+        </span>
+        <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
+          {formatBytes(file.sizeBytes)} · {new Date(file.uploadedAt).toLocaleDateString()}
+          {!onOpen && ' · preview not available'}
+        </span>
+      </span>
+
+      {/* The row itself opens the viewer, so the actions inside it stop the
+          click rather than each guarding separately — Btn's link form renders
+          a plain <a> and has no onClick to guard with anyway. */}
+      <span
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {onOpen && (
+          <Btn size="small" className="accent--text" onClick={onOpen}>
+            <Icon name="mdi-eye-outline" size={16} />
+            View
+          </Btn>
+        )}
+        <Btn icon size="small" href={api.projects.downloadUrl(projectId, file.id)} aria-label={`Download ${file.name}`}>
+          <Icon name="mdi-download-outline" size={17} />
+        </Btn>
+        {isOwner && (
+          <Btn icon size="small" onClick={onDelete} aria-label={`Delete ${file.name}`}>
+            <Icon name="mdi-delete-outline" size={17} />
+          </Btn>
+        )}
+      </span>
+    </li>
+  )
+}
+
 function FilesPanel({ projectId, files, isOwner }: { projectId: string; files: ProjectFile[]; isOwner: boolean }) {
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
+  const [viewing, setViewing] = useState<string | null>(null)
+
+  // The viewer's arrows page through what it can actually render, so a .zip
+  // sitting between two PDFs doesn't become a dead end mid-sequence.
+  const previewable = files.filter(f => previewKindFor(f.name))
 
   const upload = useMutation({
     mutationFn: (file: File) => api.projects.uploadFile(projectId, file),
@@ -365,11 +449,19 @@ function FilesPanel({ projectId, files, isOwner }: { projectId: string; files: P
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 
-  if (!isOwner && files.length === 0) return null
-
   return (
-    <Card style={{ padding: 24, marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <Card style={{ padding: 24 }}>
+      {viewing && (
+        <FileViewer
+          projectId={projectId}
+          files={previewable}
+          fileId={viewing}
+          onSelect={setViewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <h2 style={{ fontSize: '1.125rem' }}>Files</h2>
         {isOwner && (
           <label
@@ -395,29 +487,185 @@ function FilesPanel({ projectId, files, isOwner }: { projectId: string; files: P
       {error && <ErrorText>{error}</ErrorText>}
 
       {files.length === 0 ? (
-        <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
-          No files uploaded yet.
-        </p>
+        <EmptyState
+          icon="mdi-file-upload-outline"
+          title={
+            isOwner
+              ? 'No files yet — upload a report, slide deck, image or video and it will render right here.'
+              : 'No files on this project.'
+          }
+        />
       ) : (
-        <ul className="v-list" style={{ display: 'grid', gap: 10 }}>
+        <ul className="v-list" style={{ display: 'grid', gap: 4 }}>
           {files.map(f => (
-            <li key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.9375rem' }}>
-              <Icon name="mdi-file-outline" size={18} color="var(--v-accent-base)" />
-              <a href={api.projects.downloadUrl(projectId, f.id)} className="overflow-ellipsis" style={{ flex: 1, minWidth: 0 }}>
-                {f.name}
-              </a>
-              <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
-                {(f.sizeBytes / (1024 * 1024)).toFixed(1)}MB
-              </span>
-              {isOwner && (
-                <Btn icon size="small" onClick={() => remove.mutate(f.id)} aria-label={`Delete ${f.name}`}>
-                  <Icon name="mdi-delete-outline" size={16} />
-                </Btn>
-              )}
-            </li>
+            <FileRow
+              key={f.id}
+              file={f}
+              projectId={projectId}
+              isOwner={isOwner}
+              onOpen={previewKindFor(f.name) ? () => setViewing(f.id) : undefined}
+              onDelete={() => remove.mutate(f.id)}
+            />
           ))}
         </ul>
       )}
+    </Card>
+  )
+}
+
+function OverviewPanel({
+  project,
+  isOwner,
+  onInvite,
+}: {
+  project: ProjectDetail
+  isOwner: boolean
+  onInvite: () => void
+}) {
+  const links = project.links.map(l => ({ ...l, href: safeUrl(l.url) })).filter(l => l.href)
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Card style={{ padding: 24 }}>
+        <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>About this project</h2>
+        {project.description ? (
+          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{project.description}</p>
+        ) : (
+          <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+            {isOwner ? 'No description yet — Edit adds one.' : 'No description.'}
+          </p>
+        )}
+
+        {project.tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 20 }}>
+            {project.tags.map(tag => (
+              <Link key={tag} to={`/courses/${encodeURIComponent(tag)}`}>
+                <Chip small color="blue" clickable>
+                  {tag}
+                </Chip>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Anything that is not http(s) was dropped above rather than rendered. */}
+        {links.length > 0 && (
+          <>
+            <Divider style={{ margin: '20px 0 16px' }} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {links.map(link => (
+                <a
+                  key={link.id}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.9375rem' }}
+                >
+                  <Icon name="mdi-open-in-new" size={16} />
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
+
+      {(project.collaborators.length > 0 || isOwner) && (
+        <Card style={{ padding: 24 }}>
+          <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Collaborators</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+            {project.collaborators.map(c => (
+              <Link
+                key={c.user.id}
+                to={`/u/${c.user.id}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: '0.9375rem' }}
+              >
+                <Avatar name={c.user.name} img={c.user.avatarUrl} size={28} />
+                {c.user.name}
+              </Link>
+            ))}
+            {project.collaborators.length === 0 && (
+              <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+                Just you so far.
+              </p>
+            )}
+          </div>
+          {isOwner && (
+            <Btn onClick={onInvite} style={{ color: 'var(--v-accent-base)', marginTop: 12, paddingLeft: 0 }}>
+              <Icon name="mdi-account-plus-outline" size={18} />
+              Invite collaborator
+            </Btn>
+          )}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function CommentsPanel({ projectId, canPost }: { projectId: string; canPost: MeUser | null }) {
+  const qc = useQueryClient()
+  const [body, setBody] = useState('')
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments', projectId],
+    queryFn: () => api.projects.comments(projectId),
+  })
+  const post = useMutation({
+    mutationFn: () => api.projects.addComment(projectId, body),
+    onSuccess: () => {
+      setBody('')
+      qc.invalidateQueries({ queryKey: ['comments', projectId] })
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+    },
+  })
+
+  return (
+    <Card style={{ padding: 24 }}>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Comments</h2>
+
+      {canPost && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: comments.length ? 28 : 0 }}>
+          <Avatar name={canPost.name} img={canPost.avatarUrl} size={34} />
+          <div style={{ flex: 1 }}>
+            <TextArea rows={2} value={body} onChange={e => setBody(e.target.value)} placeholder="Leave a comment…" />
+            <Btn
+              variant="accent"
+              size="small"
+              onClick={() => post.mutate()}
+              disabled={!body.trim() || post.isPending}
+              style={{ marginTop: 10 }}
+            >
+              {post.isPending ? 'Posting…' : 'Post'}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 20 }}>
+        {comments.length === 0 ? (
+          <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
+            No comments yet.
+          </p>
+        ) : (
+          comments.map(c => (
+            <div key={c.id} style={{ display: 'flex', gap: 12 }}>
+              <Avatar name={c.user?.name} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <Link to={`/u/${c.userId}`} style={{ fontWeight: 500, color: 'var(--v-text-base)' }}>
+                    {c.user?.name ?? 'Unknown'}
+                  </Link>
+                  <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
+                    {new Date(c.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text--secondary" style={{ margin: '2px 0 0', fontSize: '0.9375rem' }}>
+                  {c.body}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </Card>
   )
 }
@@ -431,19 +679,14 @@ export default function ProjectPage() {
   const { user: me } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [params, setParams] = useSearchParams()
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  const [comment, setComment] = useState('')
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
     queryFn: () => api.projects.get(id!),
-    enabled: !!id,
-  })
-  const { data: comments = [] } = useQuery({
-    queryKey: ['comments', id],
-    queryFn: () => api.projects.comments(id!),
     enabled: !!id,
   })
   const { data: likeState } = useQuery({
@@ -456,14 +699,6 @@ export default function ProjectPage() {
     mutationFn: () => api.projects.like(id!),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['like', id] })
-      qc.invalidateQueries({ queryKey: ['project', id] })
-    },
-  })
-  const commentMutation = useMutation({
-    mutationFn: () => api.projects.addComment(id!, comment),
-    onSuccess: () => {
-      setComment('')
-      qc.invalidateQueries({ queryKey: ['comments', id] })
       qc.invalidateQueries({ queryKey: ['project', id] })
     },
   })
@@ -485,6 +720,20 @@ export default function ProjectPage() {
   const isOwner = me?.id === project.ownerId
   const isFaculty = me?.role === 'FACULTY'
   const liked = likeState?.liked
+
+  const tabs: TabItem[] = [
+    { value: 'overview', label: 'Overview', icon: 'mdi-text-box-outline' },
+    { value: 'files', label: 'Files', icon: 'mdi-folder-outline', badge: project.files.length },
+    { value: 'versions', label: 'Versions', icon: 'mdi-history' },
+    { value: 'comments', label: 'Comments', icon: 'mdi-comment-outline', badge: project._count.comments },
+    // Analytics and access requests are the owner's own instrumentation —
+    // nobody else has anything to read on that tab.
+    ...(isOwner ? [{ value: 'insights', label: 'Insights', icon: 'mdi-chart-line' }] : []),
+  ]
+  // A ?tab= naming a panel this viewer has no business seeing (or none at all)
+  // falls back rather than rendering an empty page.
+  const requested = params.get('tab') ?? ''
+  const tab = tabs.some(t => t.value === requested) ? requested : 'overview'
 
   return (
     <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 900 }}>
@@ -577,44 +826,6 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        {project.description && (
-          <p style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{project.description}</p>
-        )}
-
-        {project.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
-            {project.tags.map(tag => (
-              <Link key={tag} to={`/courses/${encodeURIComponent(tag)}`}>
-                <Chip small color="blue" clickable>
-                  {tag}
-                </Chip>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {project.links.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
-            {project.links.map(link => {
-              // Drop anything that is not http(s) rather than rendering the href.
-              const href = safeUrl(link.url)
-              if (!href) return null
-              return (
-                <a
-                  key={link.id}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.9375rem' }}
-                >
-                  <Icon name="mdi-open-in-new" size={16} />
-                  {link.label}
-                </a>
-              )
-            })}
-          </div>
-        )}
-
         <Divider style={{ margin: '20px 0 16px' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -635,95 +846,25 @@ export default function ProjectPage() {
         </div>
       </Card>
 
-      {isOwner && <AnalyticsPanel projectId={id!} />}
-      {isOwner && <AccessRequestsPanel projectId={id!} />}
-      <VersionsPanel projectId={id!} isOwner={isOwner} />
-      <FilesPanel projectId={id!} files={project.files} isOwner={isOwner} />
+      {/* One panel at a time. Everything below used to stack onto the page at
+          once — analytics, versions, files, collaborators and comments — which
+          buried the project itself under its own machinery. */}
+      <div style={{ margin: '24px 0 16px' }}>
+        <Tabs items={tabs} value={tab} onChange={t => setParams({ tab: t }, { replace: true })} />
+      </div>
 
-      {/* Collaborators */}
-      {(project.collaborators.length > 0 || isOwner) && (
-        <Card style={{ padding: 24, marginTop: 16 }}>
-          <h2 style={{ fontSize: '1.125rem', marginBottom: 16 }}>Collaborators</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-            {project.collaborators.map(c => (
-              <Link
-                key={c.user.id}
-                to={`/u/${c.user.id}`}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: '0.9375rem' }}
-              >
-                <Avatar name={c.user.name} img={c.user.avatarUrl} size={28} />
-                {c.user.name}
-              </Link>
-            ))}
-            {project.collaborators.length === 0 && (
-              <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
-                Just you so far.
-              </p>
-            )}
-          </div>
-          {isOwner && (
-            <Btn onClick={() => setInviteOpen(true)} style={{ color: 'var(--v-accent-base)', marginTop: 12, paddingLeft: 0 }}>
-              <Icon name="mdi-account-plus-outline" size={18} />
-              Invite collaborator
-            </Btn>
-          )}
-        </Card>
+      {tab === 'overview' && (
+        <OverviewPanel project={project} isOwner={isOwner} onInvite={() => setInviteOpen(true)} />
       )}
-
-      {/* Comments */}
-      <Card style={{ padding: 24, marginTop: 16 }}>
-        <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Comments ({project._count.comments})</h2>
-
-        <div style={{ display: 'grid', gap: 20 }}>
-          {comments.length === 0 ? (
-            <p className="text--disabled" style={{ margin: 0, fontSize: '0.9375rem' }}>
-              No comments yet.
-            </p>
-          ) : (
-            comments.map(c => (
-              <div key={c.id} style={{ display: 'flex', gap: 12 }}>
-                <Avatar name={c.user?.name} size={34} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <Link to={`/u/${c.userId}`} style={{ fontWeight: 500, color: 'var(--v-text-base)' }}>
-                      {c.user?.name ?? 'Unknown'}
-                    </Link>
-                    <span className="text--disabled" style={{ fontSize: '0.75rem' }}>
-                      {new Date(c.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text--secondary" style={{ margin: '2px 0 0', fontSize: '0.9375rem' }}>
-                    {c.body}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
+      {tab === 'files' && <FilesPanel projectId={id!} files={project.files} isOwner={isOwner} />}
+      {tab === 'versions' && <VersionsPanel projectId={id!} isOwner={isOwner} />}
+      {tab === 'comments' && <CommentsPanel projectId={id!} canPost={me} />}
+      {tab === 'insights' && (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <AnalyticsPanel projectId={id!} />
+          <AccessRequestsPanel projectId={id!} />
         </div>
-
-        {me && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-            <Avatar name={me.name} img={me.avatarUrl} size={34} />
-            <div style={{ flex: 1 }}>
-              <TextArea
-                rows={2}
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                placeholder="Leave a comment…"
-              />
-              <Btn
-                variant="accent"
-                size="small"
-                onClick={() => commentMutation.mutate()}
-                disabled={!comment.trim() || commentMutation.isPending}
-                style={{ marginTop: 10 }}
-              >
-                {commentMutation.isPending ? 'Posting…' : 'Post'}
-              </Btn>
-            </div>
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   )
 }

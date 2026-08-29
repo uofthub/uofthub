@@ -37,6 +37,15 @@ export type MeUser = User & { role: 'STUDENT' | 'FACULTY'; isAdmin: boolean }
 
 export type ProjectFile = { id: string; name: string; sizeBytes: number; mimeType?: string; uploadedAt: string }
 
+/**
+ * What the viewer needs to show one file. Text arrives as a string — the
+ * storage bucket has no CORS headers to fetch it with — while media arrives as
+ * a short-lived signed URL the browser loads directly.
+ */
+export type FilePreview =
+  | { kind: 'text'; name: string; text: string; truncated: boolean }
+  | { kind: 'image' | 'pdf' | 'video' | 'audio'; name: string; url: string }
+
 export type ProjectDetail = Project & {
   collaborators: { user: Pick<User, 'id' | 'name' | 'avatarUrl'>; accepted: boolean }[]
   files: ProjectFile[]
@@ -234,6 +243,8 @@ export const api = {
     deleteFile: (id: string, fileId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
     downloadUrl: (id: string, fileId: string) => `${API_URL}/projects/${id}/files/${fileId}/download`,
+    filePreview: (id: string, fileId: string) =>
+      request<FilePreview>(`/projects/${id}/files/${fileId}/preview`),
     report: (id: string, body: { reason: ReportReason; details?: string }) =>
       request<{ id: string; status: ReportStatus }>(`/projects/${id}/report`, {
         method: 'POST',
