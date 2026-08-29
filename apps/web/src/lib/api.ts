@@ -315,7 +315,8 @@ export const api = {
   },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
-    projects: (id: string) => request<ProjectSummary[]>(`/users/${id}/projects`),
+    projects: (id: string, params?: { skip?: number }) =>
+      request<ProjectSummary[]>(`/users/${id}/projects${params?.skip ? `?skip=${params.skip}` : ''}`),
     updateMe: (
       body: Partial<{
         name: string

@@ -20,7 +20,7 @@ import Markdown from './Markdown'
 const CSV_ROW_CAP = 200
 
 /** Enough of RFC 4180 to survive quoted commas, escaped quotes and CRLF. */
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = []
   let row: string[] = []
   let field = ''

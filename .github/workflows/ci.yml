@@ -53,6 +53,9 @@ jobs:
       - name: Test (API)
         run: pnpm --filter @uofthub/api test
 
+      - name: Test (web)
+        run: pnpm --filter @uofthub/web test
+
       - run: pnpm build
 
       - run: pnpm lint

@@ -13,17 +13,26 @@ export default function CommandModal() {
   const { commandModal, setCommandModal, darkMode, setDarkMode } = useUI()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
   const [cursor, setCursor] = useState(0)
 
+  // Without this the palette fires one request per keystroke — typing
+  // "robotics" was eight searches. Same 300ms the directory uses.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
   const { data: projects = [] } = useQuery({
-    queryKey: ['command-search', query],
-    queryFn: () => api.projects.list({ search: query }),
-    enabled: commandModal && query.trim().length > 1,
+    queryKey: ['command-search', debounced],
+    queryFn: () => api.projects.list({ search: debounced }),
+    enabled: commandModal && debounced.trim().length > 1,
   })
 
   const close = () => {
     setCommandModal(false)
     setQuery('')
+    setDebounced('')
     setCursor(0)
   }
 

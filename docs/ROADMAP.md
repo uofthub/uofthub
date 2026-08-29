@@ -73,7 +73,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Frontend — notification bell + dropdown in `AppBar.tsx` with an unread dot, polling every 30s (no WebSocket infrastructure — deliberately deferred, see Later / Exploratory). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
 - [x] Frontend — accept/decline lives *in the notification row*, not on the project page: a pending collaborator can't open a `PRIVATE` project yet, so a link there would 404 until they accept
 - [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
-- [ ] Phase 3's org-verification emails (admin alert on submission, contact notified on decision) now only need to call `sendEmail` — the transport decision is no longer blocking them
+- [x] Phase 3's org-verification emails — `lib/orgEmails.ts`; `emailAdminsOfSubmission` on `POST /orgs/:slug/verify`, `emailContactOfDecision` on all three admin decisions. Best-effort: `sendEmail` no-ops without `RESEND_API_KEY`, so a missing key degrades rather than failing the request
 - [ ] No notification is emailed yet — the in-app feed is the only delivery channel. Worth revisiting once there's real usage, since an invite is exactly the kind of thing a student won't see until their next visit
 
 **Trust & Safety**

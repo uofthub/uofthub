@@ -31,6 +31,23 @@ export async function resetDb(): Promise<void> {
   await db.$executeRawUnsafe(`TRUNCATE TABLE ${list} CASCADE`)
 }
 
+let ip = 0
+
+/**
+ * A distinct source address per call.
+ *
+ * `app.inject()` reports every request as 127.0.0.1, and the credential routes
+ * are rate-limited to 10 per 15 minutes per IP — so a file that signs in a
+ * dozen times would start getting 429s that have nothing to do with what it is
+ * testing. The limiter is left at its real setting and the requests are simply
+ * made to look like they come from different clients, which is also what makes
+ * a deliberate test of the limit (same address, repeated) mean something.
+ */
+export function uniqueIp(): string {
+  ip += 1
+  return `10.${(ip >> 16) & 255}.${(ip >> 8) & 255}.${ip & 255}`
+}
+
 let seq = 0
 
 export async function createUser(

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { api } from '../lib/api'
@@ -228,11 +228,20 @@ export default function ProfilePage() {
     enabled: !!id,
   })
 
-  const { data: projects = [] } = useQuery({
+  const {
+    data: projectPages,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
     queryKey: ['userProjects', id],
-    queryFn: () => api.users.projects(id!),
+    queryFn: ({ pageParam }) => api.users.projects(id!, { skip: pageParam }),
     enabled: !!id,
+    initialPageParam: 0,
+    // Matches the route's default page size: a short page is the last one.
+    getNextPageParam: (last, all) => (last.length < 24 ? undefined : all.length * 24),
   })
+  const projects = projectPages?.pages.flat() ?? []
 
   const { data: followState } = useQuery({
     queryKey: ['follow', id],
@@ -326,7 +335,16 @@ export default function ProfilePage() {
           }
         />
       ) : (
-        <ProjectGrid projects={projects} showOwner={false} />
+        <>
+          <ProjectGrid projects={projects} showOwner={false} />
+          {hasNextPage && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '28px 0' }}>
+              <Btn variant="outlined" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+                {isFetchingNextPage ? 'Loading…' : 'Load more'}
+              </Btn>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

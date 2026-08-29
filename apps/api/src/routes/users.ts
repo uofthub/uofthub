@@ -46,24 +46,34 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     return user
   })
 
-  // GET /users/:id/projects
-  app.get<{ Params: { id: string } }>('/:id/projects', async (request, reply) => {
-    const callerId = await getOptionalUserId(request)
+  // GET /users/:id/projects?take&skip
+  //
+  // Paged, like the directory. It used to return every project a user owned:
+  // fine for a student with six, and a query that grows without bound for a
+  // prolific one — and now one signed cover URL per row on top.
+  app.get<{ Params: { id: string }; Querystring: { take?: string; skip?: string } }>(
+    '/:id/projects',
+    async (request) => {
+      const callerId = await getOptionalUserId(request)
+      const { take = '24', skip = '0' } = request.query
 
-    const projects = await db.project.findMany({
-      where: {
-        ownerId: request.params.id,
-        // Signed-in viewers also see this user's UOFT projects, not just PUBLIC.
-        ...visibleProjectWhere(callerId),
-      },
-      include: {
-        _count: { select: { likes: true, comments: true } },
-        links: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-    return withCovers(projects)
-  })
+      const projects = await db.project.findMany({
+        where: {
+          ownerId: request.params.id,
+          // Signed-in viewers also see this user's UOFT projects, not just PUBLIC.
+          ...visibleProjectWhere(callerId),
+        },
+        include: {
+          _count: { select: { likes: true, comments: true } },
+          links: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Math.max(Number(take) || 24, 1), 50),
+        skip: Math.max(Number(skip) || 0, 0),
+      })
+      return withCovers(projects)
+    }
+  )
 
   // PATCH /users/me — update own profile
   app.patch<{
