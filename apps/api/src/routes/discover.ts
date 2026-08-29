@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
 import { EMPTY_FILTERS, parseQuery, windowStart, type DiscoverFilters } from '../lib/discovery.js'
+import { withCovers } from '../lib/covers.js'
+import { parseCampus } from '../lib/campus.js'
 import { bySession } from '../lib/rateLimit.js'
 
 const QUERY_MAX = 300
@@ -32,6 +34,9 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
 
       const interpreted = filters ?? { ...EMPTY_FILTERS, search: q }
       const since = windowStart(interpreted.within)
+      // Re-validated rather than trusted: the zod schema constrains what the
+      // model may answer, but its output is still untrusted input to a query.
+      const onCampus = parseCampus(interpreted.campus)
 
       const projects = await db.project.findMany({
         // AND-composed so the visibility OR and the search OR cannot clobber
@@ -54,11 +59,12 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
             ...(interpreted.faculty
               ? [{ owner: { faculty: { contains: interpreted.faculty, mode: 'insensitive' as const } } }]
               : []),
+            ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
             ...(since ? [{ createdAt: { gte: since } }] : []),
           ],
         },
         include: {
-          owner: { select: { id: true, name: true, faculty: true } },
+          owner: { select: { id: true, name: true, faculty: true, campus: true } },
           _count: { select: { likes: true, comments: true } },
         },
         orderBy:
@@ -76,7 +82,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
         // False when the query was run as a plain keyword search because the
         // model was unavailable — the UI says so rather than implying more.
         interpreted: filters !== null,
-        projects,
+        projects: await withCovers(projects),
       }
     }
   )

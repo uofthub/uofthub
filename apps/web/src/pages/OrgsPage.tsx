@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, type Org } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
+import { CAMPUS_LABELS, CAMPUS_OPTIONS, CAMPUSES } from '../lib/campus'
 import {
   Btn,
   Card,
@@ -36,6 +37,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
     name: '',
     slug: '',
     type: 'CLUB',
+    campus: '',
     description: '',
     websiteUrl: '',
     discordUrl: '',
@@ -54,6 +56,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
         websiteUrl: form.websiteUrl || undefined,
         discordUrl: form.discordUrl || undefined,
         groupMeUrl: form.groupMeUrl || undefined,
+        campus: form.campus || undefined,
         contactEmail: form.contactEmail,
         contactRole: form.contactRole,
       }),
@@ -81,6 +84,16 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
           <SelectField value={form.type} onChange={set('type')}>
             <option value="CLUB">Club or design team</option>
             <option value="LAB">Research lab</option>
+          </SelectField>
+        </Field>
+        <Field label="Campus" hint="Leave on all three if the group is tri-campus.">
+          <SelectField value={form.campus} onChange={set('campus')}>
+            <option value="">All three campuses</option>
+            {CAMPUS_OPTIONS.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </SelectField>
         </Field>
         <Field label="Description">
@@ -157,6 +170,10 @@ function OrgCard({ org }: { org: Org }) {
             <Chip small color={lab ? 'purple' : 'blue'}>
               {lab ? 'Research Lab' : 'Club'}
             </Chip>
+            <Chip small color="grey">
+              <Icon name="mdi-map-marker-outline" size={13} />
+              {org.campus ?? 'Tri-campus'}
+            </Chip>
             {org.status !== 'VERIFIED' && (
               <Chip small color={ORG_STATUS_COLORS[org.status]}>
                 {ORG_STATUS_LABELS[org.status]}
@@ -195,8 +212,12 @@ export default function OrgsPage() {
   usePageCrumbs([{ text: 'Clubs & Labs', href: '/orgs' }])
   const { user } = useAuth()
   const [creating, setCreating] = useState(false)
+  const [campus, setCampus] = useState('')
 
-  const { data: orgs = [], isLoading } = useQuery({ queryKey: ['orgs'], queryFn: () => api.orgs.list() })
+  const { data: orgs = [], isLoading } = useQuery({
+    queryKey: ['orgs', campus],
+    queryFn: () => api.orgs.list({ campus: campus || undefined }),
+  })
 
   // The API only ever returns an unverified group to its own members, so
   // anything here that isn't VERIFIED is one of yours — it is listed
@@ -220,6 +241,28 @@ export default function OrgsPage() {
           )
         }
       />
+
+      {/* Filtering happens server-side so a tri-campus group (campus null) is
+          excluded from a specific campus's results rather than always shown. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+        <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+          <Icon name="mdi-map-marker-outline" size={16} /> Campus
+        </span>
+        <Chip label color={campus === '' ? 'accent' : 'grey'} onClick={() => setCampus('')} style={{ paddingInline: 14 }}>
+          All
+        </Chip>
+        {CAMPUSES.map(c => (
+          <Chip
+            key={c}
+            label
+            color={campus === c ? 'accent' : 'grey'}
+            onClick={() => setCampus(campus === c ? '' : c)}
+            style={{ paddingInline: 14 }}
+          >
+            {c} — {CAMPUS_LABELS[c]}
+          </Chip>
+        ))}
+      </div>
 
       {mine.length > 0 && (
         <section style={{ marginBottom: 40 }}>

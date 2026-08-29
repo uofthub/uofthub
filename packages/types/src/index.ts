@@ -1,4 +1,6 @@
 export type Visibility = 'PRIVATE' | 'UOFT' | 'PUBLIC'
+/** The three U of T campuses. Absent means unstated, never "all three". */
+export type Campus = 'UTSG' | 'UTM' | 'UTSC'
 export type CollaboratorRole = 'OWNER' | 'COLLABORATOR' | 'VIEWER'
 
 export interface User {
@@ -6,6 +8,7 @@ export interface User {
   email: string
   name: string
   faculty?: string
+  campus?: Campus
   program?: string
   classYear?: number
   avatarUrl?: string
@@ -26,7 +29,7 @@ export interface Project {
   takenDownAt?: string
   createdAt: string
   updatedAt: string
-  owner?: Pick<User, 'id' | 'name' | 'faculty'>
+  owner?: Pick<User, 'id' | 'name' | 'faculty' | 'campus'>
 }
 
 export interface ProjectFile {

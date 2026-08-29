@@ -1,4 +1,5 @@
 import type {
+  Campus,
   User,
   Project,
   Comment,
@@ -55,12 +56,19 @@ export type ProjectDetail = Project & {
 
 export type ProjectSummary = Project & {
   _count: { likes: number; comments: number }
+  /**
+   * Signed, short-lived URL for the project's first uploaded image, used as
+   * the card thumbnail. Absent when the project has no image — the card draws
+   * its own monogram instead.
+   */
+  coverUrl?: string
 }
 
 export type ProfileUser = {
   id: string
   name: string
   faculty?: string
+  campus?: Campus
   program?: string
   classYear?: number
   bio?: string
@@ -101,6 +109,8 @@ export type Org = {
   slug: string
   name: string
   type: 'CLUB' | 'LAB'
+  /** Absent means the group serves all three campuses, not that it is unknown. */
+  campus?: Campus
   description?: string
   websiteUrl?: string
   discordUrl?: string
@@ -175,6 +185,7 @@ export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
 export type DiscoverFilters = {
   search: string | null
   faculty: string | null
+  campus: Campus | null
   tag: string | null
   sort: 'new' | 'trending' | null
   within: 'month' | 'term' | 'year' | null
@@ -196,10 +207,11 @@ export const api = {
       }),
   },
   projects: {
-    list: (params?: { search?: string; faculty?: string; sort?: string; skip?: number }) => {
+    list: (params?: { search?: string; faculty?: string; campus?: string; sort?: string; skip?: number }) => {
       const q = new URLSearchParams()
       if (params?.search) q.set('search', params.search)
       if (params?.faculty) q.set('faculty', params.faculty)
+      if (params?.campus) q.set('campus', params.campus)
       if (params?.sort) q.set('sort', params.sort)
       if (params?.skip) q.set('skip', String(params.skip))
       return request<ProjectSummary[]>(`/projects?${q}`)
@@ -267,12 +279,14 @@ export const api = {
       request<AdminOrg>(`/admin/orgs/${slug}/decision`, { method: 'POST', body: JSON.stringify(body) }),
   },
   orgs: {
-    list: () => request<Org[]>('/orgs'),
+    list: (params?: { campus?: string }) =>
+      request<Org[]>(`/orgs${params?.campus ? `?campus=${params.campus}` : ''}`),
     get: (slug: string) => request<OrgDetail>(`/orgs/${slug}`),
     create: (body: {
       name: string
       slug: string
       type?: string
+      campus?: string
       description?: string
       websiteUrl?: string
       discordUrl?: string
@@ -282,7 +296,7 @@ export const api = {
     }) => request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
     update: (
       slug: string,
-      body: Partial<{ description: string; websiteUrl: string; discordUrl: string; groupMeUrl: string }>
+      body: Partial<{ description: string; campus: string; websiteUrl: string; discordUrl: string; groupMeUrl: string }>
     ) =>
       request<Org>(`/orgs/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
     verify: (slug: string, note: string) =>
@@ -302,7 +316,17 @@ export const api = {
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
     projects: (id: string) => request<ProjectSummary[]>(`/users/${id}/projects`),
-    updateMe: (body: Partial<{ name: string; faculty: string; program: string; classYear: number; bio: string }>) =>
+    updateMe: (
+      body: Partial<{
+        name: string
+        faculty: string
+        // Empty string clears it back to unstated, which is why this is not Campus.
+        campus: string
+        program: string
+        classYear: number
+        bio: string
+      }>
+    ) =>
       request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
     follow: (id: string) => request<{ following: boolean }>(`/users/${id}/follow`, { method: 'POST' }),
     followingMe: (id: string) => request<{ following: boolean }>(`/users/${id}/follow/me`),

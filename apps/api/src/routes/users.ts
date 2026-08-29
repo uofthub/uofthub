@@ -4,12 +4,15 @@ import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 import { categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
 import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
+import { withCovers } from '../lib/covers.js'
+import { parseCampus } from '../lib/campus.js'
 
 const ME_SELECT = {
   id: true,
   email: true,
   name: true,
   faculty: true,
+  campus: true,
   program: true,
   classYear: true,
   bio: true,
@@ -30,6 +33,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         id: true,
         name: true,
         faculty: true,
+        campus: true,
         program: true,
         classYear: true,
         bio: true,
@@ -58,20 +62,40 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       },
       orderBy: { createdAt: 'desc' },
     })
-    return projects
+    return withCovers(projects)
   })
 
   // PATCH /users/me — update own profile
   app.patch<{
-    Body: { name?: string; faculty?: string; program?: string; classYear?: number; bio?: string; avatarUrl?: string }
+    Body: {
+      name?: string
+      faculty?: string
+      campus?: string | null
+      program?: string
+      classYear?: number
+      bio?: string
+      avatarUrl?: string
+    }
   }>('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { name, faculty, program, classYear, bio, avatarUrl } = request.body
+    const { name, faculty, campus, program, classYear, bio, avatarUrl } = request.body
+
+    // Empty string and null both mean "clear it" — the profile form sends the
+    // empty option that way. Anything else has to be a real campus.
+    let nextCampus: ReturnType<typeof parseCampus> | null | undefined
+    if (campus !== undefined) {
+      if (campus === null || campus === '') nextCampus = null
+      else {
+        nextCampus = parseCampus(campus)
+        if (!nextCampus) return reply.code(400).send({ error: 'Campus must be UTSG, UTM or UTSC' })
+      }
+    }
 
     const user = await db.user.update({
       where: { id: request.user.sub },
       data: {
         ...(name !== undefined && { name: name.trim() }),
         ...(faculty !== undefined && { faculty }),
+        ...(nextCampus !== undefined && { campus: nextCampus }),
         ...(program !== undefined && { program }),
         ...(classYear !== undefined && { classYear }),
         ...(bio !== undefined && { bio }),

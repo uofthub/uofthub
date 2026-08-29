@@ -10,6 +10,7 @@ import {
   visibleOrgWhere,
 } from '../lib/orgs.js'
 import { emailAdminsOfSubmission } from '../lib/orgEmails.js'
+import { parseCampus } from '../lib/campus.js'
 
 const VERIFICATION_NOTE_MAX = 2000
 
@@ -20,10 +21,13 @@ function readNote(raw: unknown): string {
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // GET /orgs — verified groups, plus the caller's own whatever their state
-  app.get('/', async (request) => {
+  app.get<{ Querystring: { campus?: string } }>('/', async (request) => {
     const callerId = await getOptionalUserId(request)
+    // Unrecognised values are dropped, not rejected — same reasoning as the
+    // project directory's filter.
+    const onCampus = parseCampus(request.query.campus)
     return db.organization.findMany({
-      where: visibleOrgWhere(callerId),
+      where: { ...visibleOrgWhere(callerId), ...(onCampus && { campus: onCampus }) },
       include: { _count: { select: { members: true, projects: true } } },
       orderBy: { createdAt: 'desc' },
     })
@@ -37,6 +41,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       name: string
       slug: string
       type?: string
+      campus?: string
       description?: string
       websiteUrl?: string
       discordUrl?: string
@@ -88,6 +93,8 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         name: name.trim(),
         slug: slugified,
         type: type as 'CLUB' | 'LAB',
+        // Null is a real answer here — a group that serves all three campuses.
+        campus: parseCampus(request.body.campus) ?? null,
         description: description?.trim(),
         websiteUrl: safeWebsite,
         discordUrl: safeDiscord,
@@ -114,7 +121,9 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       where: { slug: request.params.slug },
       include: {
         members: {
-          include: { user: { select: { id: true, name: true, avatarUrl: true, faculty: true } } },
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true } },
+          },
         },
         activities: {
           orderBy: { date: 'desc' },
@@ -159,7 +168,13 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /orgs/:slug — admins edit the group's own details
   app.patch<{
     Params: { slug: string }
-    Body: { description?: string; websiteUrl?: string; discordUrl?: string; groupMeUrl?: string }
+    Body: {
+      description?: string
+      campus?: string | null
+      websiteUrl?: string
+      discordUrl?: string
+      groupMeUrl?: string
+    }
   }>('/:slug', { preHandler: [app.authenticate] }, async (request, reply) => {
     const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
     if (!org) return reply.code(404).send({ error: 'Not found' })
@@ -169,7 +184,10 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     })
     if (member?.role !== 'ADMIN') return reply.code(403).send({ error: 'Admins only' })
 
-    const { description, websiteUrl, discordUrl, groupMeUrl } = request.body
+    const { description, campus, websiteUrl, discordUrl, groupMeUrl } = request.body
+
+    // Empty and null both clear it back to "all campuses".
+    const nextCampus = campus === undefined ? undefined : (parseCampus(campus) ?? null)
 
     let safeWebsite: string | null | undefined
     if (websiteUrl !== undefined) {
@@ -199,6 +217,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       where: { id: org.id },
       data: {
         ...(description !== undefined && { description: description.trim() || null }),
+        ...(nextCampus !== undefined && { campus: nextCampus }),
         ...(safeWebsite !== undefined && { websiteUrl: safeWebsite }),
         ...(safeDiscord !== undefined && { discordUrl: safeDiscord }),
         ...(safeGroupMe !== undefined && { groupMeUrl: safeGroupMe }),

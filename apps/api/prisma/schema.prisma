@@ -19,6 +19,15 @@ enum CollaboratorRole {
   VIEWER
 }
 
+/// The three U of T campuses. Nullable wherever it appears: campus was added
+/// after launch so existing rows have none, and nothing obliges a student to
+/// say which one they are at.
+enum Campus {
+  UTSG
+  UTM
+  UTSC
+}
+
 enum OrgType {
   CLUB
   LAB
@@ -64,6 +73,7 @@ model User {
   /// scrypt hash; null for accounts that only ever signed in with Microsoft.
   passwordHash String?
   faculty   String?
+  campus    Campus?
   program   String?
   classYear Int?
   avatarUrl String?
@@ -253,6 +263,9 @@ model Organization {
   slug        String    @unique
   name        String
   type        OrgType   @default(CLUB)
+  /// The campus the group is based at. A club can serve all three, which is
+  /// what null means here — not "unknown".
+  campus      Campus?
   description String?
   websiteUrl  String?
   /// Invite link to the group's Discord server. Validated as a discord.gg /

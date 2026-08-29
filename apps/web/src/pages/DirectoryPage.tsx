@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { api } from '../lib/api'
 import { ProjectGrid } from '../components/ProjectCard'
-import { Btn, Chip, EmptyState, Icon, PageHeader, SelectField, Spinner, TextField } from '../components/ui'
+import { CAMPUS_LABELS, CAMPUSES } from '../lib/campus'
+import { Btn, Chip, EmptyState, Icon, PageHeader, SelectField, Spinner, TextField, Tooltip } from '../components/ui'
 
 const FACULTIES = [
   'Arts & Science',
@@ -23,6 +24,14 @@ const SORTS = [
   { value: 'trending', label: 'Trending', icon: 'mdi-fire' },
 ] as const
 
+/** Matches the API's default page size, so a short page means the end. */
+const PAGE_SIZE = 20
+
+const VIEW_KEY = 'projects-view'
+type View = 'grid' | 'list'
+
+const storedView = (): View => (localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid')
+
 /** The project directory — the browse-everything page. */
 export default function DirectoryPage() {
   const { user } = useAuth()
@@ -32,7 +41,14 @@ export default function DirectoryPage() {
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [debounced, setDebounced] = useState(search)
   const [faculty, setFaculty] = useState('')
+  const [campus, setCampus] = useState('')
   const [sort, setSort] = useState<'new' | 'trending'>('new')
+  const [view, setView] = useState<View>(storedView)
+
+  const chooseView = (next: View) => {
+    localStorage.setItem(VIEW_KEY, next)
+    setView(next)
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -42,11 +58,25 @@ export default function DirectoryPage() {
     return () => clearTimeout(t)
   }, [search, setParams])
 
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects', debounced, faculty, sort],
-    queryFn: () =>
-      api.projects.list({ search: debounced || undefined, faculty: faculty || undefined, sort }),
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
+    queryKey: ['projects', debounced, faculty, campus, sort],
+    queryFn: ({ pageParam }) =>
+      api.projects.list({
+        search: debounced || undefined,
+        faculty: faculty || undefined,
+        campus: campus || undefined,
+        sort,
+        skip: pageParam,
+      }),
+    initialPageParam: 0,
+    // A full page means there is probably another; a short one is the end.
+    // The list endpoint returns an array rather than a total, and asking it
+    // for one would change a response shape four other callers depend on.
+    getNextPageParam: (last, all) => (last.length < PAGE_SIZE ? undefined : all.length * PAGE_SIZE),
   })
+
+  const projects = data?.pages.flat() ?? []
+  const filtered = !!debounced || !!faculty || !!campus
 
   return (
     <div className="contentMaxWidth" style={{ paddingTop: 32 }}>
@@ -67,7 +97,7 @@ export default function DirectoryPage() {
         }
       />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ flex: '2 1 280px' }}>
           <TextField
             prependIcon="mdi-magnify"
@@ -104,19 +134,94 @@ export default function DirectoryPage() {
         </div>
       </div>
 
+      {/* Campus is its own row of pills rather than another dropdown: there
+          are only three, students think in them, and a select would hide the
+          whole axis behind a click. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+          <Icon name="mdi-map-marker-outline" size={16} /> Campus
+        </span>
+        <Chip
+          label
+          color={campus === '' ? 'accent' : 'grey'}
+          onClick={() => setCampus('')}
+          style={{ paddingInline: 14 }}
+        >
+          All
+        </Chip>
+        {CAMPUSES.map(c => (
+          <Chip
+            key={c}
+            label
+            color={campus === c ? 'accent' : 'grey'}
+            onClick={() => setCampus(campus === c ? '' : c)}
+            style={{ paddingInline: 14 }}
+          >
+            {c} — {CAMPUS_LABELS[c]}
+          </Chip>
+        ))}
+      </div>
+
+      {/* Result count and density, on one line above the results. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, minHeight: 32 }}>
+        <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+          {isLoading
+            ? ' '
+            : `${hasNextPage ? 'Showing ' : ''}${projects.length} project${projects.length === 1 ? '' : 's'}`}
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          {([
+            { value: 'grid', icon: 'mdi-view-grid-outline', label: 'Grid view' },
+            { value: 'list', icon: 'mdi-view-list-outline', label: 'List view' },
+          ] as const).map(option => (
+            <Tooltip key={option.value} text={option.label} position="bottom">
+              <Btn
+                icon
+                aria-label={option.label}
+                aria-pressed={view === option.value}
+                onClick={() => chooseView(option.value)}
+                className={view === option.value ? 'accent--text' : 'text--disabled'}
+              >
+                <Icon name={option.icon} size={20} />
+              </Btn>
+            </Tooltip>
+          ))}
+        </div>
+      </div>
+
       {isLoading ? (
         <Spinner />
       ) : projects.length === 0 ? (
         <EmptyState
           icon="mdi-file-search-outline"
-          title={
-            debounced || faculty
-              ? 'No projects match those filters.'
-              : 'No public projects yet — be the first to share one.'
+          title={filtered ? 'No projects match those filters.' : 'No public projects yet — be the first to share one.'}
+          action={
+            filtered ? (
+              <Btn
+                variant="outlined"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  setSearch('')
+                  setFaculty('')
+                  setCampus('')
+                }}
+              >
+                Clear filters
+              </Btn>
+            ) : undefined
           }
         />
       ) : (
-        <ProjectGrid projects={projects} />
+        <>
+          <ProjectGrid projects={projects} view={view} />
+          {hasNextPage && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '28px 0' }}>
+              <Btn variant="outlined" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+                {isFetchingNextPage ? 'Loading…' : 'Load more'}
+              </Btn>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

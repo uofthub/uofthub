@@ -24,7 +24,7 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         <ul>
           <li>
             <strong>Your account</strong> — the U of T email address you sign in with, your name, and anything
-            you choose to add to your profile: faculty, program, class year, bio, avatar.
+            you choose to add to your profile: faculty, campus, program, class year, bio, avatar.
           </li>
           <li>
             <strong>What you publish</strong> — projects, descriptions, tags, links, uploaded files, comments,

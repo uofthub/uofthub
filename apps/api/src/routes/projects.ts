@@ -17,6 +17,8 @@ import {
   previewKindFor,
 } from '../lib/fileValidation.js'
 import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { withCovers } from '../lib/covers.js'
+import { parseCampus } from '../lib/campus.js'
 import { notify } from '../lib/notifications.js'
 import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
 import { bySession } from '../lib/rateLimit.js'
@@ -42,11 +44,21 @@ const REPORT_REASONS = [
 const REPORT_DETAILS_MAX = 1000
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
-  // GET /projects?search&faculty&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
+  // GET /projects?search&faculty&campus&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
   app.get<{
-    Querystring: { search?: string; faculty?: string; sort?: string; take?: string; skip?: string }
+    Querystring: {
+      search?: string
+      faculty?: string
+      campus?: string
+      sort?: string
+      take?: string
+      skip?: string
+    }
   }>('/', async (request) => {
-    const { search, faculty, sort, take = '20', skip = '0' } = request.query
+    const { search, faculty, campus, sort, take = '20', skip = '0' } = request.query
+    // An unrecognised campus is dropped rather than 400ing: it filters a
+    // browse page, and a stale bookmark should still show projects.
+    const onCampus = parseCampus(campus)
     const callerId = await getOptionalUserId(request)
 
     const orderBy =
@@ -74,17 +86,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           ...(faculty
             ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
             : []),
+          ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
         ],
       },
       include: {
-        owner: { select: { id: true, name: true, faculty: true } },
+        owner: { select: { id: true, name: true, faculty: true, campus: true } },
         _count: { select: { likes: true, comments: true } },
       },
       orderBy,
       take: Math.min(Number(take), 50),
       skip: Number(skip),
     })
-    return projects
+    return withCovers(projects)
   })
 
   // GET /projects/:id
@@ -94,7 +107,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const project = await db.project.findUnique({
       where: { id: request.params.id },
       include: {
-        owner: { select: { id: true, name: true, faculty: true } },
+        owner: { select: { id: true, name: true, faculty: true, campus: true } },
         collaborators: {
           where: { accepted: true },
           include: { user: { select: { id: true, name: true, avatarUrl: true } } },
@@ -159,7 +172,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         links: safeLinks.length ? { create: safeLinks } : undefined,
       },
       include: {
-        owner: { select: { id: true, name: true, faculty: true } },
+        owner: { select: { id: true, name: true, faculty: true, campus: true } },
         links: true,
         _count: { select: { likes: true, comments: true } },
       },
@@ -196,7 +209,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ...(visibility !== undefined && { visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC' }),
       },
       include: {
-        owner: { select: { id: true, name: true, faculty: true } },
+        owner: { select: { id: true, name: true, faculty: true, campus: true } },
         links: true,
         _count: { select: { likes: true, comments: true } },
       },
@@ -691,7 +704,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             : undefined,
         },
         include: {
-          owner: { select: { id: true, name: true, faculty: true } },
+          owner: { select: { id: true, name: true, faculty: true, campus: true } },
           links: true,
           _count: { select: { likes: true, comments: true } },
         },
@@ -776,7 +789,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
     const requests = await db.projectCollaborator.findMany({
       where: { projectId: project.id, role: 'VIEWER', accepted: false },
-      include: { user: { select: { id: true, name: true, email: true, faculty: true } } },
+      include: { user: { select: { id: true, name: true, email: true, faculty: true, campus: true } } },
       orderBy: { invitedAt: 'desc' },
     })
     return requests

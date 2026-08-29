@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { api } from '../lib/api'
 import { ProjectGrid } from '../components/ProjectCard'
+import { CAMPUS_OPTIONS, campusLabel } from '../lib/campus'
 import {
   Avatar,
   Btn,
@@ -16,6 +17,7 @@ import {
   Field,
   Icon,
   Menu,
+  SelectField,
   Spinner,
   TextArea,
   TextField,
@@ -134,6 +136,7 @@ function EditProfileDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     name: user?.name ?? '',
     faculty: user?.faculty ?? '',
+    campus: user?.campus ?? '',
     program: user?.program ?? '',
     classYear: user?.classYear ? String(user.classYear) : '',
     bio: user?.bio ?? '',
@@ -144,6 +147,9 @@ function EditProfileDialog({ onClose }: { onClose: () => void }) {
       api.users.updateMe({
         name: form.name,
         faculty: form.faculty || undefined,
+        // Sent even when empty, so clearing it actually clears it — every
+        // other field here treats empty as "leave alone".
+        campus: form.campus,
         program: form.program || undefined,
         classYear: form.classYear ? Number(form.classYear) : undefined,
         bio: form.bio || undefined,
@@ -167,6 +173,16 @@ function EditProfileDialog({ onClose }: { onClose: () => void }) {
         </Field>
         <Field label="Faculty">
           <TextField value={form.faculty} onChange={set('faculty')} placeholder="Arts & Science" />
+        </Field>
+        <Field label="Campus">
+          <SelectField value={form.campus} onChange={set('campus')}>
+            <option value="">Prefer not to say</option>
+            {CAMPUS_OPTIONS.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </SelectField>
         </Field>
         <Field label="Program">
           <TextField value={form.program} onChange={set('program')} placeholder="Computer Science Specialist" />
@@ -253,7 +269,12 @@ export default function ProfilePage() {
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <h1 style={{ fontSize: '1.5rem' }}>{profile.name}</h1>
             <div className="text--secondary" style={{ fontSize: '0.9375rem', marginTop: 4 }}>
-              {[profile.faculty, profile.program, profile.classYear && `Class of ${profile.classYear}`]
+              {[
+                campusLabel(profile.campus),
+                profile.faculty,
+                profile.program,
+                profile.classYear && `Class of ${profile.classYear}`,
+              ]
                 .filter(Boolean)
                 .join(' · ')}
             </div>

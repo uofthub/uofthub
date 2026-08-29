@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { api, safeUrl, type OrgDetail, type OrgStorage } from '../lib/api'
 import { ORG_STATUS_COLORS, ORG_STATUS_LABELS, daysUntil, formatBytes } from '../lib/orgs'
+import { CAMPUS_OPTIONS, campusLabel } from '../lib/campus'
 import { Stat } from '../components/ProjectCard'
 import {
   Avatar,
@@ -19,6 +20,7 @@ import {
   ErrorText,
   Field,
   Icon,
+  SelectField,
   Spinner,
   TextArea,
   TextField,
@@ -82,6 +84,7 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
   const qc = useQueryClient()
   const [form, setForm] = useState({
     description: org.description ?? '',
+    campus: org.campus ?? '',
     websiteUrl: org.websiteUrl ?? '',
     discordUrl: org.discordUrl ?? '',
     groupMeUrl: org.groupMeUrl ?? '',
@@ -102,6 +105,16 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
       <div style={{ padding: 22, display: 'grid', gap: 16 }}>
         <Field label="Description">
           <TextArea rows={4} value={form.description} onChange={set('description')} />
+        </Field>
+        <Field label="Campus" hint="Leave on all three if the group is tri-campus.">
+          <SelectField value={form.campus} onChange={set('campus')}>
+            <option value="">All three campuses</option>
+            {CAMPUS_OPTIONS.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </SelectField>
         </Field>
         <Field label="Website">
           <TextField value={form.websiteUrl} onChange={set('websiteUrl')} placeholder="https://…" />
@@ -401,6 +414,10 @@ export default function OrgPage() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Chip color={lab ? 'purple' : 'blue'} small style={{ fontWeight: 700 }}>
               {lab ? 'Research Lab' : 'Club'}
+            </Chip>
+            <Chip color="grey" small style={{ fontWeight: 700 }}>
+              <Icon name="mdi-map-marker-outline" size={14} />
+              {campusLabel(org.campus) ?? 'All three campuses'}
             </Chip>
             {org.status === 'VERIFIED' ? (
               <Chip color="green" small style={{ fontWeight: 700 }}>

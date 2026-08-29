@@ -36,6 +36,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | email | string | must be `@mail.utoronto.ca` or `@utoronto.ca` |
 | name | string | |
 | faculty | string | |
+| campus | enum? | `UTSG`, `UTM`, `UTSC`. Nullable — added after launch, and nothing obliges a student to say |
 | program | string | |
 | class_year | int | |
 | bio | string? | |
@@ -198,7 +199,7 @@ TA/professor access is granted per-project by the student owner (generates a vie
 
 `GET /discover?q=` reads a natural-language query — "what have students built in CSC309 this year" — and answers it out of the ordinary project index.
 
-The model's only job is to fill five fields: `search`, `faculty`, `tag`, `sort`, `within`. It never sees the database and never produces a query. The response is constrained by a Zod schema (`lib/discovery.ts`) with enums for faculty, sort and time window; the route then applies those fields through Prisma, inside the same `visibleProjectWhere` filter every other read uses. **The model's output is untrusted input** — the schema is the boundary that keeps a creative answer from becoming a creative query, and no amount of prompt injection in the query text can widen what a caller is allowed to see.
+The model's only job is to fill six fields: `search`, `faculty`, `campus`, `tag`, `sort`, `within`. It never sees the database and never produces a query. The response is constrained by a Zod schema (`lib/discovery.ts`) with enums for faculty, campus, sort and time window; the route then applies those fields through Prisma, inside the same `visibleProjectWhere` filter every other read uses. **The model's output is untrusted input** — the schema is the boundary that keeps a creative answer from becoming a creative query, and no amount of prompt injection in the query text can widen what a caller is allowed to see.
 
 Without `OPENAI_API_KEY` the route runs the raw query as a keyword search and returns `interpreted: false`, which the page shows as a one-line note. Same degradation as email: nothing breaks, the feature is just less clever. Cost control is a session-keyed 20/hour limit (`lib/rateLimit.ts`), a 300-character query cap, a 2048-token output ceiling, and the endpoint requiring a session at all — an anonymous visitor can still use the free keyword search on `/projects`.
 

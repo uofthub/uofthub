@@ -4,6 +4,7 @@ import { api, type DiscoverFilters } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { usePageCrumbs } from '../lib/crumbs'
 import { ProjectGrid } from '../components/ProjectCard'
+import { campusLabel } from '../lib/campus'
 import { Btn, Card, Chip, EmptyState, ErrorText, Icon, PageHeader, Spinner, TextField } from '../components/ui'
 
 const EXAMPLES = [
@@ -25,6 +26,7 @@ function FilterChips({ filters }: { filters: DiscoverFilters }) {
     filters.search && { label: 'about', value: filters.search },
     filters.tag && { label: 'tagged', value: filters.tag },
     filters.faculty && { label: 'faculty', value: filters.faculty },
+    filters.campus && { label: 'campus', value: campusLabel(filters.campus)! },
     filters.sort && { label: 'sorted by', value: filters.sort },
     filters.within && { label: 'from the', value: WITHIN_LABELS[filters.within] },
   ].filter(Boolean) as { label: string; value: string }[]

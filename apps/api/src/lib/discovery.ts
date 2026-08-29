@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
+import { CAMPUSES } from './campus.js'
 
 /**
  * Turns "AI projects from Engineering students this year" into the filters the
@@ -39,6 +40,12 @@ const DiscoverFilters = z.object({
     .enum(FACULTIES)
     .describe('The faculty of the student who owns the project, if the query names one.')
     .nullable(),
+  campus: z
+    .enum(CAMPUSES)
+    .describe(
+      'The campus of the student who owns the project. UTSG is St. George/downtown/main campus, UTM is Mississauga/Erindale, UTSC is Scarborough. Only when the query names one.'
+    )
+    .nullable(),
   tag: z
     .string()
     .describe('An exact course or topic tag, e.g. "CSC309". Only when the query names one.')
@@ -58,6 +65,7 @@ export type DiscoverFilters = z.infer<typeof DiscoverFilters>
 export const EMPTY_FILTERS: DiscoverFilters = {
   search: null,
   faculty: null,
+  campus: null,
   tag: null,
   sort: null,
   within: null,
@@ -72,6 +80,8 @@ Examples:
 - "trending engineering projects" → faculty: "Engineering", sort: "trending"
 - "what have students built in CSC309 this year" → tag: "CSC309", within: "year"
 - "cool stuff from med students lately" → faculty: "Medicine", sort: "new"
+- "robotics at UTM" → search: "robotics", campus: "UTM"
+- "what are Scarborough students building" → campus: "UTSC"
 - "what's popular right now" → sort: "trending"`
 
 /** Overridable per deployment; this is the default when `OPENAI_MODEL` is unset. */
@@ -107,7 +117,7 @@ export async function parseQuery(query: string): Promise<DiscoverFilters | null>
     model: discoveryModel(),
     instructions: SYSTEM,
     input: query,
-    // Extraction into five fields — the answer is a handful of tokens. The cap
+    // Extraction into six fields — the answer is a handful of tokens. The cap
     // is generous enough to leave room for a reasoning model's hidden tokens
     // without letting a runaway response bill for long.
     max_output_tokens: 2048,

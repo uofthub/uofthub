@@ -250,6 +250,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         email: true,
         name: true,
         faculty: true,
+        campus: true,
         program: true,
         classYear: true,
         avatarUrl: true,
