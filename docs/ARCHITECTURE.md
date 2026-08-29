@@ -302,6 +302,18 @@ A student or group that needs more than the default quota or file-count cap (e.g
 
 ---
 
+## Search
+
+Project search runs on a Postgres `tsvector`, not `ILIKE`.
+
+`Project.searchVector` is a `GENERATED ALWAYS ... STORED` column over the title (weight A), tags (B) and description (C), with a GIN index on it. Generated rather than trigger-maintained so there is no write path that updates a project and forgets its vector. The expression spells out `'english'::regconfig` because the one-argument `to_tsvector(text)` is only STABLE, and a generated column needs IMMUTABLE; `uofthub_tags_text` exists for the same reason, narrowing `array_to_string` to the `text[]` case where it is genuinely immutable.
+
+`lib/search.ts` turns a query into a prefix `tsquery` (`robotics:*`), dropping everything non-alphanumeric so nothing can reach `to_tsquery` as syntax and 500 the directory. It returns **ids only**, capped at 1,000 by rank, and the caller feeds them back into the same Prisma query it always ran — visibility stays in `visibleProjectWhere` and is never re-expressed in SQL, because a second copy of the rule is what eventually drifts and leaks a private project.
+
+Two consequences worth knowing: matching is by whole stemmed word plus prefix, so a mid-word substring ("botic" inside "robotics") no longer matches; and a query matching more than 1,000 projects cannot be paged past the cap. Measured at 40k rows, the old `ILIKE '%term%'` sequential scan took ~74ms and the indexed lookup ~1ms.
+
+---
+
 ## Scheduled jobs
 
 Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than timers inside the API process — a cron entry is one line of config, survives a deploy, and cannot double-fire across replicas the way a `setInterval` would.
@@ -310,6 +322,8 @@ Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than t
 |---|---|---|---|
 | Verification sweep | `pnpm --filter @uofthub/api sweep-orgs` (`--dry` to list only) | daily | Deletes groups still `PENDING_VERIFICATION` / `INFO_REQUESTED` past their deadline. Not the only enforcement: `POST /orgs/:slug/verify` refuses an expired deadline too, so a missed run delays cleanup rather than reopening the window |
 | Term storage grants | `pnpm --filter @uofthub/api grant-term-storage` | monthly | Grants each verified group the 10GB for every term it is owed but hasn't received. Idempotent on (group, term) |
+
+Both run nightly from `.github/workflows/scheduled.yml`, which needs a `DATABASE_URL` repository secret pointing at production and reports "skipped" rather than failing when it is absent. `workflow_dispatch` runs them by hand. Moving them to Railway cron is the better long-term home — it runs inside the private network with credentials it already has, and no database URL needs to leave it — at which point delete the workflow rather than leaving both.
 
 `pnpm --filter @uofthub/api grant-admin <email>` is the third script, but it's operator-run, not scheduled — see [Moderation](#moderation).
 
@@ -368,7 +382,7 @@ Environment variables in production — see `apps/api/.env.example` for the full
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
 
-The [scheduled jobs](#scheduled-jobs) are not part of the web service — run them as Railway cron jobs against the same image (`pnpm --filter @uofthub/api sweep-orgs`, `… grant-term-storage`). Until they are scheduled somewhere, expired unverified groups linger (invisible, but not deleted) and verified groups stop receiving new term allowances.
+The [scheduled jobs](#scheduled-jobs) are not part of the web service. They currently run nightly from GitHub Actions (`.github/workflows/scheduled.yml`) against the `DATABASE_URL` secret; running them as Railway cron jobs against the same image is the better arrangement once someone sets it up, since it keeps the production database URL off GitHub entirely.
 
 ---
 

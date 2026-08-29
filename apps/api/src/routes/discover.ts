@@ -4,6 +4,7 @@ import { visibleProjectWhere } from '../lib/visibility.js'
 import { EMPTY_FILTERS, parseQuery, windowStart, type DiscoverFilters } from '../lib/discovery.js'
 import { withCovers } from '../lib/covers.js'
 import { parseCampus } from '../lib/campus.js'
+import { searchProjectIds } from '../lib/search.js'
 import { bySession } from '../lib/rateLimit.js'
 
 const QUERY_MAX = 300
@@ -37,24 +38,18 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
       // Re-validated rather than trusted: the zod schema constrains what the
       // model may answer, but its output is still untrusted input to a query.
       const onCampus = parseCampus(interpreted.campus)
+      // Same full-text path the directory uses, so both searches agree on what
+      // "matches" means and neither falls back to a sequential scan.
+      const matchedIds = interpreted.search ? await searchProjectIds(interpreted.search) : null
 
       const projects = await db.project.findMany({
-        // AND-composed so the visibility OR and the search OR cannot clobber
-        // each other. This route is authenticated, so callerId is always set.
+        // AND-composed: the visibility fragment is itself an OR, so spreading
+        // another one alongside it would silently drop one of them. This route
+        // is authenticated, so callerId is always set.
         where: {
           AND: [
             visibleProjectWhere(request.user.sub),
-            ...(interpreted.search
-              ? [
-                  {
-                    OR: [
-                      { title: { contains: interpreted.search, mode: 'insensitive' as const } },
-                      { description: { contains: interpreted.search, mode: 'insensitive' as const } },
-                      { tags: { has: interpreted.search } },
-                    ],
-                  },
-                ]
-              : []),
+            ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
             ...(interpreted.tag ? [{ tags: { has: interpreted.tag } }] : []),
             ...(interpreted.faculty
               ? [{ owner: { faculty: { contains: interpreted.faculty, mode: 'insensitive' as const } } }]

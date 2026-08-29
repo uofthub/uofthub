@@ -19,6 +19,7 @@ import {
 import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { withCovers } from '../lib/covers.js'
 import { parseCampus } from '../lib/campus.js'
+import { searchProjectIds } from '../lib/search.js'
 import { notify } from '../lib/notifications.js'
 import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
 import { bySession } from '../lib/rateLimit.js'
@@ -59,6 +60,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // An unrecognised campus is dropped rather than 400ing: it filters a
     // browse page, and a stale bookmark should still show projects.
     const onCampus = parseCampus(campus)
+
+    // Resolved up front through the full-text index; the ids then narrow the
+    // same visibility-filtered query this route has always run.
+    const matchedIds = search ? await searchProjectIds(search) : null
     const callerId = await getOptionalUserId(request)
 
     const orderBy =
@@ -67,22 +72,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         : [{ createdAt: 'desc' as const }]
 
     const projects = await db.project.findMany({
-      // AND-composed: the visibility fragment also uses OR, so spreading it
-      // alongside the search OR would silently drop one of them.
+      // AND-composed: the visibility fragment uses OR internally, so spreading
+      // another condition alongside it would silently drop one of them.
       where: {
         AND: [
           visibleProjectWhere(callerId),
-          ...(search
-            ? [
-                {
-                  OR: [
-                    { title: { contains: search, mode: 'insensitive' as const } },
-                    { description: { contains: search, mode: 'insensitive' as const } },
-                    { tags: { has: search } },
-                  ],
-                },
-              ]
-            : []),
+          ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
           ...(faculty
             ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
             : []),
