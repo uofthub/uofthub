@@ -6,6 +6,8 @@ import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
 import { withCovers } from '../lib/covers.js'
 import { parseCampus } from '../lib/campus.js'
+import { notifyOnce } from '../lib/notifications.js'
+import { PIN_LIMIT } from '../lib/pins.js'
 
 const ME_SELECT = {
   id: true,
@@ -74,6 +76,29 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       return withCovers(projects)
     }
   )
+
+  // GET /users/:id/pinned — the handful a student chose to lead with
+  //
+  // Its own route rather than a flag on the list above: the list is paged
+  // newest-first, so a project pinned a year ago would not be on the first
+  // page, and the strip has to be complete to be worth anything.
+  app.get<{ Params: { id: string } }>('/:id/pinned', async (request) => {
+    const callerId = await getOptionalUserId(request)
+
+    const projects = await db.project.findMany({
+      where: {
+        ownerId: request.params.id,
+        pinnedAt: { not: null },
+        // A pinned project that is still PRIVATE is pinned for the owner's own
+        // benefit; the same visibility rules apply to it as to anything else.
+        ...visibleProjectWhere(callerId),
+      },
+      include: { _count: { select: { likes: true, comments: true } }, links: true },
+      orderBy: { pinnedAt: 'desc' },
+      take: PIN_LIMIT,
+    })
+    return withCovers(projects)
+  })
 
   // PATCH /users/me — update own profile
   app.patch<{
@@ -200,6 +225,15 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     }
 
     await db.follow.create({ data: { followerId, followingId } })
+
+    // Keyed on the follower, so unfollow-refollow is not a way to ping
+    // somebody repeatedly — you announce yourself to a person once.
+    const follower = await db.user.findUnique({ where: { id: followerId }, select: { name: true } })
+    await notifyOnce(followingId, 'FOLLOWED_YOU', `follow:${followerId}`, {
+      actorId: followerId,
+      actorName: follower?.name,
+    })
+
     return { following: true }
   })
 

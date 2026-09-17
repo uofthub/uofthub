@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import type { ReactionKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import {
   canViewProject,
@@ -19,8 +20,11 @@ import {
 import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { withCovers } from '../lib/covers.js'
 import { parseCampus } from '../lib/campus.js'
+import { startOfUtcDay } from '../lib/dates.js'
+import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
-import { notify } from '../lib/notifications.js'
+import { notify, notifyProjectOwner } from '../lib/notifications.js'
+import { announcePublish } from '../lib/publishing.js'
 import { billingOrgFor, orgQuotaBytes, orgUsageBytes } from '../lib/orgs.js'
 import { bySession } from '../lib/rateLimit.js'
 
@@ -43,6 +47,11 @@ const REPORT_REASONS = [
 ] as const
 
 const REPORT_DETAILS_MAX = 1000
+
+const REACTION_KINDS: ReactionKind[] = ['USEFUL', 'IMPRESSIVE', 'WELL_DOCUMENTED', 'WOULD_USE']
+
+/** How much of a comment rides along in the notification that announces it. */
+const COMMENT_EXCERPT_MAX = 140
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // GET /projects?search&faculty&campus&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
@@ -173,7 +182,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       },
     })
 
-    return reply.code(201).send(project)
+    // A project created straight to UOFT/PUBLIC is published the moment it
+    // exists, so the stamp and the follower fan-out happen here too — not only
+    // on the PATCH that flips a draft open later.
+    const publishedAt = await announcePublish(project)
+
+    return reply.code(201).send({ ...project, publishedAt })
   })
 
   // PATCH /projects/:id
@@ -209,7 +223,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         _count: { select: { likes: true, comments: true } },
       },
     })
-    return updated
+
+    // The edit that opens a draft up is the one that counts as publishing it.
+    const publishedAt = await announcePublish(updated)
+
+    return { ...updated, publishedAt: publishedAt ?? updated.publishedAt }
   })
 
   // DELETE /projects/:id
@@ -241,7 +259,97 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
 
     await db.projectLike.create({ data: { projectId: id, userId } })
+    // Keyed, so un-liking and re-liking is not an unlimited way to ping
+    // somebody: one person liking one project is one notification, ever.
+    await notifyProjectOwner(id, userId, 'PROJECT_LIKED', { key: `like:${id}:${userId}` })
     return { liked: true }
+  })
+
+  // POST /projects/:id/reactions — toggles one reaction of one kind
+  app.post<{ Params: { id: string }; Body: { kind?: string } }>(
+    '/:id/reactions',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { id } = request.params
+      const userId = request.user.sub
+      const kind = request.body?.kind
+
+      if (!kind || !REACTION_KINDS.includes(kind as ReactionKind)) {
+        return reply.code(400).send({ error: 'A valid reaction kind is required' })
+      }
+      if (!(await canViewProjectId(id, userId))) {
+        return reply.code(404).send({ error: 'Not found' })
+      }
+
+      const where = { projectId_userId_kind: { projectId: id, userId, kind: kind as ReactionKind } }
+      const existing = await db.projectReaction.findUnique({ where })
+
+      if (existing) {
+        await db.projectReaction.delete({ where })
+        return { kind, reacted: false }
+      }
+
+      await db.projectReaction.create({ data: { projectId: id, userId, kind: kind as ReactionKind } })
+      // One key per person per project rather than per kind: somebody working
+      // through all four chips is one piece of feedback, not four pings.
+      await notifyProjectOwner(id, userId, 'PROJECT_REACTED', {
+        key: `reaction:${id}:${userId}`,
+        extra: { kind },
+      })
+      return { kind, reacted: true }
+    }
+  )
+
+  // GET /projects/:id/reactions — the tally, plus what this caller chose
+  app.get<{ Params: { id: string } }>('/:id/reactions', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    if (!(await canViewProjectId(request.params.id, callerId))) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
+    const rows = await db.projectReaction.findMany({
+      where: { projectId: request.params.id },
+      select: { kind: true, userId: true },
+    })
+
+    // Every kind is present in the response, at zero if nobody chose it: the
+    // page renders a fixed row of chips and would otherwise have to invent the
+    // missing keys itself.
+    const counts = Object.fromEntries(REACTION_KINDS.map((k) => [k, 0])) as Record<ReactionKind, number>
+    const mine: ReactionKind[] = []
+    for (const row of rows) {
+      counts[row.kind] += 1
+      if (callerId && row.userId === callerId) mine.push(row.kind)
+    }
+
+    return { counts, mine }
+  })
+
+  // POST /projects/:id/pin — toggles this project on the owner's profile strip
+  app.post<{ Params: { id: string } }>('/:id/pin', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const project = await db.project.findUnique({
+      where: { id: request.params.id },
+      select: { id: true, ownerId: true, pinnedAt: true },
+    })
+    if (!project) return reply.code(404).send({ error: 'Not found' })
+    // Pinning arranges the owner's own profile, so it is theirs alone to do —
+    // a collaborator pinning it would move somebody else's furniture.
+    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+    if (project.pinnedAt) {
+      await db.project.update({ where: { id: project.id }, data: { pinnedAt: null } })
+      return { pinned: false }
+    }
+
+    const pinned = await db.project.count({ where: { ownerId: project.ownerId, pinnedAt: { not: null } } })
+    if (pinned >= PIN_LIMIT) {
+      return reply
+        .code(400)
+        .send({ error: `You can pin ${PIN_LIMIT} projects — unpin one to make room.` })
+    }
+
+    await db.project.update({ where: { id: project.id }, data: { pinnedAt: new Date() } })
+    return { pinned: true }
   })
 
   // GET /projects/:id/comments
@@ -275,6 +383,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         data: { projectId: request.params.id, userId: request.user.sub, body: body.trim() },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
+
+      // Unkeyed: every comment is new writing, and the owner wants all of them.
+      // The excerpt is denormalized so the bell reads as something specific
+      // rather than "somebody commented".
+      await notifyProjectOwner(request.params.id, request.user.sub, 'PROJECT_COMMENTED', {
+        extra: { excerpt: comment.body.slice(0, COMMENT_EXCERPT_MAX) },
+      })
+
       return reply.code(201).send(comment)
     }
   )
@@ -704,6 +820,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           _count: { select: { likes: true, comments: true } },
         },
       })
+
+      // Against the original, not the fork — the fork has no audience yet, and
+      // it is the original's owner who wants to know their work was picked up.
+      // Unkeyed: forking the same project twice is two real events.
+      await notifyProjectOwner(original.id, request.user.sub, 'PROJECT_FORKED', {
+        extra: { forkId: fork.id },
+      })
+
       return reply.code(201).send(fork)
     }
   )
@@ -719,19 +843,51 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (!project) return reply.code(404).send({ error: 'Not found' })
     if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyDaysAgo = startOfUtcDay(30)
+    const sevenDaysAgo = startOfUtcDay(7)
+    const fourteenDaysAgo = startOfUtcDay(14)
 
-    const dailyViews = await db.projectDailyView.findMany({
-      where: { projectId: request.params.id, date: { gte: thirtyDaysAgo } },
-      orderBy: { date: 'asc' },
-    })
+    const [dailyViews, recentLikes, reactions] = await Promise.all([
+      db.projectDailyView.findMany({
+        where: { projectId: request.params.id, date: { gte: thirtyDaysAgo } },
+        orderBy: { date: 'asc' },
+      }),
+      // A view is anonymous, but a like is already attributed on the project
+      // page, so showing the owner who liked their work reveals nothing new —
+      // and "Priya and 4 others" is a fact, where "23" is only a number.
+      db.projectLike.findMany({
+        where: { projectId: request.params.id },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
+      db.projectReaction.groupBy({
+        by: ['kind'],
+        where: { projectId: request.params.id },
+        _count: { kind: true },
+      }),
+    ])
+
+    const viewsBetween = (from: Date, to?: Date) =>
+      dailyViews
+        .filter(d => d.date >= from && (!to || d.date < to))
+        .reduce((sum, d) => sum + d.count, 0)
+
+    // Same shape as GET /:id/reactions — every kind present, zero included.
+    const reactionCounts = Object.fromEntries(REACTION_KINDS.map(k => [k, 0])) as Record<ReactionKind, number>
+    for (const row of reactions) reactionCounts[row.kind] = row._count.kind
 
     return {
       totalViews: project.viewCount,
       likes: project._count.likes,
       comments: project._count.comments,
       forks: project._count.forks,
+      // Two adjacent weeks rather than one number, so the owner can tell
+      // "quiet" apart from "slowing down" — the single total never could.
+      viewsThisWeek: viewsBetween(sevenDaysAgo),
+      viewsLastWeek: viewsBetween(fourteenDaysAgo, sevenDaysAgo),
+      recentLikes: recentLikes.map(l => ({ user: l.user, createdAt: l.createdAt })),
+      reactions: reactionCounts,
       dailyViews: dailyViews.map(d => ({ date: d.date, count: d.count })),
     }
   })
