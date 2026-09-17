@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useUI } from '../lib/ui'
+import { useAuth } from '../lib/auth'
 import { useCrumbs } from '../lib/crumbs'
 import { Breadcrumbs, Divider } from './ui'
 import AppBar from './layout/AppBar'
@@ -13,17 +14,25 @@ import { BARE_ROUTES, LANDING_ROUTES } from './layout/nav'
 
 /**
  * Chrome for the whole app, laid out the way uoftindex.ca's App.vue is:
- *   • /session   — bare, no app bar or drawer
- *   • /          — centred landing nav + tall footer
- *   • everything — navy drawer + breadcrumb app bar + slim footer
+ *   • /session        — bare, no app bar or drawer
+ *   • / signed out    — centred landing nav + tall footer
+ *   • everything else — navy drawer + breadcrumb app bar + slim footer
  */
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
   const { collapsed, width, setMobileNav } = useUI()
+  const { maybeSignedIn } = useAuth()
   const crumbs = useCrumbs()
 
   const bare = BARE_ROUTES.includes(pathname)
-  const landing = LANDING_ROUTES.includes(pathname)
+  // `/` is a sales pitch to a visitor and a feed to a student, and those want
+  // different chrome: the pitch is centred and full-bleed, the feed belongs in
+  // the app, beside the same sidebar as every other signed-in page.
+  //
+  // `maybeSignedIn` rather than `user`, so a returning student does not watch
+  // the landing header and tall footer paint and then vanish on every visit
+  // while /auth/me is in flight.
+  const landing = LANDING_ROUTES.includes(pathname) && !maybeSignedIn
   const narrow = width < 960
 
   useEffect(() => {
