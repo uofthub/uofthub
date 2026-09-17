@@ -4,30 +4,8 @@ import { Link } from 'react-router-dom'
 import type { Notification } from '@uofthub/types'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { messageFor } from '../../lib/notifications'
 import { Btn, Icon, Menu } from '../ui'
-
-function messageFor(n: Notification): { text: string; to: string } {
-  const p = n.payload as Record<string, string | boolean | undefined>
-  const to = typeof p.projectId === 'string' ? `/projects/${p.projectId}` : '/'
-
-  switch (n.type) {
-    case 'COLLABORATOR_INVITED':
-      return { text: `${p.inviterName} invited you to collaborate on "${p.projectTitle}"`, to }
-    case 'COLLABORATOR_RESPONDED':
-      return { text: `${p.userName} ${p.accepted ? 'accepted' : 'declined'} your invite to "${p.projectTitle}"`, to }
-    case 'ACCESS_REQUESTED':
-      return { text: `${p.requesterName} requested viewer access to "${p.projectTitle}"`, to }
-    case 'ACCESS_REQUEST_DECIDED':
-      return { text: `Your access request for "${p.projectTitle}" was ${p.accepted ? 'approved' : 'denied'}`, to }
-    case 'PROJECT_MODERATED': {
-      const action =
-        p.action === 'TAKEN_DOWN'
-          ? `"${p.projectTitle}" was taken down after a report`
-          : `A moderator reviewed a report about "${p.projectTitle}"`
-      return { text: p.note ? `${action}: ${p.note}` : action, to }
-    }
-  }
-}
 
 export default function NotificationBell() {
   const { user } = useAuth()

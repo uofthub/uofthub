@@ -7,6 +7,7 @@ import type {
   Notification,
   OrgActivity,
   OrgStatus,
+  ReactionKind,
   ReportReason,
   ReportStatus,
   Visibility,
@@ -92,7 +93,47 @@ export type Analytics = {
   likes: number
   comments: number
   forks: number
+  /** Two adjacent weeks, so "quiet" reads differently from "slowing down". */
+  viewsThisWeek: number
+  viewsLastWeek: number
+  /** Who liked it, most recent first — a view is anonymous, a like is not. */
+  recentLikes: { user: Pick<User, 'id' | 'name' | 'avatarUrl'>; createdAt: string }[]
+  reactions: Record<ReactionKind, number>
   dailyViews: { date: string; count: number }[]
+}
+
+/** Tally of every reaction kind — zeroes included — plus this caller's own. */
+export type Reactions = { counts: Record<ReactionKind, number>; mine: ReactionKind[] }
+
+/** Why one project reached this student's feed. See routes/feed.ts. */
+export type FeedReason =
+  | { kind: 'FOLLOWING'; userId: string; userName: string }
+  | { kind: 'COURSE'; tag: string }
+  | { kind: 'CAMPUS'; campus: Campus }
+  | { kind: 'TRENDING' }
+
+export type FeedItem = { project: ProjectSummary; reason: FeedReason }
+
+/** A week of engagement on the student's own work, for the top of the feed. */
+export type FeedActivity = {
+  projectCount: number
+  views: number
+  previousViews: number
+  likes: number
+  comments: number
+  reactions: number
+  recentComments: {
+    id: string
+    body: string
+    createdAt: string
+    user: Pick<User, 'id' | 'name' | 'avatarUrl'>
+    project: { id: string; title: string }
+  }[]
+  recentLikes: {
+    createdAt: string
+    user: Pick<User, 'id' | 'name' | 'avatarUrl'>
+    project: { id: string; title: string }
+  }[]
 }
 
 export type AccessRequest = {
@@ -224,6 +265,13 @@ export const api = {
     delete: (id: string) => request<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
     like: (id: string) => request<{ liked: boolean }>(`/projects/${id}/like`, { method: 'POST' }),
     likedByMe: (id: string) => request<{ liked: boolean }>(`/projects/${id}/likes/me`),
+    pin: (id: string) => request<{ pinned: boolean }>(`/projects/${id}/pin`, { method: 'POST', body: '{}' }),
+    reactions: (id: string) => request<Reactions>(`/projects/${id}/reactions`),
+    react: (id: string, kind: ReactionKind) =>
+      request<{ kind: ReactionKind; reacted: boolean }>(`/projects/${id}/reactions`, {
+        method: 'POST',
+        body: JSON.stringify({ kind }),
+      }),
     comments: (id: string) => request<Comment[]>(`/projects/${id}/comments`),
     addComment: (id: string, body: string) =>
       request<Comment>(`/projects/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
@@ -262,6 +310,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+  },
+  feed: {
+    list: (params?: { skip?: number }) =>
+      request<{ items: FeedItem[] }>(`/feed${params?.skip ? `?skip=${params.skip}` : ''}`),
+    activity: () => request<FeedActivity>('/feed/activity'),
   },
   discover: {
     search: (q: string) =>
@@ -317,6 +370,7 @@ export const api = {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
     projects: (id: string, params?: { skip?: number }) =>
       request<ProjectSummary[]>(`/users/${id}/projects${params?.skip ? `?skip=${params.skip}` : ''}`),
+    pinned: (id: string) => request<ProjectSummary[]>(`/users/${id}/pinned`),
     updateMe: (
       body: Partial<{
         name: string
