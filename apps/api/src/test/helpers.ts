@@ -80,15 +80,38 @@ export async function cookieFor(user: { id: string; email: string }): Promise<{ 
 
 export async function createProject(
   ownerId: string,
-  overrides: { title?: string; visibility?: Visibility; description?: string } = {}
+  overrides: {
+    title?: string
+    visibility?: Visibility
+    description?: string
+    tags?: string[]
+    /**
+     * Left to mirror the routes by default — anything not PRIVATE is stamped
+     * as published, exactly as POST/PATCH /projects do. Pass it explicitly to
+     * order a feed, or `null` for a project that was never visible.
+     */
+    publishedAt?: Date | null
+    viewCount?: number
+  } = {}
 ) {
   seq += 1
+  const visibility = overrides.visibility ?? 'PRIVATE'
+  const published =
+    overrides.publishedAt !== undefined
+      ? overrides.publishedAt
+      : visibility === 'PRIVATE'
+        ? null
+        : new Date()
+
   return db.project.create({
     data: {
       ownerId,
       title: overrides.title ?? `Project ${seq}`,
       description: overrides.description,
-      visibility: overrides.visibility ?? 'PRIVATE',
+      tags: overrides.tags ?? [],
+      visibility,
+      publishedAt: published,
+      viewCount: overrides.viewCount ?? 0,
     },
   })
 }

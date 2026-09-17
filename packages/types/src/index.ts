@@ -27,6 +27,10 @@ export interface Project {
   forkedFromId?: string
   /** Set only when a moderator has taken the project down. */
   takenDownAt?: string
+  /** When it first stopped being private. Absent while it never has been. */
+  publishedAt?: string
+  /** Set while the owner has pinned it to the top of their profile. */
+  pinnedAt?: string
   createdAt: string
   updatedAt: string
   owner?: Pick<User, 'id' | 'name' | 'faculty' | 'campus'>
@@ -54,6 +58,12 @@ export type NotificationType =
   | 'ACCESS_REQUESTED'
   | 'ACCESS_REQUEST_DECIDED'
   | 'PROJECT_MODERATED'
+  | 'PROJECT_LIKED'
+  | 'PROJECT_COMMENTED'
+  | 'PROJECT_FORKED'
+  | 'PROJECT_REACTED'
+  | 'FOLLOWED_YOU'
+  | 'FOLLOWING_PUBLISHED'
 
 export interface Notification {
   id: string
@@ -63,6 +73,9 @@ export interface Notification {
   read: boolean
   createdAt: string
 }
+
+/** Low-friction feedback on a project — see `ProjectReaction` in the schema. */
+export type ReactionKind = 'USEFUL' | 'IMPRESSIVE' | 'WELL_DOCUMENTED' | 'WOULD_USE'
 
 /** Verification lifecycle of a student group — see docs/student-groups.md. */
 export type OrgStatus = 'PENDING_VERIFICATION' | 'IN_REVIEW' | 'INFO_REQUESTED' | 'VERIFIED'
