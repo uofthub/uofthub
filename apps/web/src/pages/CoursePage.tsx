@@ -18,7 +18,10 @@ export default function CoursePage() {
   })
 
   return (
-    <div className="contentMaxWidth" style={{ paddingTop: 32 }}>
+    // Same reading column as the directory's list, for the same reason: this
+    // is the directory filtered to one tag, and it would be odd for /projects
+    // and /courses/CSC309 to disagree about how student work is shown.
+    <div className="contentMaxWidth" style={{ paddingTop: 32, maxWidth: 920 }}>
       <PageHeader
         title={label}
         subtitle={`Projects tagged with ${label}.`}
@@ -34,7 +37,7 @@ export default function CoursePage() {
       ) : projects.length === 0 ? (
         <EmptyState icon="mdi-tag-off-outline" title={`Nothing tagged “${label}” yet.`} />
       ) : (
-        <ProjectGrid projects={projects} />
+        <ProjectGrid projects={projects} view="list" />
       )}
     </div>
   )

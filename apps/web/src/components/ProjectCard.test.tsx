@@ -106,15 +106,57 @@ describe('ProjectCard', () => {
 })
 
 describe('ProjectRow', () => {
-  it('renders the same project as a single row without nesting anchors', () => {
-    const c = render(
+  const row = (p: ProjectSummary) =>
+    render(
       <MemoryRouter>
-        <ProjectRow project={project({ description: 'A gripper.', tags: ['CSC309'] })} />
+        <ProjectRow project={p} />
       </MemoryRouter>
     ).container
+
+  it('renders the same project as a single row without nesting anchors', () => {
+    const c = row(project({ description: 'A gripper.', tags: ['CSC309'] }))
 
     expect(c).toHaveTextContent('Autonomous gripper')
     expect(c).toHaveTextContent('CSC309')
     expect(c.querySelector('a')!.querySelector('a')).toBeNull()
+  })
+
+  it('hides the owner when asked to, for a feed that already named them', () => {
+    const c = render(
+      <MemoryRouter>
+        <ProjectRow project={project()} showOwner={false} />
+      </MemoryRouter>
+    ).container
+    expect(c).not.toHaveTextContent('Ada Lovelace')
+  })
+})
+
+describe('the date a project is stamped with', () => {
+  // A capstone drafted in January and opened up in March is March's news, so
+  // both the card and the row date it by when it was published — createdAt is
+  // only the fallback for a project published before the column existed.
+  const january = '2026-01-05T00:00:00.000Z'
+  const march = '2026-03-20T00:00:00.000Z'
+
+  const dateShownBy = (node: HTMLElement) => node.textContent ?? ''
+
+  it('prefers publishedAt on the card', () => {
+    const c = show(project({ createdAt: january, publishedAt: march }))
+    expect(dateShownBy(c)).toContain(new Date(march).toLocaleDateString())
+    expect(dateShownBy(c)).not.toContain(new Date(january).toLocaleDateString())
+  })
+
+  it('prefers publishedAt on the row', () => {
+    const c = render(
+      <MemoryRouter>
+        <ProjectRow project={project({ createdAt: january, publishedAt: march })} />
+      </MemoryRouter>
+    ).container
+    expect(dateShownBy(c)).toContain(new Date(march).toLocaleDateString())
+  })
+
+  it('falls back to createdAt for a project that predates the column', () => {
+    const c = show(project({ createdAt: january }))
+    expect(dateShownBy(c)).toContain(new Date(january).toLocaleDateString())
   })
 })

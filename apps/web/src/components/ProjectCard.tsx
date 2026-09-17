@@ -195,34 +195,46 @@ export default function ProjectCard({ project, showOwner = true }: { project: Pr
       >
         <Meta project={project} showOwner={showOwner} />
         <span className="text--disabled" style={{ marginLeft: 'auto', fontSize: '0.75rem', flexShrink: 0 }}>
-          {new Date(project.createdAt).toLocaleDateString()}
+          {/* When it was published, falling back to when it was made: a draft
+              opened up in March is March's, and createdAt would say January. */}
+          {new Date(project.publishedAt ?? project.createdAt).toLocaleDateString()}
         </span>
       </div>
     </Card>
   )
 }
 
-/** The same project as a single dense row, for the directory's list view. */
+/**
+ * The same project as a single wide row — the directory's default.
+ *
+ * A card grid only earns its vertical cost when the image is what you choose
+ * by, and most projects here have no image at all: their card spends 124px
+ * drawing a coloured letter. A row is read top to bottom, so position means
+ * something, and it stays legible at twenty rows where a grid of twenty tiles
+ * is wallpaper. See docs/feed-and-density.md.
+ */
 export function ProjectRow({ project, showOwner = true }: { project: ProjectSummary; showOwner?: boolean }) {
   return (
-    <Card hover to={`/projects/${project.id}`} style={{ padding: 12, display: 'flex', gap: 14, alignItems: 'center' }}>
-      <Cover project={project} height={56} width={72} />
+    <Card hover to={`/projects/${project.id}`} style={{ padding: 14, display: 'flex', gap: 16, alignItems: 'center' }}>
+      <Cover project={project} height={60} width={76} />
 
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h3 className="overflow-ellipsis" style={{ fontSize: '0.9375rem', fontWeight: 600 }}>
+          <h3 className="overflow-ellipsis" style={{ fontSize: '1rem', fontWeight: 600 }}>
             {project.title}
           </h3>
           <VisibilityChip visibility={project.visibility} />
         </div>
 
+        {/* One line, not two: the row's job is to be scanned, and the project
+            page is one click away for anyone the first line interests. */}
         {project.description && (
-          <p className="text--secondary overflow-ellipsis" style={{ fontSize: '0.8125rem', margin: '2px 0 0' }}>
+          <p className="text--secondary overflow-ellipsis" style={{ fontSize: '0.875rem', margin: '3px 0 0' }}>
             {project.description}
           </p>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
           <Meta project={project} showOwner={showOwner} />
           {project.tags.slice(0, 3).map(tag => (
             <Chip key={tag} small color="blue">
@@ -233,7 +245,7 @@ export function ProjectRow({ project, showOwner = true }: { project: ProjectSumm
       </div>
 
       <span className="text--disabled" style={{ fontSize: '0.75rem', flexShrink: 0 }}>
-        {new Date(project.createdAt).toLocaleDateString()}
+        {new Date(project.publishedAt ?? project.createdAt).toLocaleDateString()}
       </span>
     </Card>
   )

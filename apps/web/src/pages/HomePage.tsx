@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useUI } from '../lib/ui'
-import { Btn, Card, Divider, Icon, TextField } from '../components/ui'
+import { Btn, Card, Divider, Icon, Spinner, TextField } from '../components/ui'
 import { GITHUB_URL } from '../components/layout/nav'
 import Mark from '../components/Mark'
 import Logo from '../components/Logo'
+import FeedHome from './FeedHome'
 import heroPreview from '../assets/hero.png'
 
 const SHAPES = ['purple', 'blue', 'light-blue', 'red', 'orange', 'cyan'] as const
@@ -172,9 +173,30 @@ function FeatureCards() {
   )
 }
 
+/**
+ * `/`.
+ *
+ * A sales pitch to a visitor, a feed to a student. It was the pitch to both,
+ * which meant somebody who had been publishing here for a month still landed
+ * on "Get started" and a product screenshot every time they opened the site.
+ * Layout.tsx switches the surrounding chrome on the same condition.
+ */
 export default function HomePage() {
-  const { user } = useAuth()
+  const { user, maybeSignedIn } = useAuth()
 
+  if (user) return <FeedHome />
+  // A browser that was signed in last time almost certainly still is, so wait
+  // for the answer rather than flashing the sales pitch at its own user. A
+  // browser with no such history is shown the pitch immediately — it is the
+  // right answer for them, and making a first-time visitor wait on a round
+  // trip to find that out would be the worse trade.
+  if (maybeSignedIn) return <Spinner />
+
+  return <MarketingHome />
+}
+
+/** The pitch. Only ever rendered to somebody who is not signed in. */
+function MarketingHome() {
   return (
     <div>
       <Hero />
@@ -281,12 +303,8 @@ export default function HomePage() {
                 <Icon name="mdi-cake-variant" color="#fff" />
                 Request a feature
               </Btn>
-              <Btn
-                size="large"
-                to={user ? '/projects/new' : '/session'}
-                style={{ background: '#fff', color: '#003C85', fontWeight: 700 }}
-              >
-                {user ? 'Share a project' : 'Get started'}
+              <Btn size="large" to="/session" style={{ background: '#fff', color: '#003C85', fontWeight: 700 }}>
+                Get started
               </Btn>
             </div>
           </Card>

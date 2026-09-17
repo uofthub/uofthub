@@ -42,12 +42,33 @@ enum OrgStatus {
   VERIFIED
 }
 
+/// The first five are administrative — something happened that the student has
+/// to answer or is obliged to know. The rest are social: somebody engaged with
+/// their work, or somebody they follow published. Without those the site asks
+/// students to publish into a void, since a like or a comment was previously
+/// only discoverable by reopening the project and reading a counter.
 enum NotificationType {
   COLLABORATOR_INVITED
   COLLABORATOR_RESPONDED
   ACCESS_REQUESTED
   ACCESS_REQUEST_DECIDED
   PROJECT_MODERATED
+  PROJECT_LIKED
+  PROJECT_COMMENTED
+  PROJECT_FORKED
+  PROJECT_REACTED
+  FOLLOWED_YOU
+  FOLLOWING_PUBLISHED
+}
+
+/// Low-friction feedback on a project, deliberately not a popularity score:
+/// a blank comment box on a stranger's capstone collects nothing, where one
+/// tap saying what specifically worked costs the reader almost nothing.
+enum ReactionKind {
+  USEFUL
+  IMPRESSIVE
+  WELL_DOCUMENTED
+  WOULD_USE
 }
 
 enum ReportReason {
@@ -96,6 +117,7 @@ model User {
   ownedProjects  Project[]             @relation("ProjectOwner")
   collaborations ProjectCollaborator[]
   likes          ProjectLike[]
+  reactions      ProjectReaction[]
   comments       Comment[]
   following      Follow[]              @relation("Following")
   followers      Follow[]              @relation("Followers")
@@ -115,6 +137,16 @@ model Project {
   visibility   Visibility @default(PRIVATE)
   viewCount    Int        @default(0)
   forkedFromId String?
+  /// When the project first stopped being PRIVATE. Distinct from createdAt: a
+  /// capstone drafted in January and published in March belongs in March's
+  /// feed, not January's. Null while it has never been visible to anyone but
+  /// the owner, which is also what stops the follower fan-out firing twice on
+  /// a project that is toggled UOFT → PRIVATE → UOFT.
+  publishedAt  DateTime?
+  /// Set while the owner has pinned this to the top of their profile. Pinned
+  /// projects are the only ones a profile renders as cards — see
+  /// docs/feed-and-density.md for why everything else is a list.
+  pinnedAt     DateTime?
   /// Set when a moderator takes the project down: visibility is forced back to
   /// PRIVATE and the owner cannot re-open it while this is set. Null for every
   /// project that has never been actioned.
@@ -133,6 +165,7 @@ model Project {
   files         ProjectFile[]
   links         ProjectLink[]
   likes         ProjectLike[]
+  reactions     ProjectReaction[]
   comments      Comment[]
   versions      ProjectVersion[]
   dailyViews    ProjectDailyView[]
@@ -147,6 +180,10 @@ model Project {
   @@index([ownerId, createdAt])
   /// The "trending" sort.
   @@index([viewCount])
+  /// The home feed's ordering — see routes/feed.ts.
+  @@index([publishedAt])
+  /// A profile's pinned strip: six rows out of however many the student owns.
+  @@index([ownerId, pinnedAt])
   @@index([searchVector], type: Gin)
 }
 
@@ -257,6 +294,23 @@ model ProjectLike {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([projectId, userId])
+}
+
+/// One reaction of one kind by one person. Separate rows rather than a single
+/// row with flags, so a student can say a project is both useful and well
+/// documented without the two answers overwriting each other.
+model ProjectReaction {
+  projectId String
+  userId    String
+  kind      ReactionKind
+  createdAt DateTime     @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Leads with projectId, which is what the per-project tally groups by — no
+  /// secondary index is needed on top of it.
+  @@id([projectId, userId, kind])
 }
 
 model Comment {
@@ -380,12 +434,20 @@ model Notification {
   /// creation time, so the feed still reads correctly after the source row
   /// changes or is deleted.
   payload   Json
+  /// Identity of the thing being announced, for the notifications that must
+  /// only ever fire once — `like:<projectId>:<actorId>`, `follow:<actorId>`.
+  /// Without it, un-liking and re-liking a project is an unlimited way to ping
+  /// its owner. Null for the announcements that are genuinely new every time
+  /// (each comment, each fork).
+  key       String?
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read, createdAt])
+  /// The `notifyOnce` existence check.
+  @@index([userId, type, key])
 }
 
 model OrgProject {

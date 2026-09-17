@@ -243,6 +243,15 @@ export default function ProfilePage() {
   })
   const projects = projectPages?.pages.flat() ?? []
 
+  // Its own request rather than a flag on the list above: the list is paged
+  // newest-first, so a project pinned a year ago would not be on the first
+  // page, and a half-complete pinned strip is worse than none.
+  const { data: pinned = [] } = useQuery({
+    queryKey: ['pinnedProjects', id],
+    queryFn: () => api.users.pinned(id!),
+    enabled: !!id,
+  })
+
   const { data: followState } = useQuery({
     queryKey: ['follow', id],
     queryFn: () => api.users.followingMe(id!),
@@ -321,7 +330,24 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      <h2 style={{ margin: '40px 0 16px' }}>Projects</h2>
+      {/* Pinned first, and as cards — this is the one place on a profile
+          where a card grid earns its space, because these six were chosen and
+          the grid is what says so. Everything below is a list, which ranks. */}
+      {pinned.length > 0 && (
+        <>
+          <h2 style={{ margin: '40px 0 16px' }}>Pinned</h2>
+          <ProjectGrid projects={pinned} showOwner={false} />
+        </>
+      )}
+
+      <h2 style={{ margin: '40px 0 16px' }}>{pinned.length > 0 ? 'All projects' : 'Projects'}</h2>
+
+      {isOwn && pinned.length === 0 && projects.length > 0 && (
+        <p className="text--disabled" style={{ fontSize: '0.875rem', marginTop: -8, marginBottom: 16 }}>
+          <Icon name="mdi-pin-outline" size={16} /> Open a project and pin it to lead with your best work here.
+        </p>
+      )}
+
       {projects.length === 0 ? (
         <EmptyState
           icon="mdi-folder-open-outline"
@@ -336,11 +362,11 @@ export default function ProfilePage() {
         />
       ) : (
         <>
-          <ProjectGrid projects={projects} showOwner={false} />
+          <ProjectGrid projects={projects} showOwner={false} view="list" />
           {hasNextPage && (
             <div style={{ display: 'flex', justifyContent: 'center', margin: '28px 0' }}>
               <Btn variant="outlined" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-                {isFetchingNextPage ? 'Loading…' : 'Load more'}
+                {isFetchingNextPage ? 'Loading…' : 'Show more'}
               </Btn>
             </div>
           )}
