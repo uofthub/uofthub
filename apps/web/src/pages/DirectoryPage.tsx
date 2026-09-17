@@ -30,7 +30,25 @@ const PAGE_SIZE = 20
 const VIEW_KEY = 'projects-view'
 type View = 'grid' | 'list'
 
-const storedView = (): View => (localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid')
+/**
+ * List, unless this student has said otherwise.
+ *
+ * The grid used to be the default, and it was the wrong one: a card grid only
+ * pays for its vertical space when the cover image is what you are choosing
+ * by, and most projects here have never had a file uploaded — their card is a
+ * coloured letter of the alphabet above a title. A list also ranks, which a
+ * grid cannot: row one is unambiguously first, where a grid's twelve tiles all
+ * read as equally important. See docs/feed-and-density.md.
+ */
+const storedView = (): View => (localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list')
+
+/**
+ * The reading column. A 76px thumbnail and a 14px description stretched across
+ * a 1600px monitor is its own kind of unreadable, so the list mode narrows the
+ * whole page — header and filters included, so nothing sits off on its own.
+ * The grid keeps the full width, which is what a gallery wants.
+ */
+const LIST_MAX_WIDTH = 920
 
 /** The project directory — the browse-everything page. */
 export default function DirectoryPage() {
@@ -79,7 +97,10 @@ export default function DirectoryPage() {
   const filtered = !!debounced || !!faculty || !!campus
 
   return (
-    <div className="contentMaxWidth" style={{ paddingTop: 32 }}>
+    <div
+      className="contentMaxWidth"
+      style={{ paddingTop: 32, maxWidth: view === 'list' ? LIST_MAX_WIDTH : undefined }}
+    >
       <PageHeader
         title="Projects"
         subtitle="Everything students have published — capstones, research, side projects and studio work."

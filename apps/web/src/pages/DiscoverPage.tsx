@@ -149,7 +149,9 @@ export default function DiscoverPage() {
           {data.projects.length === 0 ? (
             <EmptyState icon="mdi-magnify-close" title="Nothing matched that query." />
           ) : (
-            <ProjectGrid projects={data.projects} showOwner />
+            // A list, like the directory: search results are ranked, and a
+            // grid of tiles says nothing about which answer came first.
+            <ProjectGrid projects={data.projects} showOwner view="list" />
           )}
         </div>
       )}
