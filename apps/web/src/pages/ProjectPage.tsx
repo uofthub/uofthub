@@ -8,6 +8,8 @@ import { formatBytes, lookFor, previewKindFor } from '../lib/files'
 import { REPORT_REASONS } from '../lib/moderation'
 import type { ReportReason } from '@uofthub/types'
 import { VisibilityChip } from '../components/ProjectCard'
+import Reactions from '../components/Reactions'
+import { REACTIONS } from '../lib/reactions'
 import FileViewer from '../components/FileViewer'
 import { CONTACT_EMAIL } from '../components/layout/nav'
 import {
@@ -199,6 +201,9 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
     { label: 'Forks', value: data.forks, icon: 'mdi-source-fork' },
   ]
 
+  const weekChange = data.viewsThisWeek - data.viewsLastWeek
+  const said = REACTIONS.filter(r => data.reactions[r.value] > 0)
+
   return (
     <Card style={{ padding: 24 }}>
       <h2 style={{ fontSize: '1.125rem', marginBottom: 20 }}>Analytics</h2>
@@ -213,6 +218,61 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
           </div>
         ))}
       </div>
+
+      {/* The lifetime total above cannot tell "quiet" from "slowing down".
+          Two adjacent weeks can, which is the question an owner actually has. */}
+      <p className="text--secondary" style={{ fontSize: '0.875rem', marginTop: 20, marginBottom: 0 }}>
+        <strong>{data.viewsThisWeek}</strong> {data.viewsThisWeek === 1 ? 'view' : 'views'} this week
+        {data.viewsLastWeek > 0 && (
+          <>
+            {', against '}
+            {data.viewsLastWeek} last week
+            {weekChange !== 0 && (
+              <span style={{ color: weekChange > 0 ? 'var(--tone-success)' : 'var(--text-secondary)' }}>
+                {' '}
+                <Icon name={weekChange > 0 ? 'mdi-trending-up' : 'mdi-trending-down'} size={15} />
+                {weekChange > 0 ? '+' : ''}
+                {weekChange}
+              </span>
+            )}
+          </>
+        )}
+        .
+      </p>
+
+      {/* Names, not a number. Views are anonymous and stay that way, but a like
+          is already attributed on the page — so the owner can see who it was. */}
+      {data.recentLikes.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <p className="text--disabled" style={{ fontSize: '0.75rem', marginBottom: 8 }}>
+            Liked by
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+            {data.recentLikes.map(like => (
+              <Link
+                key={like.user.id}
+                to={`/u/${like.user.id}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: '0.875rem',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <Avatar name={like.user.name} img={like.user.avatarUrl} size={26} />
+                {like.user.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {said.length > 0 && (
+        <p className="text--secondary" style={{ fontSize: '0.875rem', marginTop: 20, marginBottom: 0 }}>
+          {said.map(r => `${data.reactions[r.value]} ${r.past}`).join(' · ')}.
+        </p>
+      )}
 
       {data.dailyViews.length > 0 && (
         <div style={{ marginTop: 24 }}>
@@ -683,6 +743,9 @@ export default function ProjectPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  // The only way pinning fails is the six-project cap, and that has to be
+  // said out loud — a button that quietly does nothing reads as a bug.
+  const [pinError, setPinError] = useState<string | null>(null)
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -710,6 +773,18 @@ export default function ProjectPage() {
     mutationFn: () => api.projects.fork(id!),
     onSuccess: fork => navigate(`/projects/${fork.id}`),
   })
+  const pinMutation = useMutation({
+    mutationFn: () => api.projects.pin(id!),
+    onSuccess: () => {
+      // Cleared here, not only set on failure: hitting the six-project cap and
+      // then unpinning something must not leave the old complaint on screen.
+      setPinError(null)
+      qc.invalidateQueries({ queryKey: ['project', id] })
+      // The profile strip this feeds is a separate query, and stale by now.
+      qc.invalidateQueries({ queryKey: ['pinnedProjects'] })
+    },
+    onError: (err: Error) => setPinError(err.message),
+  })
   const requestAccess = useMutation({ mutationFn: () => api.projects.requestAccess(id!) })
 
   usePageCrumbs([{ text: 'Projects', href: '/projects' }, { text: project?.title ?? 'Project' }])
@@ -720,6 +795,7 @@ export default function ProjectPage() {
   const isOwner = me?.id === project.ownerId
   const isFaculty = me?.role === 'FACULTY'
   const liked = likeState?.liked
+  const pinned = !!project.pinnedAt
 
   const tabs: TabItem[] = [
     { value: 'overview', label: 'Overview', icon: 'mdi-text-box-outline' },
@@ -786,6 +862,19 @@ export default function ProjectPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {isOwner && (
               <>
+                {/* Pinning lives here rather than on the profile: a profile row
+                    is a whole anchor, and a button inside one is invalid markup
+                    that silently breaks the row's click target. */}
+                <Btn
+                  variant="outlined"
+                  onClick={() => pinMutation.mutate()}
+                  disabled={pinMutation.isPending}
+                  style={pinned ? { color: 'var(--v-accent-base)', borderColor: 'var(--v-accent-base)' } : undefined}
+                  title={pinned ? 'Remove from your profile' : 'Show this at the top of your profile'}
+                >
+                  <Icon name={pinned ? 'mdi-pin' : 'mdi-pin-outline'} size={18} />
+                  {pinned ? 'Pinned' : 'Pin'}
+                </Btn>
                 <Btn variant="outlined" onClick={() => setEditOpen(true)}>
                   <Icon name="mdi-pencil-outline" size={18} />
                   Edit
@@ -826,6 +915,8 @@ export default function ProjectPage() {
           </div>
         </div>
 
+        {pinError && <ErrorText>{pinError}</ErrorText>}
+
         <Divider style={{ margin: '20px 0 16px' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -843,6 +934,13 @@ export default function ProjectPage() {
               <Link to="/session">Sign in</Link> to like, comment or fork.
             </span>
           )}
+        </div>
+
+        {/* Under the fold of the header rather than beside Like: the two are
+            different questions, and a row of feedback chips competing with the
+            headline action would read as five ways to say the same thing. */}
+        <div style={{ marginTop: 20 }}>
+          <Reactions projectId={id!} canReact={!!me} />
         </div>
       </Card>
 
