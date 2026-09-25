@@ -97,6 +97,30 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     return decorate(projects, callerId)
   })
 
+  // GET /users/me/saved?take&skip — the caller's own bookmarks, newest save
+  // first. Only ever the caller's: a save is private.
+  app.get<{ Querystring: { take?: string; skip?: string } }>(
+    '/me/saved',
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const userId = request.user.sub
+      const { take = '24', skip = '0' } = request.query
+      const saves = await db.projectSave.findMany({
+        // A saved project that has since gone private to its makers drops out
+        // of the list rather than leaking its title.
+        where: { userId, project: { is: visibleProjectWhere(userId) } },
+        include: { project: { include: CARD_INCLUDE } },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Math.max(Number(take) || 24, 1), 50),
+        skip: Math.max(Number(skip) || 0, 0),
+      })
+      return decorate(
+        saves.map((s) => s.project),
+        userId
+      )
+    }
+  )
+
   // PATCH /users/me — update own profile
   app.patch<{
     Body: {

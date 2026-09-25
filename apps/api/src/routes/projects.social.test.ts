@@ -17,21 +17,25 @@ beforeEach(resetDb)
 const notificationsFor = (userId: string) =>
   db.notification.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } })
 
-async function post(url: string, user: { id: string; email: string }, payload: Record<string, unknown> = {}) {
+async function post(
+  url: string,
+  user: { id: string; email: string },
+  payload: Record<string, unknown> = {}
+) {
   const app = await getApp()
   return app.inject({ method: 'POST', url, cookies: await cookieFor(user), payload })
 }
 
-describe('like notifications', () => {
-  it('tells the owner the first time somebody likes their project', async () => {
+describe('"Want to collab" notifications', () => {
+  it('tells the owner privately, the first time, who wants to collaborate', async () => {
     const owner = await createUser()
     const fan = await createUser({ name: 'Priya' })
     const project = await createProject(owner.id, { title: 'Gripper', visibility: 'PUBLIC' })
 
-    await post(`/projects/${project.id}/like`, fan)
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'COLLAB' })
 
     const [notification] = await notificationsFor(owner.id)
-    expect(notification.type).toBe('PROJECT_LIKED')
+    expect(notification.type).toBe('PROJECT_COLLAB_INTEREST')
     expect(notification.payload).toMatchObject({
       projectId: project.id,
       projectTitle: 'Gripper',
@@ -40,35 +44,55 @@ describe('like notifications', () => {
     })
   })
 
-  it('does not ping the owner again when a like is toggled off and back on', async () => {
+  it('does not ping the owner again when it is toggled off and back on', async () => {
     const owner = await createUser()
     const fan = await createUser()
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
-    await post(`/projects/${project.id}/like`, fan)
-    await post(`/projects/${project.id}/like`, fan)
-    await post(`/projects/${project.id}/like`, fan)
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'COLLAB' })
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'COLLAB' })
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'COLLAB' })
 
     expect(await notificationsFor(owner.id)).toHaveLength(1)
   })
 
-  it('treats a second person’s like as its own event', async () => {
+  it('treats a second person’s offer as its own event', async () => {
     const owner = await createUser()
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
-    await post(`/projects/${project.id}/like`, await createUser())
-    await post(`/projects/${project.id}/like`, await createUser())
+    await post(`/projects/${project.id}/reactions`, await createUser(), { kind: 'COLLAB' })
+    await post(`/projects/${project.id}/reactions`, await createUser(), { kind: 'COLLAB' })
 
     expect(await notificationsFor(owner.id)).toHaveLength(2)
   })
 
-  it('says nothing when the owner likes their own project', async () => {
+  it('is not the same notification as a public reaction', async () => {
+    const owner = await createUser()
+    const fan = await createUser()
+    const project = await createProject(owner.id, { visibility: 'PUBLIC' })
+
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'IMPRESSIVE' })
+    await post(`/projects/${project.id}/reactions`, fan, { kind: 'COLLAB' })
+
+    expect((await notificationsFor(owner.id)).map((n) => n.type)).toEqual([
+      'PROJECT_REACTED',
+      'PROJECT_COLLAB_INTEREST',
+    ])
+  })
+
+  it('says nothing when the owner offers to collaborate on their own project', async () => {
     const owner = await createUser()
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
-    await post(`/projects/${project.id}/like`, owner)
+    await post(`/projects/${project.id}/reactions`, owner, { kind: 'COLLAB' })
 
     expect(await notificationsFor(owner.id)).toEqual([])
+  })
+
+  it('no longer has a like to toggle', async () => {
+    const owner = await createUser()
+    const project = await createProject(owner.id, { visibility: 'PUBLIC' })
+    expect((await post(`/projects/${project.id}/like`, await createUser())).statusCode).toBe(404)
   })
 })
 
@@ -247,7 +271,9 @@ describe('publishing', () => {
 
     expect(await notificationsFor(follower.id)).toHaveLength(1)
     // The original publication date survives the round trip.
-    expect((await db.project.findUniqueOrThrow({ where: { id: project.id } })).publishedAt).toEqual(first)
+    expect((await db.project.findUniqueOrThrow({ where: { id: project.id } })).publishedAt).toEqual(
+      first
+    )
   })
 })
 
@@ -257,7 +283,9 @@ describe('POST /projects/:id/pin', () => {
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
     expect((await post(`/projects/${project.id}/pin`, owner)).json()).toEqual({ pinned: true })
-    expect((await db.project.findUniqueOrThrow({ where: { id: project.id } })).pinnedAt).not.toBeNull()
+    expect(
+      (await db.project.findUniqueOrThrow({ where: { id: project.id } })).pinnedAt
+    ).not.toBeNull()
 
     expect((await post(`/projects/${project.id}/pin`, owner)).json()).toEqual({ pinned: false })
     expect((await db.project.findUniqueOrThrow({ where: { id: project.id } })).pinnedAt).toBeNull()
@@ -310,7 +338,10 @@ describe('GET /users/:id/pinned', () => {
     await createProject(owner.id, { title: 'unpinned', visibility: 'PUBLIC' })
 
     await db.project.update({ where: { id: first.id }, data: { pinnedAt: new Date('2026-01-01') } })
-    await db.project.update({ where: { id: second.id }, data: { pinnedAt: new Date('2026-02-01') } })
+    await db.project.update({
+      where: { id: second.id },
+      data: { pinnedAt: new Date('2026-02-01') },
+    })
 
     const app = await getApp()
     const body = (await app.inject({ method: 'GET', url: `/users/${owner.id}/pinned` })).json()
@@ -345,7 +376,7 @@ describe('reactions', () => {
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
     await post(`/projects/${project.id}/reactions`, reader, { kind: 'USEFUL' })
-    await post(`/projects/${project.id}/reactions`, reader, { kind: 'WELL_DOCUMENTED' })
+    await post(`/projects/${project.id}/reactions`, reader, { kind: 'COLLAB' })
 
     const app = await getApp()
     const body = (
@@ -356,8 +387,8 @@ describe('reactions', () => {
       })
     ).json()
 
-    expect(body.counts).toEqual({ USEFUL: 1, IMPRESSIVE: 0, WELL_DOCUMENTED: 1, WOULD_USE: 0 })
-    expect(body.mine.sort()).toEqual(['USEFUL', 'WELL_DOCUMENTED'])
+    expect(body.counts).toEqual({ USEFUL: 1, IMPRESSIVE: 0, COLLAB: 1 })
+    expect(body.mine.sort()).toEqual(['COLLAB', 'USEFUL'])
 
     await post(`/projects/${project.id}/reactions`, reader, { kind: 'USEFUL' })
     const after = (
@@ -368,7 +399,7 @@ describe('reactions', () => {
       })
     ).json()
     expect(after.counts.USEFUL).toBe(0)
-    expect(after.mine).toEqual(['WELL_DOCUMENTED'])
+    expect(after.mine).toEqual(['COLLAB'])
   })
 
   it('reports every kind at zero on a project nobody has reacted to', async () => {
@@ -376,9 +407,11 @@ describe('reactions', () => {
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
     const app = await getApp()
-    const body = (await app.inject({ method: 'GET', url: `/projects/${project.id}/reactions` })).json()
+    const body = (
+      await app.inject({ method: 'GET', url: `/projects/${project.id}/reactions` })
+    ).json()
 
-    expect(body.counts).toEqual({ USEFUL: 0, IMPRESSIVE: 0, WELL_DOCUMENTED: 0, WOULD_USE: 0 })
+    expect(body.counts).toEqual({ USEFUL: 0, IMPRESSIVE: 0, COLLAB: 0 })
     expect(body.mine).toEqual([])
   })
 
@@ -389,19 +422,30 @@ describe('reactions', () => {
     await post(`/projects/${project.id}/reactions`, reader, { kind: 'IMPRESSIVE' })
 
     const app = await getApp()
-    const body = (await app.inject({ method: 'GET', url: `/projects/${project.id}/reactions` })).json()
+    const body = (
+      await app.inject({ method: 'GET', url: `/projects/${project.id}/reactions` })
+    ).json()
 
     expect(body.counts.IMPRESSIVE).toBe(1)
     expect(body.mine).toEqual([])
   })
 
-  it('rejects a kind that is not one of the four', async () => {
+  it('rejects a kind that is not one of the three, including the retired ones', async () => {
     const owner = await createUser()
     const reader = await createUser()
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
-    expect((await post(`/projects/${project.id}/reactions`, reader, { kind: 'AMAZING' })).statusCode).toBe(400)
+    expect(
+      (await post(`/projects/${project.id}/reactions`, reader, { kind: 'AMAZING' })).statusCode
+    ).toBe(400)
     expect((await post(`/projects/${project.id}/reactions`, reader, {})).statusCode).toBe(400)
+    expect(
+      (await post(`/projects/${project.id}/reactions`, reader, { kind: 'WOULD_USE' })).statusCode
+    ).toBe(400)
+    expect(
+      (await post(`/projects/${project.id}/reactions`, reader, { kind: 'WELL_DOCUMENTED' }))
+        .statusCode
+    ).toBe(400)
   })
 
   it('404s a project the reader cannot see, rather than confirming it exists', async () => {
@@ -414,14 +458,14 @@ describe('reactions', () => {
     expect(await db.projectReaction.count()).toBe(0)
   })
 
-  it('notifies the owner once however many chips the reader taps', async () => {
+  it('notifies the owner once however many public reactions the reader taps', async () => {
     const owner = await createUser()
     const reader = await createUser()
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
 
     await post(`/projects/${project.id}/reactions`, reader, { kind: 'USEFUL' })
     await post(`/projects/${project.id}/reactions`, reader, { kind: 'IMPRESSIVE' })
-    await post(`/projects/${project.id}/reactions`, reader, { kind: 'WOULD_USE' })
+    await post(`/projects/${project.id}/reactions`, reader, { kind: 'USEFUL' })
 
     const notifications = await notificationsFor(owner.id)
     expect(notifications).toHaveLength(1)
@@ -430,12 +474,17 @@ describe('reactions', () => {
 })
 
 describe('GET /projects/:id/analytics', () => {
-  it('names who liked the project rather than only counting them', async () => {
+  it('names who reacted, and who wants to collaborate, to the owner alone', async () => {
     const owner = await createUser()
     const fan = await createUser({ name: 'Priya' })
+    const partner = await createUser({ name: 'Omar' })
     const project = await createProject(owner.id, { visibility: 'PUBLIC' })
-    await db.projectLike.create({ data: { projectId: project.id, userId: fan.id } })
-    await db.projectReaction.create({ data: { projectId: project.id, userId: fan.id, kind: 'USEFUL' } })
+    await db.projectReaction.create({
+      data: { projectId: project.id, userId: fan.id, kind: 'USEFUL' },
+    })
+    await db.projectReaction.create({
+      data: { projectId: project.id, userId: partner.id, kind: 'COLLAB' },
+    })
 
     const app = await getApp()
     const body = (
@@ -446,9 +495,21 @@ describe('GET /projects/:id/analytics', () => {
       })
     ).json()
 
-    expect(body.recentLikes).toHaveLength(1)
-    expect(body.recentLikes[0].user.name).toBe('Priya')
-    expect(body.reactions).toEqual({ USEFUL: 1, IMPRESSIVE: 0, WELL_DOCUMENTED: 0, WOULD_USE: 0 })
+    expect(body.reactions).toEqual({ USEFUL: 1, IMPRESSIVE: 0, COLLAB: 1 })
+    expect(body.recentReactions.map((r: { user: { name: string } }) => r.user.name)).toEqual([
+      'Priya',
+    ])
+    expect(body.collabInterest.map((r: { user: { name: string } }) => r.user.name)).toEqual([
+      'Omar',
+    ])
+    expect(body).not.toHaveProperty('likes')
+
+    const stranger = await app.inject({
+      method: 'GET',
+      url: `/projects/${project.id}/analytics`,
+      cookies: await cookieFor(fan),
+    })
+    expect(stranger.statusCode).toBe(403)
   })
 
   it('splits views into this week and last', async () => {

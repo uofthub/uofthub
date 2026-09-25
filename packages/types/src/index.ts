@@ -65,6 +65,7 @@ export type NotificationType =
   | 'PROJECT_REACTED'
   | 'FOLLOWED_YOU'
   | 'FOLLOWING_PUBLISHED'
+  | 'PROJECT_COLLAB_INTEREST'
 
 export interface Notification {
   id: string
@@ -75,8 +76,12 @@ export interface Notification {
   createdAt: string
 }
 
-/** Low-friction feedback on a project — see `ProjectReaction` in the schema. */
-export type ReactionKind = 'USEFUL' | 'IMPRESSIVE' | 'WELL_DOCUMENTED' | 'WOULD_USE'
+/**
+ * The three reactions — the app's only public engagement signal. USEFUL is
+ * shown as "Learned something"; COLLAB ("Want to collab") is counted publicly
+ * but who made it is only ever shown to the owner.
+ */
+export type ReactionKind = 'USEFUL' | 'IMPRESSIVE' | 'COLLAB'
 
 /** Verification lifecycle of a student group — see docs/student-groups.md. */
 export type OrgStatus = 'PENDING_VERIFICATION' | 'IN_REVIEW' | 'INFO_REQUESTED' | 'VERIFIED'

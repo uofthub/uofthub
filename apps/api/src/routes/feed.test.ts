@@ -241,27 +241,37 @@ describe('GET /feed/activity', () => {
     const a = await createProject(me.id, { visibility: 'PUBLIC' })
     const b = await createProject(me.id, { visibility: 'PUBLIC' })
 
-    await db.projectLike.create({ data: { projectId: a.id, userId: visitor.id } })
     await db.comment.create({ data: { projectId: b.id, userId: visitor.id, body: 'Nice work' } })
-    await db.projectReaction.create({ data: { projectId: a.id, userId: visitor.id, kind: 'USEFUL' } })
+    await db.projectReaction.create({
+      data: { projectId: a.id, userId: visitor.id, kind: 'USEFUL' },
+    })
+    await db.projectReaction.create({
+      data: { projectId: a.id, userId: visitor.id, kind: 'COLLAB' },
+    })
 
     const body = (await activity(me)).json()
 
-    expect(body).toMatchObject({ projectCount: 2, likes: 1, comments: 1, reactions: 1 })
+    expect(body).toMatchObject({ projectCount: 2, comments: 1, reactions: 2, collabRequests: 1 })
     expect(body.recentComments[0]).toMatchObject({ body: 'Nice work' })
     expect(body.recentComments[0].user.name).toBe('Priya')
-    expect(body.recentLikes[0].project.id).toBe(a.id)
+    expect(body.recentReactions[0].project.id).toBe(a.id)
+    expect(body).not.toHaveProperty('likes')
   })
 
-  it('does not count the owner’s own likes and comments as engagement', async () => {
+  it('does not count the owner’s own reactions and comments as engagement', async () => {
     const me = await createUser()
     const project = await createProject(me.id, { visibility: 'PUBLIC' })
-    await db.projectLike.create({ data: { projectId: project.id, userId: me.id } })
-    await db.comment.create({ data: { projectId: project.id, userId: me.id, body: 'note to self' } })
+    await db.projectReaction.create({
+      data: { projectId: project.id, userId: me.id, kind: 'IMPRESSIVE' },
+    })
+    await db.comment.create({
+      data: { projectId: project.id, userId: me.id, body: 'note to self' },
+    })
 
     const body = (await activity(me)).json()
 
-    expect(body).toMatchObject({ likes: 0, comments: 0 })
+    expect(body).toMatchObject({ reactions: 0, comments: 0 })
+    expect(body.recentReactions).toEqual([])
     expect(body.recentComments).toEqual([])
   })
 
@@ -290,6 +300,12 @@ describe('GET /feed/activity', () => {
   it('reports zeroes rather than failing for a student with no projects', async () => {
     const me = await createUser()
     const body = (await activity(me)).json()
-    expect(body).toMatchObject({ projectCount: 0, views: 0, previousViews: 0, likes: 0, comments: 0 })
+    expect(body).toMatchObject({
+      projectCount: 0,
+      views: 0,
+      previousViews: 0,
+      reactions: 0,
+      comments: 0,
+    })
   })
 })

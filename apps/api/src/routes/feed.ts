@@ -180,57 +180,64 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
-  // GET /feed/activity — what happened on this student's own work
-  //
-  // The other half of "nobody interacts with my project": a view counter that
-  // only moves when you reload the page tells you nothing. This is the same
-  // data read as a week, with names attached to the parts that have them.
+  // GET /feed/activity — the student's own week: how their work is landing
   app.get('/activity', { preHandler: [app.authenticate] }, async (request) => {
     const userId = request.user.sub
     const mine = { project: { ownerId: userId } }
+    // Everything below excludes the owner's own actions — reacting to or
+    // commenting on your own project is allowed, but it is not engagement.
+    const others = { userId: { not: userId } }
     const since = startOfUtcDay(7)
     const previously = startOfUtcDay(14)
+    const person = { select: { id: true, name: true, avatarUrl: true } }
+    const project = { select: { id: true, title: true } }
 
-    const [projectCount, views, previousViews, likes, comments, reactions, recentComments, recentLikes] =
-      await Promise.all([
-        db.project.count({ where: { ownerId: userId } }),
-        db.projectDailyView.aggregate({ where: { ...mine, date: { gte: since } }, _sum: { count: true } }),
-        db.projectDailyView.aggregate({
-          where: { ...mine, date: { gte: previously, lt: since } },
-          _sum: { count: true },
-        }),
-        // Everything below excludes the owner's own actions — liking and
-        // commenting on your own project is allowed, but it is not engagement.
-        db.projectLike.count({ where: { ...mine, userId: { not: userId }, createdAt: { gte: since } } }),
-        db.comment.count({ where: { ...mine, userId: { not: userId }, createdAt: { gte: since } } }),
-        db.projectReaction.count({ where: { ...mine, userId: { not: userId }, createdAt: { gte: since } } }),
-        db.comment.findMany({
-          where: { ...mine, userId: { not: userId } },
-          include: {
-            user: { select: { id: true, name: true, avatarUrl: true } },
-            project: { select: { id: true, title: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        }),
-        db.projectLike.findMany({
-          where: { ...mine, userId: { not: userId } },
-          include: {
-            user: { select: { id: true, name: true, avatarUrl: true } },
-            project: { select: { id: true, title: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        }),
-      ])
+    const [
+      projectCount,
+      views,
+      previousViews,
+      comments,
+      reactions,
+      collab,
+      recentComments,
+      recentReactions,
+    ] = await Promise.all([
+      db.project.count({ where: { ownerId: userId } }),
+      db.projectDailyView.aggregate({
+        where: { ...mine, date: { gte: since } },
+        _sum: { count: true },
+      }),
+      db.projectDailyView.aggregate({
+        where: { ...mine, date: { gte: previously, lt: since } },
+        _sum: { count: true },
+      }),
+      db.comment.count({ where: { ...mine, ...others, createdAt: { gte: since } } }),
+      db.projectReaction.count({ where: { ...mine, ...others, createdAt: { gte: since } } }),
+      db.projectReaction.count({
+        where: { ...mine, ...others, kind: 'COLLAB', createdAt: { gte: since } },
+      }),
+      db.comment.findMany({
+        where: { ...mine, ...others },
+        include: { user: person, project },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      db.projectReaction.findMany({
+        where: { ...mine, ...others },
+        include: { user: person, project },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ])
 
     return {
       projectCount,
       views: views._sum.count ?? 0,
       previousViews: previousViews._sum.count ?? 0,
-      likes,
       comments,
       reactions,
+      // Of this week's reactions, how many were offers to collaborate.
+      collabRequests: collab,
       recentComments: recentComments.map((c) => ({
         id: c.id,
         body: c.body,
@@ -238,10 +245,11 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         user: c.user,
         project: c.project,
       })),
-      recentLikes: recentLikes.map((l) => ({
-        createdAt: l.createdAt,
-        user: l.user,
-        project: l.project,
+      recentReactions: recentReactions.map((r) => ({
+        kind: r.kind,
+        createdAt: r.createdAt,
+        user: r.user,
+        project: r.project,
       })),
     }
   })
