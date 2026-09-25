@@ -77,6 +77,7 @@ export type NotificationType =
   | 'FOLLOWED_YOU'
   | 'FOLLOWING_PUBLISHED'
   | 'PROJECT_COLLAB_INTEREST'
+  | 'COMMENT_REPLIED'
 
 export interface Notification {
   id: string
@@ -135,7 +136,16 @@ export interface Comment {
   id: string
   projectId: string
   userId: string
+  /** Set on a reply; replies are one level deep. */
+  parentId?: string | null
   body: string
   createdAt: string
-  user?: Pick<User, 'id' | 'name' | 'avatarUrl'>
+  user?: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
+  helpfulCount: number
+  helpfulByMe: boolean
+}
+
+/** A top-level comment as GET /projects/:id/comments returns it. */
+export interface CommentThread extends Comment {
+  replies: Comment[]
 }

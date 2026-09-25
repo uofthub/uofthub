@@ -71,6 +71,7 @@ const VISIBILITIES: Visibility[] = ['PRIVATE', 'UOFT', 'PUBLIC', 'UNLISTED']
 
 /** A card's one line. Generous next to the form's 120, for pitches split out of old descriptions. */
 const PITCH_MAX = 280
+const COMMENT_MAX = 4000
 
 /** `undefined` leaves a field alone, `null` clears it, anything unknown is an error. */
 function parseEnum<T extends string>(value: unknown, allowed: T[]): T | null | undefined | false {
@@ -470,45 +471,148 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   )
 
   // GET /projects/:id/comments
+  //
+  // Top-level comments with their replies nested one level deep. The ones
+  // readers marked helpful come first, so the useful answer to the author's
+  // question is not buried under the thread that followed it.
   app.get<{ Params: { id: string } }>('/:id/comments', async (request, reply) => {
     const callerId = await getOptionalUserId(request)
     if (!(await canViewProjectId(request.params.id, callerId))) {
       return reply.code(404).send({ error: 'Not found' })
     }
 
-    const comments = await db.comment.findMany({
+    const rows = await db.comment.findMany({
       where: { projectId: request.params.id },
-      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true, faculty: true } },
+        _count: { select: { helpful: true } },
+        ...(callerId ? { helpful: { where: { userId: callerId }, select: { userId: true } } } : {}),
+      },
       orderBy: { createdAt: 'asc' },
     })
-    return comments
+
+    type Row = (typeof rows)[number] & { helpful?: { userId: string }[] }
+    const shape = (c: Row) => ({
+      id: c.id,
+      projectId: c.projectId,
+      userId: c.userId,
+      parentId: c.parentId,
+      body: c.body,
+      createdAt: c.createdAt,
+      user: c.user,
+      helpfulCount: c._count.helpful,
+      helpfulByMe: !!c.helpful?.length,
+    })
+
+    const replies = new Map<string, ReturnType<typeof shape>[]>()
+    for (const c of rows) {
+      if (!c.parentId) continue
+      replies.set(c.parentId, [...(replies.get(c.parentId) ?? []), shape(c)])
+    }
+    return rows
+      .filter((c) => !c.parentId)
+      .map((c) => ({ ...shape(c), replies: replies.get(c.id) ?? [] }))
+      .sort(
+        (a, b) => b.helpfulCount - a.helpfulCount || a.createdAt.getTime() - b.createdAt.getTime()
+      )
   })
 
-  // POST /projects/:id/comments
-  app.post<{ Params: { id: string }; Body: { body: string } }>(
+  // POST /projects/:id/comments — a comment, or with parentId a reply
+  app.post<{ Params: { id: string }; Body: { body: string; parentId?: string } }>(
     '/:id/comments',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const { body } = request.body
-      if (!body?.trim()) return reply.code(400).send({ error: 'Comment body is required' })
+      const body = request.body?.body?.trim()
+      if (!body) return reply.code(400).send({ error: 'Comment body is required' })
+      if (body.length > COMMENT_MAX)
+        return reply.code(400).send({ error: `A comment is at most ${COMMENT_MAX} characters` })
 
-      if (!(await canViewProjectId(request.params.id, request.user.sub))) {
+      const projectId = request.params.id
+      const userId = request.user.sub
+      if (!(await canViewProjectId(projectId, userId))) {
         return reply.code(404).send({ error: 'Not found' })
       }
 
+      // One level of replies: answering a reply files it under the same
+      // top-level comment, so a thread never becomes a staircase.
+      let parent: { id: string; userId: string } | null = null
+      if (request.body.parentId) {
+        const target = await db.comment.findUnique({
+          where: { id: request.body.parentId },
+          select: { id: true, userId: true, projectId: true, parentId: true },
+        })
+        if (!target || target.projectId !== projectId) {
+          return reply.code(400).send({ error: 'That comment is not on this project' })
+        }
+        parent = target.parentId
+          ? await db.comment.findUnique({
+              where: { id: target.parentId },
+              select: { id: true, userId: true },
+            })
+          : target
+        // Whoever was actually answered hears about it, even when the reply is
+        // filed under the thread's first comment.
+        if (target.userId !== userId) {
+          const [actor, project] = await Promise.all([
+            db.user.findUnique({ where: { id: userId }, select: { name: true } }),
+            db.project.findUnique({
+              where: { id: projectId },
+              select: { title: true, ownerId: true },
+            }),
+          ])
+          // The owner already gets PROJECT_COMMENTED below; one ping is enough.
+          if (project && target.userId !== project.ownerId) {
+            await notify(target.userId, 'COMMENT_REPLIED', {
+              projectId,
+              projectTitle: project.title,
+              actorId: userId,
+              actorName: actor?.name,
+              excerpt: body.slice(0, COMMENT_EXCERPT_MAX),
+            })
+          }
+        }
+      }
+
       const comment = await db.comment.create({
-        data: { projectId: request.params.id, userId: request.user.sub, body: body.trim() },
-        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        data: { projectId, userId, body, parentId: parent?.id },
+        include: { user: { select: { id: true, name: true, avatarUrl: true, faculty: true } } },
       })
 
       // Unkeyed: every comment is new writing, and the owner wants all of them.
       // The excerpt is denormalized so the bell reads as something specific
       // rather than "somebody commented".
-      await notifyProjectOwner(request.params.id, request.user.sub, 'PROJECT_COMMENTED', {
+      await notifyProjectOwner(projectId, userId, 'PROJECT_COMMENTED', {
         extra: { excerpt: comment.body.slice(0, COMMENT_EXCERPT_MAX) },
       })
 
-      return reply.code(201).send(comment)
+      return reply.code(201).send({ ...comment, helpfulCount: 0, helpfulByMe: false, replies: [] })
+    }
+  )
+
+  // POST /projects/:id/comments/:commentId/helpful — toggles "Helpful"
+  app.post<{ Params: { id: string; commentId: string } }>(
+    '/:id/comments/:commentId/helpful',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { id, commentId } = request.params
+      const userId = request.user.sub
+      if (!(await canViewProjectId(id, userId))) return reply.code(404).send({ error: 'Not found' })
+
+      const comment = await db.comment.findUnique({
+        where: { id: commentId },
+        select: { projectId: true, userId: true },
+      })
+      if (!comment || comment.projectId !== id) return reply.code(404).send({ error: 'Not found' })
+      // Voting your own comment helpful says nothing.
+      if (comment.userId === userId)
+        return reply.code(400).send({ error: 'You cannot mark your own comment helpful' })
+
+      const where = { commentId_userId: { commentId, userId } }
+      const had = await db.commentHelpful.findUnique({ where })
+      if (had) await db.commentHelpful.delete({ where })
+      else await db.commentHelpful.create({ data: { commentId, userId } })
+      const helpfulCount = await db.commentHelpful.count({ where: { commentId } })
+      return { helpful: !had, helpfulCount }
     }
   )
 
