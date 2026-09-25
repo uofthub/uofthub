@@ -20,6 +20,21 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
+  // GET /orgs/events/upcoming — the next few events across verified groups,
+  // for the home feed's "Coming up". Only verified groups: an unverified one
+  // is invisible to everyone but its members, and so are its events.
+  app.get<{ Querystring: { take?: string } }>('/events/upcoming', async (request) => {
+    const take = Math.min(Math.max(Number(request.query.take) || 3, 1), 10)
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    return db.orgActivity.findMany({
+      where: { date: { gte: today }, org: { status: 'VERIFIED' } },
+      include: { org: { select: { slug: true, name: true, campus: true } } },
+      orderBy: { date: 'asc' },
+      take,
+    })
+  })
+
   // POST /orgs — a moderator creates a group, already verified, and hands it
   // to the exec who runs it (`execEmail` becomes its admin; otherwise the
   // moderator is). Self-serve creation with its evidence, deadline and sweep
