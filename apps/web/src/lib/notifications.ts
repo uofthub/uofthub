@@ -4,18 +4,23 @@ import type { Notification } from '@uofthub/types'
  * What one notification says, and where it goes.
  *
  * Its own module rather than a helper inside NotificationBell, because it is
- * the part worth testing: eleven types, each a sentence a student reads in
+ * the part worth testing: a dozen types, each a sentence a student reads in
  * passing, and the difference between "somebody commented on your project"
  * and a notification carrying the comment is the difference between one they
  * open and one they ignore.
  */
 
-/** The label a reaction is announced under — mirrors REACTIONS in reactions.ts. */
-const REACTION_LABELS: Record<string, string> = {
-  USEFUL: 'useful',
-  IMPRESSIVE: 'impressive',
-  WELL_DOCUMENTED: 'well documented',
-  WOULD_USE: 'something they would use',
+/**
+ * How a reaction is announced, in the words the reader tapped — see
+ * REACTIONS in reactions.ts, where USEFUL is shown as "Learned something".
+ * The two retired kinds keep their wording: notifications about them were
+ * written before the redesign and are still in people's bells.
+ */
+const REACTION_SENTENCES: Record<string, (actor: string, title: string) => string> = {
+  USEFUL: (actor, title) => `${actor} learned something from "${title}"`,
+  IMPRESSIVE: (actor, title) => `${actor} found "${title}" impressive`,
+  WELL_DOCUMENTED: (actor, title) => `${actor} found "${title}" well documented`,
+  WOULD_USE: (actor, title) => `${actor} would use "${title}"`,
 }
 
 export function messageFor(n: Notification): { text: string; to: string } {
@@ -29,11 +34,17 @@ export function messageFor(n: Notification): { text: string; to: string } {
     case 'COLLABORATOR_INVITED':
       return { text: `${p.inviterName} invited you to collaborate on "${p.projectTitle}"`, to }
     case 'COLLABORATOR_RESPONDED':
-      return { text: `${p.userName} ${p.accepted ? 'accepted' : 'declined'} your invite to "${p.projectTitle}"`, to }
+      return {
+        text: `${p.userName} ${p.accepted ? 'accepted' : 'declined'} your invite to "${p.projectTitle}"`,
+        to,
+      }
     case 'ACCESS_REQUESTED':
       return { text: `${p.requesterName} requested viewer access to "${p.projectTitle}"`, to }
     case 'ACCESS_REQUEST_DECIDED':
-      return { text: `Your access request for "${p.projectTitle}" was ${p.accepted ? 'approved' : 'denied'}`, to }
+      return {
+        text: `Your access request for "${p.projectTitle}" was ${p.accepted ? 'approved' : 'denied'}`,
+        to,
+      }
     case 'PROJECT_MODERATED': {
       const action =
         p.action === 'TAKEN_DOWN'
@@ -50,23 +61,41 @@ export function messageFor(n: Notification): { text: string; to: string } {
         text: p.excerpt
           ? `${p.actorName} on "${p.projectTitle}": ${p.excerpt}`
           : `${p.actorName} commented on "${p.projectTitle}"`,
-        // Straight to the comment, not the overview tab it is hidden behind.
-        to: `${to}?tab=comments`,
+        // Straight to the comments, not the top of a long project page.
+        to: `${to}#comments`,
       }
     case 'PROJECT_FORKED':
       return { text: `${p.actorName} forked "${p.projectTitle}"`, to }
     case 'PROJECT_REACTED': {
-      const what = typeof p.kind === 'string' ? REACTION_LABELS[p.kind] : undefined
+      const say = typeof p.kind === 'string' ? REACTION_SENTENCES[p.kind] : undefined
       return {
-        text: what
-          ? `${p.actorName} found "${p.projectTitle}" ${what}`
+        text: say
+          ? say(String(p.actorName), String(p.projectTitle))
           : `${p.actorName} left feedback on "${p.projectTitle}"`,
         to,
       }
     }
     case 'FOLLOWED_YOU':
       return { text: `${p.actorName} followed you`, to: profile }
+    case 'PROJECT_COLLAB_INTEREST':
+      // Straight to the person: whether to reply depends on who they are.
+      return { text: `${p.actorName} wants to collaborate on "${p.projectTitle}"`, to: profile }
+    case 'COMMENT_REPLIED':
+      return {
+        text: p.excerpt
+          ? `${p.actorName} replied on "${p.projectTitle}": ${p.excerpt}`
+          : `${p.actorName} replied to your comment on "${p.projectTitle}"`,
+        to: `${to}#comments`,
+      }
     case 'FOLLOWING_PUBLISHED':
       return { text: `${p.ownerName} published "${p.projectTitle}"`, to }
+    case 'PROJECT_UPDATED':
+      // The note is the update; the title alone would say nothing new.
+      return {
+        text: p.note
+          ? `Update on "${p.projectTitle}": ${p.note}`
+          : `"${p.projectTitle}" posted an update`,
+        to: `${to}#updates`,
+      }
   }
 }
