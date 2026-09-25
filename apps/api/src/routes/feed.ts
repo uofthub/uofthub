@@ -87,11 +87,13 @@ async function affinityFor(userId: string): Promise<Affinity> {
     }),
     db.user.findUnique({
       where: { id: userId },
-      select: { campus: true, faculty: true },
+      select: { campus: true, faculty: true, courses: true },
     }),
   ])
 
-  const tags = mine.flatMap((p) => p.tags)
+  // Plus the courses they told us they take, which is how a first-year with
+  // nothing published yet still gets a course-shaped feed.
+  const tags = [...mine.flatMap((p) => p.tags), ...(me?.courses ?? [])]
 
   return {
     followeeIds: new Set(follows.map((f) => f.followingId)),

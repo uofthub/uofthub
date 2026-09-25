@@ -19,6 +19,15 @@ export interface User {
   classYear?: number
   avatarUrl?: string
   bio?: string
+  /** "Open to" chips on the profile. */
+  openTo?: string[]
+  websiteUrl?: string | null
+  githubUrl?: string | null
+  linkedinUrl?: string | null
+  /** Course codes the student says they take. */
+  courses?: string[]
+  /** Whether other students may start a conversation with them. */
+  allowMessages?: boolean
   createdAt: string
 }
 

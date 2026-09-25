@@ -9,6 +9,8 @@ import { isFaculty } from '../lib/faculties.js'
 import { parseCampus } from '../lib/campus.js'
 import { notifyOnce } from '../lib/notifications.js'
 import { PIN_LIMIT } from '../lib/pins.js'
+import { parseCourses, parseOpenTo, OPEN_TO_ITEM_MAX, OPEN_TO_MAX, COURSES_MAX } from '../lib/profile.js'
+import { safeExternalUrl, safeGithubUrl, safeLinkedInUrl } from '../lib/url.js'
 
 const ME_SELECT = {
   id: true,
@@ -20,6 +22,12 @@ const ME_SELECT = {
   classYear: true,
   bio: true,
   avatarUrl: true,
+  openTo: true,
+  websiteUrl: true,
+  githubUrl: true,
+  linkedinUrl: true,
+  courses: true,
+  allowMessages: true,
   createdAt: true,
 } as const
 
@@ -41,6 +49,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         classYear: true,
         bio: true,
         avatarUrl: true,
+        openTo: true,
+        websiteUrl: true,
+        githubUrl: true,
+        linkedinUrl: true,
+        courses: true,
+        allowMessages: true,
         createdAt: true,
         _count: { select: { ownedProjects: true, followers: true, following: true } },
       },
@@ -143,9 +157,57 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       classYear?: number
       bio?: string
       avatarUrl?: string
+      openTo?: string[]
+      websiteUrl?: string | null
+      githubUrl?: string | null
+      linkedinUrl?: string | null
+      courses?: string[]
+      allowMessages?: boolean
     }
   }>('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { name, faculty, campus, program, classYear, bio, avatarUrl } = request.body
+    const body = request.body
+
+    let openTo: string[] | undefined
+    if (body.openTo !== undefined) {
+      const parsed = parseOpenTo(body.openTo)
+      if (!parsed)
+        return reply.code(400).send({
+          error: `Up to ${OPEN_TO_MAX} "Open to" items, each at most ${OPEN_TO_ITEM_MAX} characters`,
+        })
+      openTo = parsed
+    }
+    let courses: string[] | undefined
+    if (body.courses !== undefined) {
+      const parsed = parseCourses(body.courses)
+      if (!parsed)
+        return reply
+          .code(400)
+          .send({ error: `Up to ${COURSES_MAX} course codes, like CSC343 or MAT137Y1` })
+      courses = parsed
+    }
+    if (body.allowMessages !== undefined && typeof body.allowMessages !== 'boolean')
+      return reply.code(400).send({ error: 'allowMessages must be true or false' })
+
+    // Empty or null clears a link; anything else has to be a real link to the
+    // right place — the profile shows each one behind its service's icon.
+    const links: Record<string, string | null> = {}
+    const checks = [
+      ['websiteUrl', safeExternalUrl, 'Website must be an http(s) link'],
+      ['githubUrl', safeGithubUrl, 'GitHub link must point at github.com'],
+      ['linkedinUrl', safeLinkedInUrl, 'LinkedIn link must point at linkedin.com'],
+    ] as const
+    for (const [field, check, message] of checks) {
+      const raw = body[field]
+      if (raw === undefined) continue
+      if (raw === null || raw.trim() === '') {
+        links[field] = null
+        continue
+      }
+      const safe = check(raw)
+      if (!safe) return reply.code(400).send({ error: message })
+      links[field] = safe
+    }
 
     // Faculty comes from a fixed list (lib/faculties.ts) so filters and the
     // "Your program" feed can match it exactly. A value written before the
@@ -181,6 +243,10 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         ...(program !== undefined && { program }),
         ...(classYear !== undefined && { classYear }),
         ...(bio !== undefined && { bio }),
+        ...(openTo !== undefined && { openTo }),
+        ...(courses !== undefined && { courses }),
+        ...(body.allowMessages !== undefined && { allowMessages: body.allowMessages }),
+        ...links,
         // A manually-pasted URL isn't backed by our storage, so avatarKey is
         // cleared — and like an upload, it's now "custom", so the Microsoft
         // sign-in avatar sync (which only ever runs once, at signup) would

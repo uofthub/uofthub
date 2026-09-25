@@ -43,3 +43,18 @@ export const safeDiscordUrl = (raw: string | undefined | null): string | null =>
 
 export const safeGroupMeUrl = (raw: string | undefined | null): string | null =>
   safeUrlOnHosts(raw, GROUPME_HOSTS)
+
+/** Hosts a GitHub profile or repository link can live on. */
+const GITHUB_HOSTS = new Set(['github.com', 'www.github.com'])
+
+/** Hosts a LinkedIn profile can live on, including country subdomains. */
+const isLinkedInHost = (host: string) => host === 'linkedin.com' || host.endsWith('.linkedin.com')
+
+export const safeGithubUrl = (raw: string | undefined | null): string | null =>
+  safeUrlOnHosts(raw, GITHUB_HOSTS)
+
+export function safeLinkedInUrl(raw: string | undefined | null): string | null {
+  const url = safeExternalUrl(raw)
+  if (!url) return null
+  return isLinkedInHost(new URL(url).hostname.toLowerCase()) ? url : null
+}
