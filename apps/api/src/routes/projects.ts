@@ -27,6 +27,7 @@ import {
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
 import { trendingIds } from '../lib/trending.js'
+import { facetsFor } from '../lib/facets.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -172,6 +173,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     })
     return decorate(projects, callerId)
   })
+
+  // GET /projects/facets — counts for Explore's tiles and the home rails
+  app.get('/facets', async (request) => facetsFor(!!(await getOptionalUserId(request))))
 
   // GET /projects/:id
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
