@@ -59,16 +59,21 @@ enum NotificationType {
   PROJECT_REACTED
   FOLLOWED_YOU
   FOLLOWING_PUBLISHED
+  /// "Want to collab" — sent privately to the owner, once per person per
+  /// project. The public reaction count says how many; only this says who.
+  PROJECT_COLLAB_INTEREST
 }
 
-/// Low-friction feedback on a project, deliberately not a popularity score:
-/// a blank comment box on a stranger's capstone collects nothing, where one
-/// tap saying what specifically worked costs the reader almost nothing.
+/// The three reactions on a project — the app's only public engagement
+/// signal (likes were folded into IMPRESSIVE; see the engagement migration).
+///   IMPRESSIVE — "Impressive"
+///   USEFUL     — shown as "Learned something"
+///   COLLAB     — "Want to collab": counted publicly, but who reacted is only
+///                ever shown to the owner, with a private notification
 enum ReactionKind {
   USEFUL
   IMPRESSIVE
-  WELL_DOCUMENTED
-  WOULD_USE
+  COLLAB
 }
 
 enum ReportReason {
@@ -88,44 +93,44 @@ enum ReportStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
+  id             String   @id @default(uuid())
+  email          String   @unique
+  name           String
   /// scrypt hash; null for accounts that only ever signed in with Microsoft.
-  passwordHash String?
-  faculty   String?
-  campus    Campus?
-  program   String?
-  classYear Int?
-  avatarUrl String?
+  passwordHash   String?
+  faculty        String?
+  campus         Campus?
+  program        String?
+  classYear      Int?
+  avatarUrl      String?
   /// R2 object key when the avatar lives in our bucket; null for no avatar or
   /// an externally-pasted URL. Fixed per user (`avatars/<id>`) — a new
   /// upload/sync always overwrites the previous one.
-  avatarKey String?
+  avatarKey      String?
   /// True once the student has set their own avatar (upload or manual URL) —
   /// the Microsoft sign-in avatar sync only ever fires for a brand new
   /// account, so it never overwrites this.
   avatarIsCustom Boolean  @default(false)
-  bio       String?
+  bio            String?
   /// Platform moderator. Set directly in the database (see
   /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
   /// grants it, so it can't be escalated to through the API.
-  isAdmin   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isAdmin        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  ownedProjects  Project[]             @relation("ProjectOwner")
-  collaborations ProjectCollaborator[]
-  likes          ProjectLike[]
-  reactions      ProjectReaction[]
-  comments       Comment[]
-  following      Follow[]              @relation("Following")
-  followers      Follow[]              @relation("Followers")
-  orgMemberships OrgMember[]
-  notifications  Notification[]
-  reportsFiled   Report[]              @relation("Reporter")
-  reportsReviewed Report[]             @relation("Reviewer")
-  orgActivities  OrgActivity[]
+  ownedProjects    Project[]             @relation("ProjectOwner")
+  collaborations   ProjectCollaborator[]
+  reactions        ProjectReaction[]
+  saves            ProjectSave[]
+  comments         Comment[]
+  following        Follow[]              @relation("Following")
+  followers        Follow[]              @relation("Followers")
+  orgMemberships   OrgMember[]
+  notifications    Notification[]
+  reportsFiled     Report[]              @relation("Reporter")
+  reportsReviewed  Report[]              @relation("Reviewer")
+  orgActivities    OrgActivity[]
 }
 
 model Project {
@@ -160,19 +165,19 @@ model Project {
   /// through the client, only `lib/search.ts` via raw SQL.
   searchVector Unsupported("tsvector")?
 
-  owner         User                  @relation("ProjectOwner", fields: [ownerId], references: [id])
-  collaborators ProjectCollaborator[]
-  files         ProjectFile[]
-  links         ProjectLink[]
-  likes         ProjectLike[]
-  reactions     ProjectReaction[]
-  comments      Comment[]
-  versions      ProjectVersion[]
-  dailyViews    ProjectDailyView[]
-  orgProjects   OrgProject[]
-  reports       Report[]
-  forkedFrom    Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
-  forks         Project[]             @relation("ProjectForks")
+  owner           User                  @relation("ProjectOwner", fields: [ownerId], references: [id])
+  collaborators   ProjectCollaborator[]
+  files           ProjectFile[]
+  links           ProjectLink[]
+  reactions       ProjectReaction[]
+  saves           ProjectSave[]
+  comments        Comment[]
+  versions        ProjectVersion[]
+  dailyViews      ProjectDailyView[]
+  orgProjects     OrgProject[]
+  reports         Report[]
+  forkedFrom      Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
+  forks           Project[]             @relation("ProjectForks")
 
   /// The directory's default read: visible projects, newest first.
   @@index([visibility, createdAt])
@@ -188,19 +193,19 @@ model Project {
 }
 
 model Report {
-  id         String       @id @default(uuid())
-  reporterId String
-  projectId  String
-  reason     ReportReason
+  id           String       @id @default(uuid())
+  reporterId   String
+  projectId    String
+  reason       ReportReason
   /// Optional free text from the reporter — the reason enum is what the queue
   /// sorts on, this is the context a moderator actually needs to decide.
-  details    String?
-  status     ReportStatus @default(OPEN)
-  createdAt  DateTime     @default(now())
+  details      String?
+  status       ReportStatus @default(OPEN)
+  createdAt    DateTime     @default(now())
   /// Set together when a moderator decides the report.
-  reviewedAt DateTime?
+  reviewedAt   DateTime?
   reviewedById String?
-  reviewNote String?
+  reviewNote   String?
 
   reporter   User    @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reviewedBy User?   @relation("Reviewer", fields: [reviewedById], references: [id])
@@ -215,7 +220,7 @@ model ProjectVersion {
   versionNum  Int
   title       String
   description String?
-  tags        String[]  @default([])
+  tags        String[] @default([])
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -245,7 +250,6 @@ model ProjectCollaborator {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([projectId, userId])
-
   /// visibleProjectWhere runs `collaborators.some({ userId })` on every list
   /// query; the @@id above leads with projectId and cannot serve it.
   @@index([userId])
@@ -285,15 +289,19 @@ model ProjectLink {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
-model ProjectLike {
-  projectId String
+/// A private bookmark. Unlike a reaction it is never shown to anyone but the
+/// person who saved it, and never notifies the owner.
+model ProjectSave {
   userId    String
+  projectId String
   createdAt DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@id([projectId, userId])
+  /// Leads with userId: the only bulk read is "my saved projects".
+  @@id([userId, projectId])
+  @@index([projectId])
 }
 
 /// One reaction of one kind by one person. Separate rows rather than a single
@@ -335,35 +343,34 @@ model Follow {
   following User @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@id([followerId, followingId])
-
   /// Follower counts read by followingId — the @@id leads with followerId.
   @@index([followingId])
 }
 
 model Organization {
-  id          String    @id @default(uuid())
-  slug        String    @unique
-  name        String
-  type        OrgType   @default(CLUB)
+  id                   String    @id @default(uuid())
+  slug                 String    @unique
+  name                 String
+  type                 OrgType   @default(CLUB)
   /// The campus the group is based at. A club can serve all three, which is
   /// what null means here — not "unknown".
-  campus      Campus?
-  description String?
-  websiteUrl  String?
+  campus               Campus?
+  description          String?
+  websiteUrl           String?
   /// Invite link to the group's Discord server. Validated as a discord.gg /
   /// discord.com URL, not just any http(s) one.
-  discordUrl  String?
+  discordUrl           String?
   /// Share link to the group's GroupMe. Same treatment as discordUrl.
-  groupMeUrl  String?
-  status      OrgStatus @default(PENDING_VERIFICATION)
+  groupMeUrl           String?
+  status               OrgStatus @default(PENDING_VERIFICATION)
   /// Where the verification decision is sent. Required at creation — the
   /// roadmap scoped this as one freeform `contactInfo` field, but a decision
   /// email needs a real address, so the address and the claimed role are
   /// separate columns. Nullable because groups created before verification
   /// existed have neither.
-  contactEmail String?
+  contactEmail         String?
   /// The role the creator claims to hold, e.g. "president", "lab manager".
-  contactRole  String?
+  contactRole          String?
   /// Auto-delete date while PENDING_VERIFICATION or INFO_REQUESTED; cleared
   /// once material is submitted, since review has no deadline on the student.
   verificationDeadline DateTime?
@@ -371,8 +378,8 @@ model Organization {
   verificationNote     String?
   /// The admin's note back — what was missing, or why it was denied.
   reviewNote           String?
-  verifiedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  verifiedAt           DateTime?
+  createdAt            DateTime  @default(now())
 
   members       OrgMember[]
   projects      OrgProject[]
