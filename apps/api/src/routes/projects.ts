@@ -41,6 +41,7 @@ import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
 import { announcePublish } from '../lib/publishing.js'
 import { bySession } from '../lib/rateLimit.js'
+import { ImportError, importFromLink } from '../lib/linkImport.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -50,6 +51,10 @@ const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
 // a genuine reporter never needs more than a handful in an hour. Keyed by
 // session rather than by IP; see lib/rateLimit.ts for why.
 const reportRateLimit = { rateLimit: { max: 5, timeWindow: '1 hour', keyGenerator: bySession } }
+
+// Each import is the server fetching somebody else's site on a student's
+// behalf, so it is budgeted per student.
+const importRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession } }
 
 const REPORT_REASONS = [
   'SPAM',
@@ -182,6 +187,26 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     })
     return decorate(projects, callerId)
   })
+
+  // POST /projects/import — { url } → what the post form can be filled with.
+  // Nothing is saved: the student edits the result and posts it as usual. See
+  // lib/linkImport.ts for what stops this being used to reach inside our network.
+  app.post<{ Body: { url?: string } }>(
+    '/import',
+    { preHandler: [app.authenticate], config: importRateLimit },
+    async (request, reply) => {
+      const url = request.body?.url
+      if (typeof url !== 'string' || !url.trim())
+        return reply.code(400).send({ error: 'Paste a link to import' })
+      try {
+        return await importFromLink(url)
+      } catch (err) {
+        if (err instanceof ImportError) return reply.code(422).send({ error: err.message })
+        request.log.warn({ err }, 'link import failed')
+        return reply.code(422).send({ error: 'That link could not be read' })
+      }
+    }
+  )
 
   // GET /projects/facets — counts for Explore's tiles and the home rails
   app.get('/facets', async (request) => facetsFor(!!(await getOptionalUserId(request))))
