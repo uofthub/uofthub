@@ -1,0 +1,168 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { ProjectStatus, ProjectType } from '@uofthub/types'
+import { api, type ProjectSummary } from '../../lib/api'
+import { useAuth } from '../../lib/auth'
+import { PROJECT_STATUSES, PROJECT_TYPES } from '../../lib/projectMeta'
+import { Badge, Button, Icon, Pill } from '../ui'
+
+/**
+ * The star and comment counts at the foot of a card. The star is the
+ * project's reaction total — the app's one public engagement number. Zeros
+ * are hidden: a young directory is mostly zeros, and a wall of them buries
+ * the counts that mean something.
+ */
+export function ProjectStats({
+  project,
+}: {
+  project: Pick<ProjectSummary, '_count' | 'reactionTotal'>
+}) {
+  const reactions = project.reactionTotal
+  const comments = project._count.comments
+  if (!reactions && !comments) return null
+  return (
+    <span className="pstats">
+      {reactions > 0 && (
+        <span className="pstats__n" aria-label={`${reactions} reactions`}>
+          <Icon name="star" size={15} />
+          {reactions}
+        </span>
+      )}
+      {comments > 0 && (
+        <span className="pstats__n" aria-label={`${comments} comments`}>
+          <Icon name="comment" size={15} />
+          {comments}
+        </span>
+      )}
+    </span>
+  )
+}
+
+export function TypeBadge({ type }: { type?: ProjectType | null }) {
+  if (!type) return null
+  const t = PROJECT_TYPES[type]
+  return (
+    <Badge bg={t.bg} ink={t.ink}>
+      {t.badge}
+    </Badge>
+  )
+}
+
+export function StatusPill({ status }: { status?: ProjectStatus | null }) {
+  if (!status) return null
+  const s = PROJECT_STATUSES[status]
+  return <Pill dot={s.dot}>{s.label}</Pill>
+}
+
+/**
+ * Not on the boards, which only ever show other people's published work. A
+ * student looking at their own profile has to be able to tell a draft or a
+ * link-only project apart.
+ */
+export function VisibilityPill({ visibility }: { visibility: string }) {
+  if (visibility === 'PRIVATE') return <Pill dot="#8A8E98">Draft</Pill>
+  if (visibility === 'UNLISTED') return <Pill dot="#8A8E98">Unlisted</Pill>
+  return null
+}
+
+/** The row every card opens with: type on the left, where it stands on the right. */
+export function CardTop({
+  project,
+}: {
+  project: Pick<ProjectSummary, 'type' | 'status' | 'visibility'>
+}) {
+  const hidden = project.visibility === 'PRIVATE' || project.visibility === 'UNLISTED'
+  if (!project.type && !project.status && !hidden) return null
+  return (
+    <div className="pcard__top">
+      <TypeBadge type={project.type} />
+      <span className="row" style={{ gap: 6, marginLeft: 'auto' }}>
+        <VisibilityPill visibility={project.visibility} />
+        <StatusPill status={project.status} />
+      </span>
+    </div>
+  )
+}
+
+/**
+ * The bookmark. Private to whoever pressed it — the owner is never told and
+ * no count is shown anywhere.
+ */
+export function SaveButton({
+  project,
+  size = 'md',
+}: {
+  project: Pick<ProjectSummary, 'id' | 'saved'>
+  size?: 'md' | 'lg'
+}) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [saved, setSaved] = useState(project.saved)
+  // A refetch that brings a different answer (saved on another page) wins.
+  const [lastProp, setLastProp] = useState(project.saved)
+  if (project.saved !== lastProp) {
+    setLastProp(project.saved)
+    setSaved(project.saved)
+  }
+
+  const toggle = useMutation({
+    mutationFn: () => api.projects.save(project.id),
+    onMutate: () => setSaved((s) => !s),
+    onSuccess: (res) => {
+      setSaved(res.saved)
+      qc.invalidateQueries({ queryKey: ['saved'] })
+    },
+    onError: () => setSaved((s) => !s),
+  })
+
+  return (
+    <Button
+      size={size}
+      iconOnly
+      icon="bookmark"
+      aria-label={saved ? 'Saved — remove from saved' : 'Save'}
+      aria-pressed={saved}
+      title={saved ? 'Saved' : 'Save'}
+      className={saved ? 'save-btn save-btn--on' : 'save-btn'}
+      onClick={() => (user ? toggle.mutate() : navigate('/session'))}
+      disabled={toggle.isPending}
+    />
+  )
+}
+
+export type CardLayout = 'card' | 'list'
+
+/** The two square buttons that switch a list between cards and rows. */
+export function LayoutToggle({
+  value,
+  onChange,
+  label = true,
+}: {
+  value: CardLayout
+  onChange: (v: CardLayout) => void
+  label?: boolean
+}) {
+  return (
+    <div className="row" style={{ gap: 4 }}>
+      {label && (
+        <span className="muted" style={{ fontSize: 13, marginRight: 6 }}>
+          Layout
+        </span>
+      )}
+      {(['card', 'list'] as const).map((v) => (
+        <Button
+          key={v}
+          size="md"
+          iconOnly
+          icon={v === 'card' ? 'grid' : 'list'}
+          aria-label={v === 'card' ? 'Card layout' : 'List layout'}
+          aria-pressed={value === v}
+          variant={value === v ? 'primary' : 'default'}
+          onClick={() => onChange(v)}
+        />
+      ))}
+    </div>
+  )
+}
