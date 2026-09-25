@@ -27,7 +27,7 @@ Goal: a working platform that a real U of T student can use to publish and share
   - [x] `apps/api/src/lib/storage.ts` — client wrapper: put/delete/signed-URL-for-download
   - [x] `POST /projects/:id/files` — allowlist + per-category size check against the actual bytes (magic-byte check via `file-type`/OLE2 signature/SVG sniff in `apps/api/src/lib/fileValidation.ts`, not the client-declared extension or MIME type — verified by hand: a `.exe` renamed to `.pdf` is rejected, a genuine file of the declared type is not), writes a `ProjectFile` row
   - [x] `DELETE /projects/:id/files/:fileId` — owner only, matching the existing owner-only convention for links/collaborators (not "owner/collaborator" as this was originally scoped)
-  - [x] Per-account quota enforcement — summed live from `ProjectFile.sizeBytes` against the 2GB cap; per-project 20-file cap
+  - [x] ~~Per-account quota enforcement~~ (removed in the redesign) — summed live from `ProjectFile.sizeBytes` against the 2GB cap; per-project 20-file cap
   - [x] Rate-limit the upload route (`config: { rateLimit: {...} }`, same pattern as `auth.ts`)
   - [x] Upload UI on `ProjectPage.tsx` — file input + list + owner-only delete. Not on `CreateProjectPage.tsx`: a file needs a real project id to attach to, so upload only becomes available once the project exists, same as invites and links today
   - [x] File list + download/delete actions on `ProjectPage.tsx` — downloads go through `GET .../files/:fileId/download`, which re-checks visibility and redirects to a signed URL, never a public bucket URL
@@ -91,6 +91,16 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 ## Phase 3 — Student groups & integrations
 
 Goal: a group page stops being "anyone can claim it" and becomes something verified, funded per term, and worth checking regularly. Full spec: [student-groups.md](student-groups.md).
+
+> **Revised in the redesign.** The verification workflow and per-term storage quota below shipped and were then removed as more machinery than the feature earned: groups are now created by moderators, already verified, and there are no storage quotas. See [redesign.md § Student groups and quotas](redesign.md#student-groups-and-quotas). The entries are kept as history.
+
+**Simplified groups (redesign)**
+- [x] `POST /orgs` is moderator-only and creates the group `VERIFIED`; optional `execEmail` hands admin to the exec
+- [x] Removed `POST /orgs/:slug/verify`, the 7-day deadline, `sweep-orgs` and `.github/workflows/scheduled.yml`; admin decisions are `APPROVE`/`DENY` for legacy groups
+- [x] "Built with" — owners link a project to a group they belong to; cards show verified groups; group admins can unlink with `DELETE /orgs/:slug/projects/:projectId`
+- [x] Removed personal and group storage quotas, `lib/terms.ts` and `grant-term-storage`; per-file size and 20-file caps remain
+- [ ] Drop the dormant `OrgStorageGrant`, `ProjectFile.orgId` and verification columns once the decision has held
+- [ ] Revisit storage limits against real usage
 
 **Verification workflow**
 - [x] Schema — `status` enum (`PENDING_VERIFICATION` / `IN_REVIEW` / `INFO_REQUESTED` / `VERIFIED`), `verificationDeadline`, `verificationNote`, `verifiedAt` on `Organization`. The single `contactInfo` field this was scoped with became **`contactEmail` + `contactRole`**: a decision email needs a real address, and the claimed role is what an admin weighs the claim against — one freeform column would have made both unusable. `verificationNote` holds the group's submission; a separate `reviewNote` holds the admin's reply, since the two are written by different people and both need to survive a round trip
@@ -191,3 +201,23 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - Follow / like / comment engagement rate
 - Retention: students who return to add a second project
 - Stretch: adoption across faculties beyond CS
+
+## Redesign (see docs/redesign.md)
+
+- [x] UI rebuilt from Design.html — design system, all seven boards, dark mode, ⌘K command panel
+- [x] Likes folded into reactions; reactions are Impressive / Want to collab / Learned something
+- [x] Private saves, with a Saved page and profile tab
+- [x] Project `pitch`, `type`, `status`; Unlisted visibility; update notes on versions
+- [x] Unique daily views, private to the owner; trending ranked on the last seven days
+- [x] One card shape for every list (reactions, links, collaborators, saved state)
+- [x] Feed tabs server-side; fixed faculty list; facets counts; weekly spotlight; upcoming events
+- [x] Threaded comments with Helpful votes
+- [x] Collections — anyone can read, each reader sees only what they could already see; only listed projects can be added
+- [x] Follow a project's updates — private, notifies on a version with a note, owner sees a count in Insights
+- [x] Messages — one-to-one, text only, with an opt-out that still allows replies
+- [x] Courses a student takes — shape the home feed like their own course tags
+- [x] Import a project from a link — GitHub via its API, any page via its own metadata, guarded against reaching private addresses
+- [x] "Open to" and personal links on profiles — GitHub and LinkedIn links must point at those sites
+- [ ] Messages: block and report a conversation
+- [ ] Messages and notifications: push instead of polling
+
