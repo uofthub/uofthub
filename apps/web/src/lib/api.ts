@@ -1,9 +1,11 @@
 import type {
   Campus,
+  CommentThread,
   User,
   Project,
-  Comment,
   ProjectLink,
+  ProjectStatus,
+  ProjectType,
   Notification,
   OrgActivity,
   OrgStatus,
@@ -18,9 +20,9 @@ export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Only set Content-Type: application/json when there's actually a JSON
   // body to send. FormData sets its own multipart boundary — forcing this
-  // header would break the upload. And a bodyless call (logout, like,
-  // follow, delete) sending this header anyway trips Fastify's default JSON
-  // parser, which rejects an empty body under application/json with a 400.
+  // header would break the upload. And a bodyless call (logout, follow,
+  // delete) sending this header anyway trips Fastify's default JSON parser,
+  // which rejects an empty body under application/json with a 400.
   const isFormData = init?.body instanceof FormData
   const hasJsonBody = init?.body !== undefined && !isFormData
   const res = await fetch(`${API_URL}${path}`, {
@@ -35,9 +37,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json()
 }
 
+const post = (body: unknown = {}): RequestInit => ({ method: 'POST', body: JSON.stringify(body) })
+
 export type MeUser = User & { role: 'STUDENT' | 'FACULTY'; isAdmin: boolean }
 
-export type ProjectFile = { id: string; name: string; sizeBytes: number; mimeType?: string; uploadedAt: string }
+export type ProjectFile = {
+  id: string
+  name: string
+  sizeBytes: number
+  mimeType?: string
+  uploadedAt: string
+}
 
 /**
  * What the viewer needs to show one file. Text arrives as a string — the
@@ -48,21 +58,54 @@ export type FilePreview =
   | { kind: 'text'; name: string; text: string; truncated: boolean }
   | { kind: 'image' | 'pdf' | 'video' | 'audio'; name: string; url: string }
 
-export type ProjectDetail = Project & {
-  collaborators: { user: Pick<User, 'id' | 'name' | 'avatarUrl'>; accepted: boolean }[]
-  files: ProjectFile[]
-  links: ProjectLink[]
-  _count: { likes: number; comments: number }
-}
-
+/**
+ * A project as every list returns it — everything a card draws, so no card
+ * makes a request of its own (see apps/api/src/lib/projectShape.ts).
+ */
 export type ProjectSummary = Project & {
-  _count: { likes: number; comments: number }
+  links: ProjectLink[]
+  /** Accepted collaborators only. */
+  collaborators: { user: Pick<User, 'id' | 'name' | 'avatarUrl'> }[]
+  _count: { comments: number }
   /**
    * Signed, short-lived URL for the project's first uploaded image, used as
-   * the card thumbnail. Absent when the project has no image — the card draws
-   * its own monogram instead.
+   * the card cover. Absent when the project has no image — the card draws its
+   * own cover instead.
    */
   coverUrl?: string
+  reactions: Record<ReactionKind, number>
+  reactionTotal: number
+  /** The caller's own reactions. */
+  myReactions: ReactionKind[]
+  /** Whether the caller has saved it. Always false signed out. */
+  saved: boolean
+  /** The verified groups it was built with — "Built with UofT Robotics". */
+  orgProjects: { org: OrgRef }[]
+}
+
+export type OrgRef = { slug: string; name: string; type: 'CLUB' | 'LAB' }
+
+export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
+  collaborators: {
+    user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
+    accepted: boolean
+  }[]
+  files: ProjectFile[]
+  /** Whether the caller follows this project's updates. */
+  following?: boolean
+  /** Owner only: how many people follow it. */
+  followerCount?: number
+}
+
+/** The fields a project form writes. `null` clears a field. */
+export type ProjectFields = {
+  title: string
+  pitch: string | null
+  description: string
+  type: ProjectType | null
+  status: ProjectStatus | null
+  tags: string[]
+  visibility: Visibility
 }
 
 export type ProfileUser = {
@@ -74,36 +117,102 @@ export type ProfileUser = {
   classYear?: number
   bio?: string
   avatarUrl?: string
+  openTo?: string[]
+  websiteUrl?: string | null
+  githubUrl?: string | null
+  linkedinUrl?: string | null
+  courses?: string[]
+  allowMessages?: boolean
   createdAt: string
-  _count: { ownedProjects: number; followers: number; following: number }
+  _count: { ownedProjects: number; followers: number; following: number; collaborations: number }
+}
+
+/** A collection as a list shows it: a few covers and how many projects this reader can see. */
+export type CollectionSummary = {
+  id: string
+  title: string
+  description?: string | null
+  owner: Pick<User, 'id' | 'name' | 'avatarUrl' | 'campus'>
+  createdAt: string
+  updatedAt: string
+  projectCount: number
+  preview: Pick<ProjectSummary, 'id' | 'title' | 'type' | 'coverUrl'>[]
+}
+
+export type CollectionDetail = Omit<CollectionSummary, 'preview'> & { projects: ProjectSummary[] }
+
+/** One of the caller's collections, for the "Add to collection" menu. */
+export type MyCollection = { id: string; title: string; projectCount: number; hasProject: boolean }
+
+export type ChatPerson = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
+
+export type Conversation = {
+  user: ChatPerson
+  lastMessage: { id: string; body: string; fromMe: boolean; createdAt: string }
+  unread: number
+}
+
+export type Message = {
+  id: string
+  senderId: string
+  body: string
+  fromMe: boolean
+  createdAt: string
+  readAt?: string | null
+}
+
+export type Thread = {
+  user: ChatPerson
+  canMessage: boolean
+  hasMore: boolean
+  messages: Message[]
+}
+
+/** What "Start from a link" fills the post form with. */
+export type ImportedLink = {
+  url: string
+  title?: string
+  pitch?: string
+  description?: string
+  type?: ProjectType
+  tags: string[]
+  links: { label: string; url: string }[]
+  image?: { name: string; contentType: string; dataBase64: string }
 }
 
 export type ProjectVersion = {
   id: string
   projectId: string
   versionNum: number
+  /** What changed — the line the Updates timeline shows. */
+  note?: string | null
   title: string
   description?: string
   tags: string[]
   createdAt: string
 }
 
+type Person = Pick<User, 'id' | 'name' | 'avatarUrl'> & { faculty?: string }
+
+/** GET /projects/:id/analytics — the owner's own numbers. */
 export type Analytics = {
+  /** Unique viewers per day, summed. */
   totalViews: number
-  likes: number
   comments: number
   forks: number
+  /** How many people saved it — never who. */
+  saves: number
+  /** How many people follow its updates. */
+  followers: number
   /** Two adjacent weeks, so "quiet" reads differently from "slowing down". */
   viewsThisWeek: number
   viewsLastWeek: number
-  /** Who liked it, most recent first — a view is anonymous, a like is not. */
-  recentLikes: { user: Pick<User, 'id' | 'name' | 'avatarUrl'>; createdAt: string }[]
   reactions: Record<ReactionKind, number>
+  /** Who wants to collaborate — the one list only the owner sees. */
+  collabInterest: { user: Person; createdAt: string }[]
+  recentReactions: { user: Person; kind: ReactionKind; createdAt: string }[]
   dailyViews: { date: string; count: number }[]
 }
-
-/** Tally of every reaction kind — zeroes included — plus this caller's own. */
-export type Reactions = { counts: Record<ReactionKind, number>; mine: ReactionKind[] }
 
 /** Why one project reached this student's feed. See routes/feed.ts. */
 export type FeedReason =
@@ -114,14 +223,18 @@ export type FeedReason =
 
 export type FeedItem = { project: ProjectSummary; reason: FeedReason }
 
-/** A week of engagement on the student's own work, for the top of the feed. */
+/** The feed's tabs. `all` is the blended feed. */
+export type FeedScope = 'all' | 'following' | 'campus' | 'program'
+
+/** A week of engagement on the student's own work. */
 export type FeedActivity = {
   projectCount: number
   views: number
   previousViews: number
-  likes: number
   comments: number
   reactions: number
+  /** Of this week's reactions, how many were offers to collaborate. */
+  collabRequests: number
   recentComments: {
     id: string
     body: string
@@ -129,12 +242,32 @@ export type FeedActivity = {
     user: Pick<User, 'id' | 'name' | 'avatarUrl'>
     project: { id: string; title: string }
   }[]
-  recentLikes: {
+  recentReactions: {
+    kind: ReactionKind
     createdAt: string
     user: Pick<User, 'id' | 'name' | 'avatarUrl'>
     project: { id: string; title: string }
   }[]
 }
+
+/** GET /projects/facets — the counts Explore and the rails show. */
+export type Facets = {
+  faculties: Record<string, number>
+  courses: { code: string; count: number }[]
+  tagsThisWeek: { tag: string; count: number; course: boolean }[]
+  types: Partial<Record<ProjectType, number>>
+  helpWanted: number
+}
+
+/** GET /spotlight — a moderator's pick, or this week's most active project. */
+export type Spotlight = {
+  curated: boolean
+  note: string | null
+  weekOf: string
+  project: ProjectSummary | null
+}
+
+export type UpcomingEvent = OrgActivity & { org: { slug: string; name: string; campus?: Campus } }
 
 export type AccessRequest = {
   projectId: string
@@ -180,13 +313,11 @@ export type OrgDetail = Org & {
   projects: {
     orgId: string
     projectId: string
-    project: Pick<Project, 'id' | 'title' | 'description'> & {
+    project: Pick<Project, 'id' | 'title' | 'pitch' | 'description'> & {
       owner: Pick<User, 'id' | 'name'>
-      _count: { likes: number; comments: number }
+      _count: { comments: number; reactions: number }
     }
   }[]
-  /** Members only. */
-  storage?: OrgStorage
 }
 
 /** A group awaiting a decision, as the admin queue sees it. */
@@ -195,9 +326,8 @@ export type AdminOrg = Org & {
   _count: { members: number; projects: number; activities: number }
 }
 
-export type OrgDecision = 'APPROVE' | 'REQUEST_INFO' | 'DENY'
-
-export type OrgStorage = { quotaBytes: number; usedBytes: number }
+/** For a group left over from the old self-serve verification flow. */
+export type OrgDecision = 'APPROVE' | 'DENY'
 
 /** A report as the moderation queue sees it — reporter and project inlined. */
 export type AdminReport = {
@@ -222,6 +352,22 @@ export type AdminReport = {
 
 export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
 
+/** A week's spotlight pick, as the moderation page lists them. */
+export type AdminSpotlight = {
+  id: string
+  projectId: string
+  weekOf: string
+  note?: string | null
+  createdAt: string
+  project: {
+    id: string
+    title: string
+    visibility: Visibility
+    owner: { id: string; name: string }
+  }
+  pickedBy?: { id: string; name: string } | null
+}
+
 /** What `/discover` understood the query to mean. Every field may be null. */
 export type DiscoverFilters = {
   search: string | null
@@ -232,67 +378,88 @@ export type DiscoverFilters = {
   within: 'month' | 'term' | 'year' | null
 }
 
+const paged = (path: string, skip?: number) => (skip ? `${path}?skip=${skip}` : path)
+
 export const api = {
   auth: {
     me: () => request<MeUser>('/auth/me'),
     logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
     login: (body: { email: string; password: string }) =>
-      request<{ id: string; email: string; name: string }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
+      request<{ id: string; email: string; name: string }>('/auth/login', post(body)),
     register: (body: { name: string; email: string; password: string }) =>
-      request<{ id: string; email: string; name: string }>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
+      request<{ id: string; email: string; name: string }>('/auth/register', post(body)),
   },
   projects: {
-    list: (params?: { search?: string; faculty?: string; campus?: string; sort?: string; skip?: number }) => {
+    list: (params?: {
+      search?: string
+      faculty?: string
+      campus?: string
+      type?: ProjectType
+      status?: ProjectStatus
+      sort?: 'new' | 'trending'
+      skip?: number
+      /** Page size; the API defaults to 20 and caps at 50. */
+      take?: number
+    }) => {
       const q = new URLSearchParams()
-      if (params?.search) q.set('search', params.search)
-      if (params?.faculty) q.set('faculty', params.faculty)
-      if (params?.campus) q.set('campus', params.campus)
-      if (params?.sort) q.set('sort', params.sort)
-      if (params?.skip) q.set('skip', String(params.skip))
+      for (const [key, value] of Object.entries(params ?? {})) {
+        if (value !== undefined && value !== '' && value !== 0) q.set(key, String(value))
+      }
       return request<ProjectSummary[]>(`/projects?${q}`)
     },
+    facets: () => request<Facets>('/projects/facets'),
     get: (id: string) => request<ProjectDetail>(`/projects/${id}`),
-    create: (body: { title: string; description?: string; tags?: string[]; visibility?: string; links?: { label: string; url: string }[] }) =>
-      request<ProjectDetail>('/projects', { method: 'POST', body: JSON.stringify(body) }),
-    update: (id: string, body: Partial<{ title: string; description: string; tags: string[]; visibility: string }>) =>
-      request<ProjectDetail>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    create: (
+      body: Partial<ProjectFields> & { title: string; links?: { label: string; url: string }[] }
+    ) => request<ProjectSummary>('/projects', post(body)),
+    update: (id: string, body: Partial<ProjectFields>) =>
+      request<ProjectSummary>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     delete: (id: string) => request<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
-    like: (id: string) => request<{ liked: boolean }>(`/projects/${id}/like`, { method: 'POST' }),
-    likedByMe: (id: string) => request<{ liked: boolean }>(`/projects/${id}/likes/me`),
-    pin: (id: string) => request<{ pinned: boolean }>(`/projects/${id}/pin`, { method: 'POST', body: '{}' }),
-    reactions: (id: string) => request<Reactions>(`/projects/${id}/reactions`),
+    save: (id: string) => request<{ saved: boolean }>(`/projects/${id}/save`, post()),
+    followUpdates: (id: string) =>
+      request<{ following: boolean }>(`/projects/${id}/follow`, post()),
+    importLink: (url: string) => request<ImportedLink>('/projects/import', post({ url })),
+    pin: (id: string) => request<{ pinned: boolean }>(`/projects/${id}/pin`, post()),
     react: (id: string, kind: ReactionKind) =>
-      request<{ kind: ReactionKind; reacted: boolean }>(`/projects/${id}/reactions`, {
-        method: 'POST',
-        body: JSON.stringify({ kind }),
-      }),
-    comments: (id: string) => request<Comment[]>(`/projects/${id}/comments`),
-    addComment: (id: string, body: string) =>
-      request<Comment>(`/projects/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+      request<{ kind: ReactionKind; reacted: boolean }>(
+        `/projects/${id}/reactions`,
+        post({ kind })
+      ),
+    comments: (id: string) => request<CommentThread[]>(`/projects/${id}/comments`),
+    addComment: (id: string, body: string, parentId?: string) =>
+      request<CommentThread>(`/projects/${id}/comments`, post({ body, parentId })),
+    helpful: (id: string, commentId: string) =>
+      request<{ helpful: boolean; helpfulCount: number }>(
+        `/projects/${id}/comments/${commentId}/helpful`,
+        post()
+      ),
     addLink: (id: string, link: { label: string; url: string }) =>
-      request<ProjectLink>(`/projects/${id}/links`, { method: 'POST', body: JSON.stringify(link) }),
+      request<ProjectLink>(`/projects/${id}/links`, post(link)),
     deleteLink: (id: string, linkId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/links/${linkId}`, { method: 'DELETE' }),
     inviteCollaborator: (id: string, email: string) =>
-      request<unknown>(`/projects/${id}/collaborators`, { method: 'POST', body: JSON.stringify({ email }) }),
+      request<unknown>(`/projects/${id}/collaborators`, post({ email })),
     versions: (id: string) => request<ProjectVersion[]>(`/projects/${id}/versions`),
-    createVersion: (id: string) => request<ProjectVersion>(`/projects/${id}/versions`, { method: 'POST', body: '{}' }),
-    fork: (id: string) => request<ProjectDetail>(`/projects/${id}/fork`, { method: 'POST', body: '{}' }),
+    /** A snapshot; with a note it is also an update on the project's timeline. */
+    createVersion: (id: string, note?: string) =>
+      request<ProjectVersion>(`/projects/${id}/versions`, post({ note })),
+    fork: (id: string) => request<ProjectSummary>(`/projects/${id}/fork`, post()),
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
-    requestAccess: (id: string) => request<{ ok: boolean }>(`/projects/${id}/request-access`, { method: 'POST', body: '{}' }),
+    requestAccess: (id: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/request-access`, post()),
     accessRequests: (id: string) => request<AccessRequest[]>(`/projects/${id}/access-requests`),
     approveAccessRequest: (id: string, userId: string) =>
-      request<unknown>(`/projects/${id}/collaborators/${userId}`, { method: 'PATCH', body: JSON.stringify({ accepted: true }) }),
+      request<unknown>(`/projects/${id}/collaborators/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ accepted: true }),
+      }),
     // Same endpoint, answered by the invitee about themselves rather than by
     // the owner about a requester.
     respondToInvite: (id: string, myUserId: string, accepted: boolean) =>
-      request<unknown>(`/projects/${id}/collaborators/${myUserId}`, { method: 'PATCH', body: JSON.stringify({ accepted }) }),
+      request<unknown>(`/projects/${id}/collaborators/${myUserId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ accepted }),
+      }),
     removeCollaborator: (id: string, userId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/collaborators/${userId}`, { method: 'DELETE' }),
     uploadFile: (id: string, file: File) => {
@@ -302,19 +469,26 @@ export const api = {
     },
     deleteFile: (id: string, fileId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
-    downloadUrl: (id: string, fileId: string) => `${API_URL}/projects/${id}/files/${fileId}/download`,
+    downloadUrl: (id: string, fileId: string) =>
+      `${API_URL}/projects/${id}/files/${fileId}/download`,
     filePreview: (id: string, fileId: string) =>
       request<FilePreview>(`/projects/${id}/files/${fileId}/preview`),
     report: (id: string, body: { reason: ReportReason; details?: string }) =>
-      request<{ id: string; status: ReportStatus }>(`/projects/${id}/report`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
+      request<{ id: string; status: ReportStatus }>(`/projects/${id}/report`, post(body)),
   },
   feed: {
-    list: (params?: { skip?: number }) =>
-      request<{ items: FeedItem[] }>(`/feed${params?.skip ? `?skip=${params.skip}` : ''}`),
+    list: (params?: { skip?: number; scope?: FeedScope; campus?: string; type?: ProjectType }) => {
+      const q = new URLSearchParams()
+      if (params?.skip) q.set('skip', String(params.skip))
+      if (params?.scope && params.scope !== 'all') q.set('scope', params.scope)
+      if (params?.campus) q.set('campus', params.campus)
+      if (params?.type) q.set('type', params.type)
+      return request<{ items: FeedItem[] }>(`/feed?${q}`)
+    },
     activity: () => request<FeedActivity>('/feed/activity'),
+  },
+  spotlight: {
+    current: () => request<Spotlight>('/spotlight'),
   },
   discover: {
     search: (q: string) =>
@@ -326,12 +500,21 @@ export const api = {
     reports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminReport[]>(`/admin/reports?status=${status}`),
     decide: (id: string, body: { decision: ReportDecision; note?: string }) =>
-      request<AdminReport>(`/admin/reports/${id}/decision`, { method: 'POST', body: JSON.stringify(body) }),
-    orgs: (status: OrgStatus | 'all' = 'IN_REVIEW') => request<AdminOrg[]>(`/admin/orgs?status=${status}`),
+      request<AdminReport>(`/admin/reports/${id}/decision`, post(body)),
+    orgs: (status: OrgStatus | 'all' = 'IN_REVIEW') =>
+      request<AdminOrg[]>(`/admin/orgs?status=${status}`),
     decideOrg: (slug: string, body: { decision: OrgDecision; note?: string }) =>
-      request<AdminOrg>(`/admin/orgs/${slug}/decision`, { method: 'POST', body: JSON.stringify(body) }),
+      request<AdminOrg>(`/admin/orgs/${slug}/decision`, post(body)),
+    spotlights: () => request<AdminSpotlight[]>('/admin/spotlight'),
+    pickSpotlight: (body: { projectId: string; note?: string; weekOf?: string }) =>
+      request<AdminSpotlight>('/admin/spotlight', post(body)),
+    clearSpotlight: (weekOf: string) =>
+      request<{ ok: boolean }>(`/admin/spotlight/${encodeURIComponent(weekOf)}`, {
+        method: 'DELETE',
+      }),
   },
   orgs: {
+    upcoming: (take = 3) => request<UpcomingEvent[]>(`/orgs/events/upcoming?take=${take}`),
     list: (params?: { campus?: string }) =>
       request<Org[]>(`/orgs${params?.campus ? `?campus=${params.campus}` : ''}`),
     get: (slug: string) => request<OrgDetail>(`/orgs/${slug}`),
@@ -344,46 +527,67 @@ export const api = {
       websiteUrl?: string
       discordUrl?: string
       groupMeUrl?: string
-      contactEmail: string
-      contactRole: string
-    }) => request<Org>('/orgs', { method: 'POST', body: JSON.stringify(body) }),
+      contactEmail?: string
+      contactRole?: string
+      /** Moderators only: the exec's email; they become the group's admin. */
+      execEmail?: string
+    }) => request<Org>('/orgs', post(body)),
     update: (
       slug: string,
-      body: Partial<{ description: string; campus: string; websiteUrl: string; discordUrl: string; groupMeUrl: string }>
-    ) =>
-      request<Org>(`/orgs/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    verify: (slug: string, note: string) =>
-      request<Org>(`/orgs/${slug}/verify`, { method: 'POST', body: JSON.stringify({ note }) }),
+      body: Partial<{
+        description: string
+        campus: string
+        websiteUrl: string
+        discordUrl: string
+        groupMeUrl: string
+      }>
+    ) => request<Org>(`/orgs/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
     activities: (slug: string) => request<OrgActivity[]>(`/orgs/${slug}/activities`),
     addActivity: (
       slug: string,
       body: { title: string; description?: string; date?: string; link?: string; imageUrl?: string }
-    ) => request<OrgActivity>(`/orgs/${slug}/activities`, { method: 'POST', body: JSON.stringify(body) }),
+    ) => request<OrgActivity>(`/orgs/${slug}/activities`, post(body)),
     deleteActivity: (slug: string, id: string) =>
       request<{ ok: boolean }>(`/orgs/${slug}/activities/${id}`, { method: 'DELETE' }),
     addProject: (slug: string, projectId: string) =>
-      request<unknown>(`/orgs/${slug}/projects`, { method: 'POST', body: JSON.stringify({ projectId }) }),
+      request<unknown>(`/orgs/${slug}/projects`, post({ projectId })),
+    removeProject: (slug: string, projectId: string) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/projects/${projectId}`, { method: 'DELETE' }),
     addMember: (slug: string, email: string) =>
-      request<unknown>(`/orgs/${slug}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
+      request<unknown>(`/orgs/${slug}/members`, post({ email })),
   },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
     projects: (id: string, params?: { skip?: number }) =>
-      request<ProjectSummary[]>(`/users/${id}/projects${params?.skip ? `?skip=${params.skip}` : ''}`),
+      request<ProjectSummary[]>(paged(`/users/${id}/projects`, params?.skip)),
     pinned: (id: string) => request<ProjectSummary[]>(`/users/${id}/pinned`),
+    /** Projects this person is credited on without owning. */
+    collaborations: (id: string, params?: { skip?: number }) =>
+      request<ProjectSummary[]>(paged(`/users/${id}/collaborations`, params?.skip)),
+    /** Verified groups the caller belongs to — what a project can be linked to. */
+    myOrgs: () => request<(OrgRef & { id: string })[]>('/users/me/orgs'),
+    /** The caller's own saved projects. */
+    saved: (params?: { skip?: number }) =>
+      request<ProjectSummary[]>(paged('/users/me/saved', params?.skip)),
     updateMe: (
       body: Partial<{
         name: string
+        // Empty string clears it, which is why these are not narrower types.
         faculty: string
-        // Empty string clears it back to unstated, which is why this is not Campus.
         campus: string
         program: string
         classYear: number
         bio: string
+        openTo: string[]
+        websiteUrl: string | null
+        githubUrl: string | null
+        linkedinUrl: string | null
+        courses: string[]
+        allowMessages: boolean
       }>
-    ) =>
-      request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
-    follow: (id: string) => request<{ following: boolean }>(`/users/${id}/follow`, { method: 'POST' }),
+    ) => request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
+    follow: (id: string) =>
+      request<{ following: boolean }>(`/users/${id}/follow`, { method: 'POST' }),
     followingMe: (id: string) => request<{ following: boolean }>(`/users/${id}/follow/me`),
     uploadAvatar: (file: File) => {
       const form = new FormData()
@@ -392,10 +596,48 @@ export const api = {
     },
     deleteAvatar: () => request<{ ok: boolean }>('/users/me/avatar', { method: 'DELETE' }),
   },
+  collections: {
+    list: (params?: { owner?: string; take?: number; skip?: number }) => {
+      const q = new URLSearchParams()
+      if (params?.owner) q.set('owner', params.owner)
+      if (params?.take) q.set('take', String(params.take))
+      if (params?.skip) q.set('skip', String(params.skip))
+      const qs = q.toString()
+      return request<CollectionSummary[]>(`/collections${qs ? `?${qs}` : ''}`)
+    },
+    get: (id: string) => request<CollectionDetail>(`/collections/${id}`),
+    mine: (projectId?: string) =>
+      request<MyCollection[]>(
+        `/collections/mine${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`
+      ),
+    create: (body: { title: string; description?: string; projectId?: string }) =>
+      request<CollectionSummary>('/collections', post(body)),
+    update: (id: string, body: { title?: string; description?: string | null }) =>
+      request<CollectionSummary>(`/collections/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    delete: (id: string) => request<{ ok: boolean }>(`/collections/${id}`, { method: 'DELETE' }),
+    add: (id: string, projectId: string) =>
+      request<{ ok: boolean }>(`/collections/${id}/items`, post({ projectId })),
+    remove: (id: string, projectId: string) =>
+      request<{ ok: boolean }>(`/collections/${id}/items/${projectId}`, { method: 'DELETE' }),
+  },
+  messages: {
+    conversations: () => request<Conversation[]>('/messages'),
+    unread: () => request<{ count: number }>('/messages/unread'),
+    thread: (userId: string, before?: string) =>
+      request<Thread>(
+        `/messages/${userId}${before ? `?before=${encodeURIComponent(before)}` : ''}`
+      ),
+    send: (userId: string, body: string) => request<Message>(`/messages/${userId}`, post({ body })),
+  },
   notifications: {
-    list: () => request<{ notifications: Notification[]; unreadCount: number }>('/users/me/notifications'),
-    markRead: (id: string) => request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, { method: 'POST', body: '{}' }),
-    markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', { method: 'POST', body: '{}' }),
+    list: () =>
+      request<{ notifications: Notification[]; unreadCount: number }>('/users/me/notifications'),
+    markRead: (id: string) =>
+      request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, post()),
+    markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', post()),
   },
 }
 
@@ -408,7 +650,9 @@ export function safeUrl(raw: string | undefined | null): string | undefined {
   if (!raw) return undefined
   try {
     const parsed = new URL(raw, window.location.origin)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.toString()
+      : undefined
   } catch {
     return undefined
   }
