@@ -90,6 +90,8 @@ enum NotificationType {
   /// "Want to collab" — sent privately to the owner, once per person per
   /// project. The public reaction count says how many; only this says who.
   PROJECT_COLLAB_INTEREST
+  /// Somebody replied to your comment.
+  COMMENT_REPLIED
 }
 
 /// The three reactions on a project — the app's only public engagement
