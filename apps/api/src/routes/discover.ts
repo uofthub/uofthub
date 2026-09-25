@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
+import type { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
 import { EMPTY_FILTERS, parseQuery, windowStart, type DiscoverFilters } from '../lib/discovery.js'
-import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
+import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
+import { trendingIds } from '../lib/trending.js'
 import { parseCampus } from '../lib/campus.js'
 import { searchProjectIds } from '../lib/search.js'
 import { bySession } from '../lib/rateLimit.js'
@@ -42,29 +44,43 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
       // "matches" means and neither falls back to a sequential scan.
       const matchedIds = interpreted.search ? await searchProjectIds(interpreted.search) : null
 
-      const projects = await db.project.findMany({
+      const where: Prisma.ProjectWhereInput = {
         // AND-composed: the visibility fragment is itself an OR, so spreading
         // another one alongside it would silently drop one of them. This route
         // is authenticated, so callerId is always set.
-        where: {
-          AND: [
-            visibleProjectWhere(request.user.sub),
-            ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
-            ...(interpreted.tag ? [{ tags: { has: interpreted.tag } }] : []),
-            ...(interpreted.faculty
-              ? [{ owner: { faculty: { contains: interpreted.faculty, mode: 'insensitive' as const } } }]
-              : []),
-            ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
-            ...(since ? [{ createdAt: { gte: since } }] : []),
-          ],
-        },
-        include: CARD_INCLUDE,
-        orderBy:
-          interpreted.sort === 'trending'
-            ? [{ viewCount: 'desc' as const }, { createdAt: 'desc' as const }]
-            : [{ createdAt: 'desc' as const }],
-        take: 20,
-      })
+        AND: [
+          visibleProjectWhere(request.user.sub),
+          ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
+          ...(interpreted.tag ? [{ tags: { has: interpreted.tag } }] : []),
+          ...(interpreted.faculty
+            ? [
+                {
+                  owner: {
+                    faculty: { contains: interpreted.faculty, mode: 'insensitive' as const },
+                  },
+                },
+              ]
+            : []),
+          ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
+          ...(since ? [{ createdAt: { gte: since } }] : []),
+        ],
+      }
+      // Trending is this week's activity, the same ranking /projects uses.
+      const projects =
+        interpreted.sort === 'trending'
+          ? await (async () => {
+              const ids = await trendingIds(where, { skip: 0, take: 20 })
+              return inOrder(
+                await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE }),
+                ids
+              )
+            })()
+          : await db.project.findMany({
+              where,
+              include: CARD_INCLUDE,
+              orderBy: [{ createdAt: 'desc' }],
+              take: 20,
+            })
 
       return {
         // The client shows this back as chips: a student who sees "faculty:

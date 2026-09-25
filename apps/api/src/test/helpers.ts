@@ -92,6 +92,11 @@ export async function createProject(
      */
     publishedAt?: Date | null
     viewCount?: number
+    /**
+     * Unique views recorded today — what trending ranks by. `viewCount` alone
+     * is the owner's lifetime total and no longer moves a ranking.
+     */
+    recentViews?: number
     type?: ProjectType
     status?: ProjectStatus
     pitch?: string
@@ -117,9 +122,16 @@ export async function createProject(
       tags: overrides.tags ?? [],
       visibility,
       publishedAt: published,
-      viewCount: overrides.viewCount ?? 0,
+      viewCount: overrides.viewCount ?? overrides.recentViews ?? 0,
     },
   })
+  if (overrides.recentViews) {
+    const date = new Date()
+    date.setUTCHours(0, 0, 0, 0)
+    await db.projectDailyView.create({
+      data: { projectId: project.id, date, count: overrides.recentViews },
+    })
+  }
   return project
 }
 

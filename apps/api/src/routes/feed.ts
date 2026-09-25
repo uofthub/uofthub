@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Campus, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
-import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
+import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
+import { trendingIds } from '../lib/trending.js'
 import { startOfUtcDay } from '../lib/dates.js'
 
 /**
@@ -161,16 +162,15 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       const trendingSkip = skip < connectedTotal ? 0 : skip - connectedTotal
       const trendingTake = take - connected.length
 
-      const trending =
-        trendingTake > 0
-          ? await db.project.findMany({
-              where: trendingWhere,
-              include: CARD_INCLUDE,
-              orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
-              skip: trendingSkip,
-              take: trendingTake,
-            })
-          : []
+      // Ranked by this week's activity (lib/trending.ts), not all-time views.
+      let trending: typeof connected = []
+      if (trendingTake > 0) {
+        const ids = await trendingIds(trendingWhere, { skip: trendingSkip, take: trendingTake })
+        trending = inOrder(
+          await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE }),
+          ids
+        )
+      }
 
       const projects = await decorate([...connected, ...trending], userId)
 

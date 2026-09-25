@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
+import type { Prisma, ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
 import { db } from '../db/client.js'
 import {
   canViewProject,
@@ -23,8 +23,10 @@ import {
   REACTION_KINDS,
   decorate,
   emptyReactions,
+  inOrder,
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
+import { trendingIds } from '../lib/trending.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -137,30 +139,36 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const matchedIds = search ? await searchProjectIds(search) : null
     const callerId = await getOptionalUserId(request)
 
-    const orderBy =
-      sort === 'trending'
-        ? [{ viewCount: 'desc' as const }, { createdAt: 'desc' as const }]
-        : [{ createdAt: 'desc' as const }]
-
-    const projects = await db.project.findMany({
+    const where: Prisma.ProjectWhereInput = {
       // AND-composed: the visibility fragment uses OR internally, so spreading
       // another condition alongside it would silently drop one of them.
-      where: {
-        AND: [
-          visibleProjectWhere(callerId),
-          ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
-          ...(faculty
-            ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
-            : []),
-          ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
-          ...(type ? [{ type }] : []),
-          ...(status ? [{ status }] : []),
-        ],
-      },
+      AND: [
+        visibleProjectWhere(callerId),
+        ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
+        ...(faculty
+          ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
+          : []),
+        ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
+        ...(type ? [{ type }] : []),
+        ...(status ? [{ status }] : []),
+      ],
+    }
+    const page = {
+      take: Math.min(Math.max(Number(take) || 20, 1), 50),
+      skip: Math.max(Number(skip) || 0, 0),
+    }
+
+    if (sort === 'trending') {
+      const ids = await trendingIds(where, page)
+      const rows = await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE })
+      return decorate(inOrder(rows, ids), callerId)
+    }
+
+    const projects = await db.project.findMany({
+      where,
       include: CARD_INCLUDE,
-      orderBy,
-      take: Math.min(Number(take), 50),
-      skip: Number(skip),
+      orderBy: [{ createdAt: 'desc' }],
+      ...page,
     })
     return decorate(projects, callerId)
   })

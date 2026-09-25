@@ -46,7 +46,11 @@ describe('GET /feed', () => {
     const me = await createUser()
     const classmate = await createUser()
     await createProject(me.id, { title: 'my csc343 work', visibility: 'PUBLIC', tags: ['CSC343'] })
-    await createProject(classmate.id, { title: 'their csc343 work', visibility: 'PUBLIC', tags: ['CSC343'] })
+    await createProject(classmate.id, {
+      title: 'their csc343 work',
+      visibility: 'PUBLIC',
+      tags: ['CSC343'],
+    })
 
     const body = (await feed(me)).json()
 
@@ -100,8 +104,8 @@ describe('GET /feed', () => {
     // page is the worst thing it could be shown.
     const me = await createUser()
     const stranger = await createUser()
-    await createProject(stranger.id, { title: 'quiet', visibility: 'PUBLIC', viewCount: 1 })
-    await createProject(stranger.id, { title: 'popular', visibility: 'PUBLIC', viewCount: 99 })
+    await createProject(stranger.id, { title: 'quiet', visibility: 'PUBLIC', recentViews: 1 })
+    await createProject(stranger.id, { title: 'popular', visibility: 'PUBLIC', recentViews: 99 })
 
     const body = (await feed(me)).json()
 
@@ -113,7 +117,7 @@ describe('GET /feed', () => {
     const me = await createUser()
     const followed = await createUser()
     await db.follow.create({ data: { followerId: me.id, followingId: followed.id } })
-    await createProject(followed.id, { title: 'only one', visibility: 'PUBLIC', viewCount: 500 })
+    await createProject(followed.id, { title: 'only one', visibility: 'PUBLIC', recentViews: 500 })
 
     const body = (await feed(me)).json()
     expect(titles(body)).toEqual(['only one'])
@@ -149,7 +153,11 @@ describe('GET /feed', () => {
   it('honours visibility — a stranger’s private project never reaches the feed', async () => {
     const me = await createUser()
     const stranger = await createUser()
-    await createProject(stranger.id, { title: 'secret', visibility: 'PRIVATE', publishedAt: new Date() })
+    await createProject(stranger.id, {
+      title: 'secret',
+      visibility: 'PRIVATE',
+      publishedAt: new Date(),
+    })
 
     expect(titles((await feed(me)).json())).toEqual([])
   })
@@ -161,7 +169,10 @@ describe('GET /feed', () => {
     await db.follow.create({ data: { followerId: me.id, followingId: followed.id } })
 
     const old = await createProject(followed.id, { title: 'drafted first', visibility: 'PUBLIC' })
-    const recent = await createProject(followed.id, { title: 'drafted second', visibility: 'PUBLIC' })
+    const recent = await createProject(followed.id, {
+      title: 'drafted second',
+      visibility: 'PUBLIC',
+    })
     await db.project.update({
       where: { id: old.id },
       data: { publishedAt: new Date('2026-03-01T00:00:00Z') },
@@ -180,9 +191,9 @@ describe('GET /feed', () => {
     const stranger = await createUser()
     await db.follow.create({ data: { followerId: me.id, followingId: followed.id } })
     await createProject(followed.id, { title: 'connected', visibility: 'PUBLIC' })
-    // A view count rather than relying on publish order: both are stamped with
+    // Recent views rather than relying on publish order: both are stamped with
     // `new Date()` and can land in the same millisecond.
-    await createProject(stranger.id, { title: 'trending', visibility: 'PUBLIC', viewCount: 10 })
+    await createProject(stranger.id, { title: 'trending', visibility: 'PUBLIC', recentViews: 10 })
 
     const first = (await feed(me, '?take=1')).json()
     const second = (await feed(me, '?take=1&skip=1')).json()
@@ -205,11 +216,15 @@ describe('GET /feed', () => {
 
     for (let i = 0; i < 3; i++) {
       await createProject(followed.id, { title: `followed ${i}`, visibility: 'PUBLIC' })
-      await createProject(stranger.id, { title: `stranger ${i}`, visibility: 'PUBLIC', viewCount: 10 - i })
+      await createProject(stranger.id, {
+        title: `stranger ${i}`,
+        visibility: 'PUBLIC',
+        recentViews: 10 - i,
+      })
     }
 
-    const pages = await Promise.all([0, 2, 4].map(skip => feed(me, `?take=2&skip=${skip}`)))
-    const seen = pages.flatMap(res => titles(res.json()))
+    const pages = await Promise.all([0, 2, 4].map((skip) => feed(me, `?take=2&skip=${skip}`)))
+    const seen = pages.flatMap((res) => titles(res.json()))
 
     expect(seen).toHaveLength(6)
     expect(new Set(seen).size).toBe(6)
