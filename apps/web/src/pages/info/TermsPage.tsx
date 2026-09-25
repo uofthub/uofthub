@@ -108,6 +108,13 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           </li>
         </ul>
         <p>
+          A conversation can be reported from its <strong>⋯</strong> menu once the other person has
+          messaged you. The report carries the last 30 messages between you, and blocks them unless
+          you say otherwise. A moderator can dismiss it, warn the sender, or{' '}
+          <strong>suspend their messaging</strong> — they can still read their conversations but
+          cannot send until a moderator lifts it.
+        </p>
+        <p>
           Reporting in bad faith — to bury a competitor's project or harass its owner — is itself a
           violation. If a decision on your project is wrong, email{' '}
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and a human will look at it again.

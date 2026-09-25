@@ -31,6 +31,10 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             comments, group pages and activities.
           </li>
           <li>
+            <strong>Your messages</strong> — direct messages you send and receive, and the people
+            you have blocked.
+          </li>
+          <li>
             <strong>What you do here</strong> — likes, follows, collaborator invitations, access
             requests, and a per-day count of views on each project, so owners can see interest over
             time.
@@ -81,6 +85,11 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           Your name, profile and public projects are visible to anyone. Your email address is not
           shown on your profile; it is visible to a project owner when you request access to their
           project, and to moderators reviewing a report.
+        </p>
+        <p>
+          A direct message is seen by you and the person you wrote to. If either of you reports the
+          conversation, the last 30 messages between you are sent to moderators with the report.
+          Blocking someone is never shown to them.
         </p>
       </>
     ),
