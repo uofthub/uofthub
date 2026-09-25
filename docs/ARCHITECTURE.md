@@ -40,6 +40,10 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | program | string | |
 | class_year | int | |
 | bio | string? | |
+| open_to | string[] | "Open to" chips, up to six short items |
+| website_url, github_url, linkedin_url | string? | http(s) only; GitHub and LinkedIn must point at those hosts (`lib/url.ts`) |
+| courses | string[] | course codes the student takes; added to the feed's course affinity |
+| allow_messages | bool | false stops new conversations, never replies |
 | avatar_url | string? | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage) |
 | avatar_key | string? | R2 object key when the avatar lives in our bucket; internal, never sent to the client |
 | avatar_is_custom | bool | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it |
@@ -60,6 +64,15 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
+### ProjectFollow
+Private "tell me about updates" on a project: (user, project). A version saved with a note notifies followers who can still see the project.
+
+### Collection / CollectionItem
+A curator's titled set of projects. Readable by anyone; the projects in it are always filtered by the reader's own visibility, and only PUBLIC/UOFT projects can be added. See [redesign.md](redesign.md#what-used-to-be-coming-soon).
+
+### Message
+One direct message (sender, recipient, body, read_at). A conversation is just the messages between two people.
+
 ### ProjectCollaborator
 | Field | Type | Notes |
 |---|---|---|
@@ -73,7 +86,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 |---|---|---|
 | id | uuid | |
 | project_id | uuid | |
-| org_id | uuid? | the group these bytes are billed to, stamped at upload; null means the uploader's personal quota — see [File storage § group quotas](#limits--student-groups) |
+| org_id | uuid? | dormant — was the group a file was billed to under the retired group quotas; no longer written |
 | name | string | |
 | storage_key | string | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
 | size_bytes | int | |
@@ -103,14 +116,14 @@ Clubs and research labs. Full verification/storage/activity policy in [student-g
 | status | enum | `PENDING_VERIFICATION`, `IN_REVIEW`, `INFO_REQUESTED`, `VERIFIED` |
 | contact_email | string? | where the verification decision is sent; required at creation |
 | contact_role | string? | the role the creator claims to hold, e.g. "president" |
-| verification_deadline | timestamp? | 7 days from creation/info-request; cleared on submission, auto-delete on expiry |
+| verification_deadline | timestamp? | dormant — from the retired self-serve verification flow; always null for groups created now |
 | verification_note | text? | the group's most recent verification submission |
 | review_note | text? | the admin's note back — what was missing, or why it was denied |
 | verified_at | timestamp? | when it was approved; the start point for term storage grants |
 | created_at | timestamp | |
 
 ### OrgStorageGrant
-One row per (group, academic term): the 10GB granted for that term. A ledger rather than a computed total, because allowances stack and the record of what was actually granted is the thing that has to survive.
+Dormant. It was one row per (group, academic term) for the retired per-term group storage allowance; the table is kept so the history survives, but nothing reads or writes it now that quotas are gone (see [redesign.md](redesign.md#student-groups-and-quotas)).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -131,7 +144,7 @@ A meeting, event, workshop or recap — lighter than a Project, rendered only on
 | description | text? | |
 | date | timestamp | defaults to now |
 | link | string? | http(s) only |
-| image_url | string? | http(s) only — a URL, not an upload, so an activity never bills anyone's quota |
+| image_url | string? | http(s) only — a URL, not an upload, so an activity is a lightweight post rather than a stored file |
 | created_at | timestamp | |
 
 ### Notification
@@ -262,25 +275,9 @@ Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a 
 | Per-file (docs/images) | 25MB |
 | Per-file (video) | 250MB — larger videos should be hosted externally (YouTube, etc.) and attached via `ProjectLink` instead of uploaded |
 | Per-file (archives) | 100MB |
-| Per-account storage quota | 2GB total, per person, indefinite |
 | Per-project file count | 20 files (soft cap) |
 
-The per-account quota does not reset annually or expire on graduation — it's tied to the person, not to an academic-year clock (there's no reliable way to tell an inactive alumnus from a currently-enrolled student, and alumni-persistent portfolios are already on the roadmap).
-
-**Limits — student groups**
-
-Clubs and research labs (the `Organization` model) are metered separately from individual accounts, since a group turns over executives and runs on a term-based rhythm rather than a person's indefinite timeline. Per-file type/size limits above still apply; only the total-quota scope differs:
-
-| Scope | Limit |
-|---|---|
-| Per-term storage allowance | 10GB, granted fresh each academic term and stacking with prior terms — nothing is deleted when a term rolls over |
-| Eligibility | Only `VERIFIED` groups get the group quota |
-
-A file is billed to a group when its project is linked to a `VERIFIED` group the uploader belongs to; the group is stamped on `ProjectFile.org_id` at upload rather than derived from the project's org links at read time, so quota already spent cannot move between accounts when links change later. A project linked to several groups bills the one it was linked to first. An unverified group has no allowance at all, so its files simply fall back to the uploader's personal 2GB — group membership never *reduces* what an individual can store.
-
-Term boundaries live in `lib/terms.ts` (Fall/Winter/Summer, computed in UTC, key like `2026F`) and grants are made by `pnpm --filter @uofthub/api grant-term-storage`, which is idempotent on (group, term). Approving a group grants its current term immediately, so a group verified in week 3 can upload without waiting for a term boundary.
-
-Full detail — the verification workflow gating that quota, the per-term stacking rule, and org-page activity publishing — is in [student-groups.md](student-groups.md).
+There is no per-account or per-group storage quota. The 2GB personal quota and the 10GB per-term group allowance were removed with the redesign — they were enforcement for a scale the platform hasn't reached, and the per-file limits and file-count cap above already bound what any one project can hold. When storage costs make a quota worth having again, it should be designed then against real usage, not restored from the old numbers. See [redesign.md](redesign.md#student-groups-and-quotas).
 
 All checks (type and size) run server-side against the actual file, not the client-declared extension or MIME type.
 
@@ -290,17 +287,20 @@ Same storage client and content-validation as project files, restricted to the `
 
 On a brand-new Microsoft sign-in, the account's Graph profile photo is synced in as the avatar automatically — best-effort, and never blocks sign-in if it fails or the account has no photo set. This only ever happens once, at signup: a student who has set their own avatar (`User.avatarIsCustom`) keeps it, and existing accounts linking Microsoft for the first time don't get resynced.
 
-### Requesting more space
+### Requesting more room
 
-A student or group that needs more than the default quota or file-count cap (e.g. a large research dataset, a media-heavy final project, or a club's term-end showcase) can contact the team stating why. Requests are reviewed manually and get a response within 2 business days; approved requests raise that account's or group's limits individually rather than raising the platform-wide default. This keeps defaults tight against misuse while not hard-blocking legitimate edge cases.
+A student or group that needs more than the per-file size or file-count cap (e.g. a large research dataset, or a video longer than 250MB) can contact the team stating why. Requests are reviewed manually; the usual answer for very large files is to host them externally and attach a link.
 
 **Abuse guardrails**
 
 - Rate-limit uploads per account (per minute/hour) to prevent scripted spam.
 - Server-side type/size validation on every upload, independent of client input.
-- Manual limit increases are per-account/per-group opt-in, not self-service, so quota can't be trivially bypassed.
 
 ---
+
+## Link import
+
+`POST /projects/import` is the only route where the server fetches a URL a user chose. `lib/linkImport.ts` resolves every hostname through a DNS lookup that refuses the connection if any address is private, loopback, link-local, CGNAT, multicast or otherwise not public — checked on the address actually dialled, so DNS rebinding cannot slip past a pre-check. IP literals are checked directly; only http(s) on ports 80/443; at most three redirects, each re-checked; a 6-second timeout and byte caps (768 KB HTML, 4 MB image). Images come back as bytes (PNG/JPEG/WebP/GIF, never SVG) and go through the normal upload validation when the project is posted. Rate-limited to 20 per 10 minutes per session.
 
 ## Search
 
@@ -316,16 +316,9 @@ Two consequences worth knowing: matching is by whole stemmed word plus prefix, s
 
 ## Scheduled jobs
 
-Two pieces of housekeeping run on a schedule. Both are CLI scripts rather than timers inside the API process — a cron entry is one line of config, survives a deploy, and cannot double-fire across replicas the way a `setInterval` would.
+None. The two that existed — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Housekeeping that would otherwise need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
-| Job | Command | Cadence | What it does |
-|---|---|---|---|
-| Verification sweep | `pnpm --filter @uofthub/api sweep-orgs` (`--dry` to list only) | daily | Deletes groups still `PENDING_VERIFICATION` / `INFO_REQUESTED` past their deadline. Not the only enforcement: `POST /orgs/:slug/verify` refuses an expired deadline too, so a missed run delays cleanup rather than reopening the window |
-| Term storage grants | `pnpm --filter @uofthub/api grant-term-storage` | monthly | Grants each verified group the 10GB for every term it is owed but hasn't received. Idempotent on (group, term) |
-
-Both run nightly from `.github/workflows/scheduled.yml`, which needs a `DATABASE_URL` repository secret pointing at production and reports "skipped" rather than failing when it is absent. `workflow_dispatch` runs them by hand. Moving them to Railway cron is the better long-term home — it runs inside the private network with credentials it already has, and no database URL needs to leave it — at which point delete the workflow rather than leaving both.
-
-`pnpm --filter @uofthub/api grant-admin <email>` is the third script, but it's operator-run, not scheduled — see [Moderation](#moderation).
+`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. See [Moderation](#moderation).
 
 ---
 
@@ -382,7 +375,7 @@ Environment variables in production — see `apps/api/.env.example` for the full
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
 
-The [scheduled jobs](#scheduled-jobs) are not part of the web service. They currently run nightly from GitHub Actions (`.github/workflows/scheduled.yml`) against the `DATABASE_URL` secret; running them as Railway cron jobs against the same image is the better arrangement once someone sets it up, since it keeps the production database URL off GitHub entirely.
+There are no scheduled jobs to deploy alongside the web service.
 
 ---
 
