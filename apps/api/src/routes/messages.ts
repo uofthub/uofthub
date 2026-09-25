@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { bySession } from '../lib/rateLimit.js'
+import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 
 /**
  * Direct messages between two students.
@@ -12,6 +13,12 @@ import { bySession } from '../lib/rateLimit.js'
  * Anyone may start a conversation with a student who allows messages (the
  * default). A student who turns that off can still be answered by the people
  * they wrote to — turning it off stops strangers, not replies.
+ *
+ * Blocking is what stops replies too. It closes the conversation both ways
+ * until the blocker lifts it, and the blocked student is never told: they see
+ * the same "not taking new messages" as an opt-out. A student who has been
+ * messaged can also report the conversation, which files the recent thread
+ * with moderators; a moderator can suspend the sender's messaging.
  */
 
 export const MESSAGE_MAX = 2000
@@ -23,15 +30,71 @@ const PERSON = { id: true, name: true, avatarUrl: true, faculty: true, campus: t
 // A person typing to a friend sends a few a minute; a script sends hundreds.
 const sendRateLimit = { rateLimit: { max: 30, timeWindow: '10 minutes', keyGenerator: bySession } }
 
-/** Whether `from` may message `to` right now. */
-async function canMessage(from: string, to: { id: string; allowMessages: boolean }) {
-  if (from === to.id) return false
-  if (to.allowMessages) return true
-  const wroteFirst = await db.message.findFirst({
-    where: { senderId: to.id, recipientId: from },
+// How much of a conversation a report files with moderators.
+const REPORT_SNAPSHOT = 30
+
+/**
+ * Why `from` can't message `to` right now, or null if they can.
+ *   suspended   — a moderator suspended `from`'s messaging
+ *   blocked     — `from` blocked `to`, and can unblock
+ *   unavailable — `to` blocked `from`, or isn't taking messages from strangers.
+ *                 One answer for both, so a block is indistinguishable from an
+ *                 opt-out.
+ */
+type Closed = 'suspended' | 'blocked' | 'unavailable'
+
+async function whyClosed(
+  from: string,
+  to: { id: string; allowMessages: boolean }
+): Promise<Closed | null> {
+  const [sender, blocks, openToThem] = await Promise.all([
+    db.user.findUnique({ where: { id: from }, select: { messagingSuspendedAt: true } }),
+    db.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: from, blockedId: to.id },
+          { blockerId: to.id, blockedId: from },
+        ],
+      },
+      select: { blockerId: true },
+    }),
+    to.allowMessages || wroteTo(to.id, from),
+  ])
+  if (sender?.messagingSuspendedAt) return 'suspended'
+  if (blocks.some((b) => b.blockerId === from)) return 'blocked'
+  if (blocks.length > 0) return 'unavailable'
+  if (!openToThem) return 'unavailable'
+  return null
+}
+
+const CLOSED_ERRORS: Record<Closed, string> = {
+  suspended: 'A moderator has suspended your messaging',
+  blocked: 'Unblock them to send a message',
+  unavailable: 'They are not taking new messages',
+}
+
+/** Block `blocked` for `blocker`, and clear their unread so the badge stops asking. */
+async function block(blocker: string, blocked: string) {
+  await db.$transaction([
+    db.userBlock.upsert({
+      where: { blockerId_blockedId: { blockerId: blocker, blockedId: blocked } },
+      create: { blockerId: blocker, blockedId: blocked },
+      update: {},
+    }),
+    db.message.updateMany({
+      where: { senderId: blocked, recipientId: blocker, readAt: null },
+      data: { readAt: new Date() },
+    }),
+  ])
+}
+
+/** Whether `from` has ever sent `to` a message. */
+async function wroteTo(from: string, to: string) {
+  const found = await db.message.findFirst({
+    where: { senderId: from, recipientId: to },
     select: { id: true },
   })
-  return !!wroteFirst
+  return !!found
 }
 
 export const messageRoutes: FastifyPluginAsync = async (app) => {
@@ -59,12 +122,16 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
     latest.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     const recent = latest.slice(0, CONVERSATIONS_MAX)
 
-    const [people, unread] = await Promise.all([
+    const [people, unread, blocks] = await Promise.all([
       db.user.findMany({ where: { id: { in: recent.map((r) => r.other) } }, select: PERSON }),
       db.message.groupBy({
         by: ['senderId'],
         where: { recipientId: me, readAt: null },
         _count: { id: true },
+      }),
+      db.userBlock.findMany({
+        where: { blockerId: me, blockedId: { in: recent.map((r) => r.other) } },
+        select: { blockedId: true },
       }),
     ])
 
@@ -81,6 +148,7 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
             createdAt: r.createdAt,
           },
           unread: unread.find((u) => u.senderId === r.other)?._count.id ?? 0,
+          blocked: blocks.some((b) => b.blockedId === r.other),
         },
       ]
     })
@@ -132,9 +200,20 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const { allowMessages, ...user } = other
+      const [closed, reported] = await Promise.all([
+        whyClosed(me, { id: other.id, allowMessages }),
+        db.messageReport.findFirst({
+          where: { reporterId: me, reportedId: other.id, status: 'OPEN' },
+          select: { id: true },
+        }),
+      ])
       return {
         user,
-        canMessage: await canMessage(me, { id: other.id, allowMessages }),
+        canMessage: closed === null,
+        closed,
+        // A report needs something to report: at least one message from them.
+        canReport: page.some((m) => m.senderId === other.id) || (await wroteTo(other.id, me)),
+        reported: !!reported,
         hasMore: page.length === THREAD_PAGE,
         messages: page.reverse().map((m) => ({ ...m, fromMe: m.senderId === me })),
       }
@@ -157,8 +236,8 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true, allowMessages: true },
       })
       if (!other || other.id === me) return reply.code(404).send({ error: 'Not found' })
-      if (!(await canMessage(me, other)))
-        return reply.code(403).send({ error: 'They are not taking new messages' })
+      const closed = await whyClosed(me, other)
+      if (closed) return reply.code(403).send({ error: CLOSED_ERRORS[closed] })
 
       const message = await db.message.create({
         data: { senderId: me, recipientId: other.id, body },
@@ -167,4 +246,80 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send({ ...message, fromMe: true })
     }
   )
+
+  // POST /messages/:userId/block — stop the conversation both ways
+  app.post<{ Params: { userId: string } }>('/:userId/block', auth, async (request, reply) => {
+    const me = request.user.sub
+    const other = await db.user.findUnique({
+      where: { id: request.params.userId },
+      select: { id: true },
+    })
+    if (!other || other.id === me) return reply.code(404).send({ error: 'Not found' })
+    await block(me, other.id)
+    return { blocked: true }
+  })
+
+  // DELETE /messages/:userId/block — lift it. Their own opt-out still applies.
+  app.delete<{ Params: { userId: string } }>('/:userId/block', auth, async (request) => {
+    await db.userBlock.deleteMany({
+      where: { blockerId: request.user.sub, blockedId: request.params.userId },
+    })
+    return { blocked: false }
+  })
+
+  // POST /messages/:userId/report — { reason, details?, block? }. Files the
+  // recent thread with moderators; `block` (the dialog's default) also blocks.
+  app.post<{
+    Params: { userId: string }
+    Body: { reason?: string; details?: string; block?: boolean }
+  }>('/:userId/report', { ...auth, config: reportRateLimit }, async (request, reply) => {
+    const me = request.user.sub
+    const reason = request.body?.reason
+    if (!isReportReason(reason))
+      return reply.code(400).send({ error: 'A valid reason is required' })
+
+    const other = await db.user.findUnique({
+      where: { id: request.params.userId },
+      select: { id: true },
+    })
+    if (!other || other.id === me) return reply.code(404).send({ error: 'Not found' })
+
+    // Only what they sent you can be reported — otherwise a report is a way
+    // to put a stranger in front of a moderator with nothing to judge.
+    if (!(await wroteTo(other.id, me)))
+      return reply.code(400).send({ error: 'They have not messaged you' })
+
+    const existing = await db.messageReport.findFirst({
+      where: { reporterId: me, reportedId: other.id, status: 'OPEN' },
+      select: { id: true },
+    })
+    if (existing)
+      return reply.code(409).send({ error: 'You have already reported this conversation' })
+
+    const recent = await db.message.findMany({
+      where: {
+        OR: [
+          { senderId: me, recipientId: other.id },
+          { senderId: other.id, recipientId: me },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: REPORT_SNAPSHOT,
+      select: { senderId: true, body: true, createdAt: true },
+    })
+
+    const report = await db.messageReport.create({
+      data: {
+        reporterId: me,
+        reportedId: other.id,
+        reason,
+        details: reportDetails(request.body.details),
+        messages: recent.reverse().map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })),
+      },
+      select: { id: true, reason: true, status: true, createdAt: true },
+    })
+    if (request.body.block !== false) await block(me, other.id)
+
+    return reply.code(201).send(report)
+  })
 }

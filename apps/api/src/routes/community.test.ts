@@ -234,6 +234,130 @@ describe('messages', () => {
     expect((await call('POST', `/messages/${b.id}`, a, { body: 'Hi back' })).statusCode).toBe(201)
   })
 
+  it('blocks both ways, without telling the blocked person, until unblocked', async () => {
+    const a = await createUser()
+    const b = await createUser()
+    await call('POST', `/messages/${b.id}`, a, { body: 'Hi' })
+    await call('POST', `/messages/${b.id}`, a, { body: 'Hello?' })
+
+    expect((await call('POST', `/messages/${a.id}/block`, b)).statusCode).toBe(200)
+    // Blocking clears what they had sent, so the badge stops asking.
+    expect((await call('GET', '/messages/unread', b)).json()).toEqual({ count: 0 })
+    expect((await call('GET', '/messages', b)).json()[0].blocked).toBe(true)
+
+    const theirs = await call('POST', `/messages/${b.id}`, a, { body: 'Why no answer' })
+    expect(theirs.statusCode).toBe(403)
+    expect(theirs.json().error).toBe('They are not taking new messages')
+    expect((await call('GET', `/messages/${b.id}`, a)).json()).toMatchObject({
+      canMessage: false,
+      closed: 'unavailable',
+    })
+
+    expect((await call('GET', `/messages/${a.id}`, b)).json().closed).toBe('blocked')
+    expect((await call('POST', `/messages/${a.id}`, b, { body: 'Stop' })).statusCode).toBe(403)
+
+    await call('DELETE', `/messages/${a.id}/block`, b)
+    expect((await call('POST', `/messages/${b.id}`, a, { body: 'Sorry' })).statusCode).toBe(201)
+  })
+
+  it('reports a conversation with its recent thread, and blocks unless asked not to', async () => {
+    const a = await createUser({ name: 'Aisha' })
+    const b = await createUser({ name: 'Ben' })
+    const admin = await createUser({ isAdmin: true })
+
+    // Nothing to report until they have written to you.
+    await call('POST', `/messages/${a.id}`, b, { body: 'Hi' })
+    expect(
+      (await call('POST', `/messages/${a.id}/report`, b, { reason: 'HARASSMENT' })).statusCode
+    ).toBe(400)
+
+    await call('POST', `/messages/${b.id}`, a, { body: 'Something nasty' })
+    expect((await call('GET', `/messages/${a.id}`, b)).json().canReport).toBe(true)
+    expect((await call('POST', `/messages/${a.id}/report`, b, { reason: 'NOPE' })).statusCode).toBe(
+      400
+    )
+    const filed = await call('POST', `/messages/${a.id}/report`, b, {
+      reason: 'HARASSMENT',
+      details: '  Keeps going  ',
+    })
+    expect(filed.statusCode).toBe(201)
+    expect((await call('POST', `/messages/${a.id}/report`, b, { reason: 'SPAM' })).statusCode).toBe(
+      409
+    )
+    expect((await call('GET', `/messages/${a.id}`, b)).json()).toMatchObject({
+      reported: true,
+      closed: 'blocked',
+    })
+
+    // Moderators only.
+    expect((await call('GET', '/admin/message-reports', b)).statusCode).toBe(403)
+    const queue = (await call('GET', '/admin/message-reports', admin)).json()
+    expect(queue).toHaveLength(1)
+    expect(queue[0]).toMatchObject({
+      reason: 'HARASSMENT',
+      details: 'Keeps going',
+      reporter: { name: 'Ben' },
+      reported: { name: 'Aisha', messagingSuspendedAt: null },
+    })
+    expect(queue[0].messages.map((m: { body: string }) => m.body)).toEqual([
+      'Hi',
+      'Something nasty',
+    ])
+
+    const other = await createUser()
+    await call('POST', `/messages/${other.id}`, a, { body: 'Hi' })
+    await call('POST', `/messages/${a.id}/report`, other, { reason: 'SPAM', block: false })
+    expect((await call('GET', `/messages/${a.id}`, other)).json().closed).toBeNull()
+  })
+
+  it('lets a moderator warn, or suspend and later lift, the sender', async () => {
+    const a = await createUser()
+    const b = await createUser()
+    const c = await createUser()
+    const admin = await createUser({ isAdmin: true })
+    for (const who of [b, c]) {
+      await call('POST', `/messages/${who.id}`, a, { body: 'Spam' })
+      await call('POST', `/messages/${a.id}/report`, who, { reason: 'SPAM', block: false })
+    }
+    const [first] = (await call('GET', '/admin/message-reports', admin)).json()
+
+    const decided = await call('POST', `/admin/message-reports/${first.id}/decision`, admin, {
+      decision: 'SUSPEND',
+      note: 'Stop sending ads',
+    })
+    expect(decided.statusCode).toBe(200)
+    expect(decided.json().status).toBe('TAKEN_DOWN')
+    // One decision closes every open report about the same sender.
+    expect((await call('GET', '/admin/message-reports', admin)).json()).toHaveLength(0)
+    expect(
+      (
+        await call('POST', `/admin/message-reports/${first.id}/decision`, admin, {
+          decision: 'WARN',
+        })
+      ).statusCode
+    ).toBe(409)
+
+    const refused = await call('POST', `/messages/${b.id}`, a, { body: 'More spam' })
+    expect(refused.statusCode).toBe(403)
+    expect(refused.json().error).toBe('A moderator has suspended your messaging')
+    expect((await call('GET', `/messages/${b.id}`, a)).json().closed).toBe('suspended')
+
+    const notes = (await call('GET', '/users/me/notifications', a)).json().notifications
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toMatchObject({
+      type: 'MESSAGING_MODERATED',
+      payload: { action: 'TAKEN_DOWN', note: 'Stop sending ads' },
+    })
+
+    expect(
+      (await call('DELETE', `/admin/users/${a.id}/messaging-suspension`, admin)).statusCode
+    ).toBe(200)
+    expect((await call('POST', `/messages/${b.id}`, a, { body: 'Sorry' })).statusCode).toBe(201)
+    expect(
+      (await call('DELETE', `/admin/users/${a.id}/messaging-suspension`, admin)).statusCode
+    ).toBe(404)
+  })
+
   it('refuses an empty or huge message, yourself and strangers without a session', async () => {
     const a = await createUser()
     const b = await createUser()

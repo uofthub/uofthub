@@ -92,6 +92,9 @@ enum NotificationType {
   PROJECT_COLLAB_INTEREST
   /// Somebody replied to your comment.
   COMMENT_REPLIED
+  /// A moderator warned you, or suspended your messaging, after a
+  /// conversation was reported.
+  MESSAGING_MODERATED
   /// A project you follow posted an update (a version with a note).
   PROJECT_UPDATED
 }
@@ -125,64 +128,72 @@ enum ReportStatus {
 }
 
 model User {
-  id             String   @id @default(uuid())
-  email          String   @unique
-  name           String
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  name                 String
   /// scrypt hash; null for accounts that only ever signed in with Microsoft.
-  passwordHash   String?
-  faculty        String?
-  campus         Campus?
-  program        String?
-  classYear      Int?
-  avatarUrl      String?
+  passwordHash         String?
+  faculty              String?
+  campus               Campus?
+  program              String?
+  classYear            Int?
+  avatarUrl            String?
   /// R2 object key when the avatar lives in our bucket; null for no avatar or
   /// an externally-pasted URL. Fixed per user (`avatars/<id>`) — a new
   /// upload/sync always overwrites the previous one.
-  avatarKey      String?
+  avatarKey            String?
   /// True once the student has set their own avatar (upload or manual URL) —
   /// the Microsoft sign-in avatar sync only ever fires for a brand new
   /// account, so it never overwrites this.
-  avatarIsCustom Boolean  @default(false)
-  bio            String?
+  avatarIsCustom       Boolean   @default(false)
+  bio                  String?
   /// What the student is looking for — "Collaboration", "Summer 2027
   /// internships". Free text, a handful of short items; the profile's
   /// "Open to" chips.
-  openTo         String[] @default([])
+  openTo               String[]  @default([])
   /// Personal links on the profile. http(s) only, checked by safeExternalUrl.
-  websiteUrl     String?
-  githubUrl      String?
-  linkedinUrl    String?
+  websiteUrl           String?
+  githubUrl            String?
+  linkedinUrl          String?
   /// Course codes the student says they take (CSC343, MAT137). Adds to the
   /// courses inferred from their own projects' tags — see routes/feed.ts.
-  courses        String[] @default([])
+  courses              String[]  @default([])
   /// Whether other students may start a conversation with them. Replies in an
   /// existing conversation are unaffected by turning this off.
-  allowMessages  Boolean  @default(true)
+  allowMessages        Boolean   @default(true)
+  /// Set by a moderator deciding a message report; while set, the student can
+  /// read their conversations but not send. Cleared to lift it.
+  messagingSuspendedAt DateTime?
   /// Platform moderator. Set directly in the database (see
   /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
   /// grants it, so it can't be escalated to through the API.
-  isAdmin        Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isAdmin              Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  ownedProjects    Project[]             @relation("ProjectOwner")
-  collaborations   ProjectCollaborator[]
-  reactions        ProjectReaction[]
-  saves            ProjectSave[]
-  comments         Comment[]
-  helpful          CommentHelpful[]
-  spotlightPicks   Spotlight[]           @relation("SpotlightPicks")
-  following        Follow[]              @relation("Following")
-  followers        Follow[]              @relation("Followers")
-  orgMemberships   OrgMember[]
-  notifications    Notification[]
-  reportsFiled     Report[]              @relation("Reporter")
-  reportsReviewed  Report[]              @relation("Reviewer")
-  orgActivities    OrgActivity[]
-  projectFollows   ProjectFollow[]
-  collections      Collection[]
-  sentMessages     Message[]             @relation("SentMessages")
-  receivedMessages Message[]             @relation("ReceivedMessages")
+  ownedProjects          Project[]             @relation("ProjectOwner")
+  collaborations         ProjectCollaborator[]
+  reactions              ProjectReaction[]
+  saves                  ProjectSave[]
+  comments               Comment[]
+  helpful                CommentHelpful[]
+  spotlightPicks         Spotlight[]           @relation("SpotlightPicks")
+  following              Follow[]              @relation("Following")
+  followers              Follow[]              @relation("Followers")
+  orgMemberships         OrgMember[]
+  notifications          Notification[]
+  reportsFiled           Report[]              @relation("Reporter")
+  reportsReviewed        Report[]              @relation("Reviewer")
+  orgActivities          OrgActivity[]
+  projectFollows         ProjectFollow[]
+  collections            Collection[]
+  sentMessages           Message[]             @relation("SentMessages")
+  receivedMessages       Message[]             @relation("ReceivedMessages")
+  blocking               UserBlock[]           @relation("Blocking")
+  blockedBy              UserBlock[]           @relation("BlockedBy")
+  messageReportsFiled    MessageReport[]       @relation("MessageReporter")
+  messageReportsAgainst  MessageReport[]       @relation("MessageReported")
+  messageReportsReviewed MessageReport[]       @relation("MessageReviewer")
 }
 
 model Project {
@@ -646,4 +657,46 @@ model Message {
   @@index([recipientId, senderId, createdAt])
   /// The unread badge.
   @@index([recipientId, readAt])
+}
+
+/// One student blocking another. For messages it works both ways: neither
+/// can write to the other until the blocker lifts it. The blocked student is
+/// never told — they see the same "not taking new messages" as an opt-out.
+model UserBlock {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocking", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedBy", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+/// A conversation reported to moderators. Separate from `Report` because
+/// what is reported is a person's messages, not a project, and what a
+/// moderator can do about it differs (suspend messaging, not take down).
+model MessageReport {
+  id           String       @id @default(uuid())
+  reporterId   String
+  reportedId   String
+  reason       ReportReason
+  details      String?
+  /// The recent thread as the reporter saw it when they reported —
+  /// `[{ senderId, body, createdAt }]`, oldest first. A snapshot rather than a
+  /// live read, so the moderator judges what was reported.
+  messages     Json
+  status       ReportStatus @default(OPEN)
+  createdAt    DateTime     @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewNote   String?
+
+  reporter   User  @relation("MessageReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported   User  @relation("MessageReported", fields: [reportedId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("MessageReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([reportedId, status])
 }

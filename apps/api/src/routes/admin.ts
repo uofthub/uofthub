@@ -39,6 +39,29 @@ const REPORT_SELECT = {
   },
 } as const
 
+/** The same three outcomes, for a conversation: suspending stands in for taking down. */
+const MESSAGE_DECISIONS = {
+  DISMISS: 'DISMISSED',
+  WARN: 'WARNED',
+  SUSPEND: 'TAKEN_DOWN',
+} as const
+
+type MessageDecision = keyof typeof MESSAGE_DECISIONS
+
+const MESSAGE_REPORT_SELECT = {
+  id: true,
+  reason: true,
+  details: true,
+  status: true,
+  createdAt: true,
+  reviewedAt: true,
+  reviewNote: true,
+  messages: true,
+  reporter: { select: { id: true, name: true, email: true } },
+  reported: { select: { id: true, name: true, email: true, messagingSuspendedAt: true } },
+  reviewedBy: { select: { id: true, name: true } },
+} as const
+
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   const adminOnly = { preHandler: [app.authenticate, requireAdmin] }
 
@@ -125,6 +148,100 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return updated
+    }
+  )
+
+  // ── MESSAGE REPORTS ─────────────────────────────────────────────────────────
+
+  // GET /admin/message-reports?status=OPEN — reported conversations, with the
+  // thread as it was filed
+  app.get<{ Querystring: { status?: string } }>(
+    '/message-reports',
+    adminOnly,
+    async (request, reply) => {
+      const status = request.query.status ?? 'OPEN'
+      if (status !== 'all' && !REPORT_STATUSES.includes(status as ReportStatus)) {
+        return reply.code(400).send({ error: 'Unknown status' })
+      }
+      return db.messageReport.findMany({
+        where: status === 'all' ? {} : { status: status as ReportStatus },
+        select: MESSAGE_REPORT_SELECT,
+        orderBy: { createdAt: status === 'OPEN' ? 'asc' : 'desc' },
+        take: 100,
+      })
+    }
+  )
+
+  // POST /admin/message-reports/:id/decision — dismiss / warn the sender /
+  // suspend their messaging
+  app.post<{ Params: { id: string }; Body: { decision?: string; note?: string } }>(
+    '/message-reports/:id/decision',
+    adminOnly,
+    async (request, reply) => {
+      const decision = request.body?.decision as MessageDecision | undefined
+      if (!decision || !(decision in MESSAGE_DECISIONS)) {
+        return reply.code(400).send({ error: 'Decision must be DISMISS, WARN or SUSPEND' })
+      }
+      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+
+      const report = await db.messageReport.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, status: true, reportedId: true },
+      })
+      if (!report) return reply.code(404).send({ error: 'Not found' })
+      if (report.status !== 'OPEN')
+        return reply.code(409).send({ error: 'This report has already been decided' })
+
+      const decided = {
+        status: MESSAGE_DECISIONS[decision],
+        reviewedAt: new Date(),
+        reviewedById: request.user.sub,
+        reviewNote: note,
+      }
+
+      if (decision === 'SUSPEND') {
+        // They can still read what they have, and anyone can still read what
+        // they sent; they just can't send. Lifted from the same queue.
+        await db.user.update({
+          where: { id: report.reportedId },
+          data: { messagingSuspendedAt: new Date() },
+        })
+        // As with take-downs: one decision closes every open report about the
+        // same person, and they are told once.
+        await db.messageReport.updateMany({
+          where: { reportedId: report.reportedId, status: 'OPEN' },
+          data: decided,
+        })
+      }
+
+      const updated = await db.messageReport.update({
+        where: { id: report.id },
+        data: decided,
+        select: MESSAGE_REPORT_SELECT,
+      })
+
+      if (decision !== 'DISMISS') {
+        await notify(report.reportedId, 'MESSAGING_MODERATED', {
+          action: MESSAGE_DECISIONS[decision],
+          note,
+        })
+      }
+
+      return updated
+    }
+  )
+
+  // DELETE /admin/users/:id/messaging-suspension — lift a suspension
+  app.delete<{ Params: { id: string } }>(
+    '/users/:id/messaging-suspension',
+    adminOnly,
+    async (request, reply) => {
+      const { count } = await db.user.updateMany({
+        where: { id: request.params.id, messagingSuspendedAt: { not: null } },
+        data: { messagingSuspendedAt: null },
+      })
+      if (count === 0) return reply.code(404).send({ error: 'Not suspended' })
+      return { ok: true }
     }
   )
 
