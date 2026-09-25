@@ -23,7 +23,8 @@ export interface Project {
   description?: string
   tags: string[]
   visibility: Visibility
-  viewCount: number
+  /** Unique views, lifetime. Sent to the project's owner only. */
+  viewCount?: number
   forkedFromId?: string
   /** Set only when a moderator has taken the project down. */
   takenDownAt?: string
@@ -33,7 +34,7 @@ export interface Project {
   pinnedAt?: string
   createdAt: string
   updatedAt: string
-  owner?: Pick<User, 'id' | 'name' | 'faculty' | 'campus'>
+  owner?: Pick<User, 'id' | 'name' | 'faculty' | 'campus' | 'avatarUrl'>
 }
 
 export interface ProjectFile {

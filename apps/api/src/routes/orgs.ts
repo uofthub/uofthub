@@ -131,7 +131,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
             project: {
               include: {
                 owner: { select: { id: true, name: true } },
-                _count: { select: { likes: true, comments: true } },
+                _count: { select: { comments: true, reactions: true } },
               },
             },
           },

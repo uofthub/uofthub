@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Campus, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
-import { withCovers } from '../lib/covers.js'
+import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { startOfUtcDay } from '../lib/dates.js'
 
 /**
@@ -28,13 +28,6 @@ const MAX_PAGE_SIZE = 50
 
 /** How many of a student's own projects are read to infer "their" courses. */
 const TAG_SOURCE_LIMIT = 50
-
-const OWNER_SELECT = { select: { id: true, name: true, faculty: true, campus: true } } as const
-
-const FEED_INCLUDE = {
-  owner: OWNER_SELECT,
-  _count: { select: { likes: true, comments: true } },
-} as const
 
 type FeedReason =
   | { kind: 'FOLLOWING'; userId: string; userName: string }
@@ -154,7 +147,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         skip < connectedTotal
           ? await db.project.findMany({
               where: connectedWhere,
-              include: FEED_INCLUDE,
+              include: CARD_INCLUDE,
               // Publish time, not creation time: a capstone drafted in January
               // and opened up in March is March's news.
               orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
@@ -172,14 +165,14 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         trendingTake > 0
           ? await db.project.findMany({
               where: trendingWhere,
-              include: FEED_INCLUDE,
+              include: CARD_INCLUDE,
               orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
               skip: trendingSkip,
               take: trendingTake,
             })
           : []
 
-      const projects = await withCovers([...connected, ...trending])
+      const projects = await decorate([...connected, ...trending], userId)
 
       return {
         items: projects.map((project) => ({ project, reason: reasonFor(project, affinity) })),

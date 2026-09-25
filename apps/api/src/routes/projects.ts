@@ -17,7 +17,7 @@ import {
   previewKindFor,
 } from '../lib/fileValidation.js'
 import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
-import { withCovers } from '../lib/covers.js'
+import { CARD_INCLUDE, OWNER_SELECT, decorate } from '../lib/projectShape.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -91,15 +91,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
         ],
       },
-      include: {
-        owner: { select: { id: true, name: true, faculty: true, campus: true } },
-        _count: { select: { likes: true, comments: true } },
-      },
+      include: CARD_INCLUDE,
       orderBy,
       take: Math.min(Number(take), 50),
       skip: Number(skip),
     })
-    return withCovers(projects)
+    return decorate(projects, callerId)
   })
 
   // GET /projects/:id
@@ -109,16 +106,21 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const project = await db.project.findUnique({
       where: { id: request.params.id },
       include: {
-        owner: { select: { id: true, name: true, faculty: true, campus: true } },
+        ...CARD_INCLUDE,
+        // Visibility needs every collaborator row, accepted or not, to decide
+        // who may read; only accepted ones are returned to the page.
         collaborators: {
-          where: { accepted: true },
-          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+          include: {
+            user: {
+              select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true },
+            },
+          },
         },
         // storageKey is an internal R2 pointer, never sent to the client —
         // downloads go through the signed-URL route below instead.
-        files: { select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true } },
-        links: true,
-        _count: { select: { likes: true, comments: true } },
+        files: {
+          select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
+        },
       },
     })
     if (!project) return reply.code(404).send({ error: 'Not found' })
@@ -143,7 +145,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       ])
     }
 
-    return project
+    const [shaped] = await decorate(
+      [{ ...project, collaborators: project.collaborators.filter((c) => c.accepted) }],
+      callerId
+    )
+    return shaped
   })
 
   // POST /projects
@@ -173,11 +179,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC',
         links: safeLinks.length ? { create: safeLinks } : undefined,
       },
-      include: {
-        owner: { select: { id: true, name: true, faculty: true, campus: true } },
-        links: true,
-        _count: { select: { likes: true, comments: true } },
-      },
+      include: CARD_INCLUDE,
     })
 
     // A project created straight to UOFT/PUBLIC is published the moment it
@@ -185,7 +187,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // on the PATCH that flips a draft open later.
     const publishedAt = await announcePublish(project)
 
-    return reply.code(201).send({ ...project, publishedAt })
+    const [shaped] = await decorate(
+      [{ ...project, publishedAt: publishedAt ?? project.publishedAt }],
+      request.user.sub
+    )
+    return reply.code(201).send(shaped)
   })
 
   // PATCH /projects/:id
@@ -215,17 +221,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ...(tags !== undefined && { tags }),
         ...(visibility !== undefined && { visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC' }),
       },
-      include: {
-        owner: { select: { id: true, name: true, faculty: true, campus: true } },
-        links: true,
-        _count: { select: { likes: true, comments: true } },
-      },
+      include: CARD_INCLUDE,
     })
 
     // The edit that opens a draft up is the one that counts as publishing it.
     const publishedAt = await announcePublish(updated)
 
-    return { ...updated, publishedAt: publishedAt ?? updated.publishedAt }
+    const [shaped] = await decorate(
+      [{ ...updated, publishedAt: publishedAt ?? updated.publishedAt }],
+      request.user.sub
+    )
+    return shaped
   })
 
   // DELETE /projects/:id
@@ -821,11 +827,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             ? { create: original.links.map((l) => ({ label: l.label, url: l.url })) }
             : undefined,
         },
-        include: {
-          owner: { select: { id: true, name: true, faculty: true, campus: true } },
-          links: true,
-          _count: { select: { likes: true, comments: true } },
-        },
+        include: CARD_INCLUDE,
       })
 
       // Against the original, not the fork — the fork has no audience yet, and
@@ -835,7 +837,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         extra: { forkId: fork.id },
       })
 
-      return reply.code(201).send(fork)
+      const [shaped] = await decorate([fork], request.user.sub)
+      return reply.code(201).send(shaped)
     }
   )
 

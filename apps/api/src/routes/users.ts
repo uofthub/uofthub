@@ -4,7 +4,7 @@ import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 import { categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.js'
 import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
-import { withCovers } from '../lib/covers.js'
+import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { parseCampus } from '../lib/campus.js'
 import { notifyOnce } from '../lib/notifications.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -65,15 +65,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           // Signed-in viewers also see this user's UOFT projects, not just PUBLIC.
           ...visibleProjectWhere(callerId),
         },
-        include: {
-          _count: { select: { likes: true, comments: true } },
-          links: true,
-        },
+        include: CARD_INCLUDE,
         orderBy: { createdAt: 'desc' },
         take: Math.min(Math.max(Number(take) || 24, 1), 50),
         skip: Math.max(Number(skip) || 0, 0),
       })
-      return withCovers(projects)
+      return decorate(projects, callerId)
     }
   )
 
@@ -93,11 +90,11 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         // benefit; the same visibility rules apply to it as to anything else.
         ...visibleProjectWhere(callerId),
       },
-      include: { _count: { select: { likes: true, comments: true } }, links: true },
+      include: CARD_INCLUDE,
       orderBy: { pinnedAt: 'desc' },
       take: PIN_LIMIT,
     })
-    return withCovers(projects)
+    return decorate(projects, callerId)
   })
 
   // PATCH /users/me — update own profile

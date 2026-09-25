@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
 import { EMPTY_FILTERS, parseQuery, windowStart, type DiscoverFilters } from '../lib/discovery.js'
-import { withCovers } from '../lib/covers.js'
+import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { parseCampus } from '../lib/campus.js'
 import { searchProjectIds } from '../lib/search.js'
 import { bySession } from '../lib/rateLimit.js'
@@ -58,10 +58,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
             ...(since ? [{ createdAt: { gte: since } }] : []),
           ],
         },
-        include: {
-          owner: { select: { id: true, name: true, faculty: true, campus: true } },
-          _count: { select: { likes: true, comments: true } },
-        },
+        include: CARD_INCLUDE,
         orderBy:
           interpreted.sort === 'trending'
             ? [{ viewCount: 'desc' as const }, { createdAt: 'desc' as const }]
@@ -77,7 +74,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
         // False when the query was run as a plain keyword search because the
         // model was unavailable — the UI says so rather than implying more.
         interpreted: filters !== null,
-        projects: await withCovers(projects),
+        projects: await decorate(projects, request.user.sub),
       }
     }
   )
