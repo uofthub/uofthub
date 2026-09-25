@@ -58,31 +58,33 @@ export default function CollectionsPage() {
         />
       )}
 
-      {pages.isLoading ? (
-        <Spinner />
-      ) : collections.length === 0 ? (
-        <EmptyState
-          icon="layers"
-          title={mine ? 'You haven’t made a collection yet' : 'No collections yet'}
-          action={
-            <Button
-              variant="primary"
-              icon="plus"
-              onClick={() => (user ? setMaking(true) : navigate('/session'))}
-            >
-              Make the first one
-            </Button>
-          }
-        >
-          Group the projects you’d show a friend — add any project from its More menu.
-        </EmptyState>
-      ) : (
-        <div className="collection-grid">
-          {collections.map((c) => (
-            <CollectionCard key={c.id} collection={c} />
-          ))}
-        </div>
-      )}
+      <div key={tab} className="tab-in">
+        {pages.isLoading ? (
+          <Spinner />
+        ) : collections.length === 0 ? (
+          <EmptyState
+            icon="layers"
+            title={mine ? 'You haven’t made a collection yet' : 'No collections yet'}
+            action={
+              <Button
+                variant="primary"
+                icon="plus"
+                onClick={() => (user ? setMaking(true) : navigate('/session'))}
+              >
+                Make the first one
+              </Button>
+            }
+          >
+            Group the projects you’d show a friend — add any project from its More menu.
+          </EmptyState>
+        ) : (
+          <div className="collection-grid">
+            {collections.map((c) => (
+              <CollectionCard key={c.id} collection={c} />
+            ))}
+          </div>
+        )}
+      </div>
       {pages.hasNextPage && (
         <div className="row" style={{ justifyContent: 'center' }}>
           <Button onClick={() => pages.fetchNextPage()} disabled={pages.isFetchingNextPage}>

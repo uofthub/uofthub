@@ -293,53 +293,55 @@ export default function ProfilePage() {
                 with your best work.
               </p>
             )}
-            {active.isLoading ? (
-              <Spinner />
-            ) : shown.length === 0 ? (
-              tab === 'projects' ? (
-                <EmptyState
-                  icon="layers"
-                  title={
-                    own
-                      ? 'You haven’t shared anything yet'
-                      : `${first} hasn’t shared anything you can see yet`
-                  }
-                  action={
-                    own && (
-                      <Button variant="primary" icon="plus" to="/projects/new">
-                        Post your first project
-                      </Button>
-                    )
-                  }
-                />
-              ) : tab === 'collabs' ? (
-                <EmptyState
-                  icon="users"
-                  title={
-                    own
-                      ? 'No collaborations yet'
-                      : `${first} isn’t credited on anyone else’s work yet`
-                  }
-                >
-                  {own && 'Projects you’re invited onto and accept show up here.'}
-                </EmptyState>
-              ) : (
-                <EmptyState icon="bookmark" title="Nothing saved yet">
-                  Tap the bookmark on any project to keep it here. Only you can see what you’ve
-                  saved.
-                </EmptyState>
-              )
-            ) : (
-              <div className="stack" style={{ gap: 14 }}>
-                {shown.map((p) => (
-                  <ProjectListRow
-                    key={p.id}
-                    project={p}
-                    maker={tab === 'projects' ? maker : undefined}
+            <div key={tab} className="tab-in">
+              {active.isLoading ? (
+                <Spinner />
+              ) : shown.length === 0 ? (
+                tab === 'projects' ? (
+                  <EmptyState
+                    icon="layers"
+                    title={
+                      own
+                        ? 'You haven’t shared anything yet'
+                        : `${first} hasn’t shared anything you can see yet`
+                    }
+                    action={
+                      own && (
+                        <Button variant="primary" icon="plus" to="/projects/new">
+                          Post your first project
+                        </Button>
+                      )
+                    }
                   />
-                ))}
-              </div>
-            )}
+                ) : tab === 'collabs' ? (
+                  <EmptyState
+                    icon="users"
+                    title={
+                      own
+                        ? 'No collaborations yet'
+                        : `${first} isn’t credited on anyone else’s work yet`
+                    }
+                  >
+                    {own && 'Projects you’re invited onto and accept show up here.'}
+                  </EmptyState>
+                ) : (
+                  <EmptyState icon="bookmark" title="Nothing saved yet">
+                    Tap the bookmark on any project to keep it here. Only you can see what you’ve
+                    saved.
+                  </EmptyState>
+                )
+              ) : (
+                <div className="stack" style={{ gap: 14 }}>
+                  {shown.map((p) => (
+                    <ProjectListRow
+                      key={p.id}
+                      project={p}
+                      maker={tab === 'projects' ? maker : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
             {active.hasNextPage && (
               <div className="row" style={{ justifyContent: 'center' }}>
                 <Button onClick={() => active.fetchNextPage()} disabled={active.isFetchingNextPage}>

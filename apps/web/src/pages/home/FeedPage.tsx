@@ -163,13 +163,15 @@ export default function FeedPage() {
 
   const feed = (
     <>
-      {active.isLoading ? (
-        <Spinner />
-      ) : projects.length === 0 && !active.hasNextPage ? (
-        empty
-      ) : (
-        <FeedList items={active.items} scope={tab} layout={phone ? 'card' : layout} />
-      )}
+      <div key={tab} className="tab-in">
+        {active.isLoading ? (
+          <Spinner />
+        ) : projects.length === 0 && !active.hasNextPage ? (
+          empty
+        ) : (
+          <FeedList items={active.items} scope={tab} layout={phone ? 'card' : layout} />
+        )}
+      </div>
       {active.hasNextPage && (
         <div className="row" style={{ justifyContent: 'center' }}>
           <Button onClick={() => active.fetchNextPage()} disabled={active.isFetchingNextPage}>

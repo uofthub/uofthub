@@ -799,6 +799,47 @@ h3.md-heading {
   white-space: nowrap;
 }
 
+/*
+ * Motion between places, kept small on purpose: a new page eases in, a
+ * switched tab fades, and a link to a spot on the page glides there instead of
+ * jumping. None of it runs for anyone who asks for less motion.
+ */
+html {
+  scroll-behavior: smooth;
+}
+/* A section a link lands on clears the sticky header. */
+[id] {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+.shell--phone [id] {
+  scroll-margin-top: calc(var(--header-h-mobile) + 12px);
+}
+/* Wraps the routed page, so it lays out exactly as a direct child would. */
+.page-in {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  animation: page-in 0.22s ease-out;
+}
+.tab-in {
+  animation: fade-in 0.18s ease-out;
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .page-in,
+  .tab-in {
+    animation: none;
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

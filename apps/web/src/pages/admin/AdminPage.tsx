@@ -454,36 +454,43 @@ export default function AdminPage() {
           </Button>
         </div>
       )}
-      {section === 'spotlight' ? (
-        <SpotlightAdmin />
-      ) : list.isLoading ? (
-        <Spinner />
-      ) : section === 'reports' ? (
-        reports.data?.length ? (
-          reports.data.map((r) => <ReportRow key={r.id} report={r} />)
+      {/* Keyed on the queue too, so switching Open / All fades like a tab. */}
+      <div
+        key={`${section}:${section === 'groups' ? orgTab : reportTab}`}
+        className="stack tab-in"
+        style={{ gap: 24 }}
+      >
+        {section === 'spotlight' ? (
+          <SpotlightAdmin />
+        ) : list.isLoading ? (
+          <Spinner />
+        ) : section === 'reports' ? (
+          reports.data?.length ? (
+            reports.data.map((r) => <ReportRow key={r.id} report={r} />)
+          ) : (
+            <EmptyState
+              icon="flag"
+              title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
+            />
+          )
+        ) : section === 'messages' ? (
+          messageReports.data?.length ? (
+            messageReports.data.map((r) => <MessageReportRow key={r.id} report={r} />)
+          ) : (
+            <EmptyState
+              icon="flag"
+              title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
+            />
+          )
+        ) : orgs.data?.length ? (
+          orgs.data.map((o) => <OrgRow key={o.id} org={o} />)
         ) : (
           <EmptyState
-            icon="flag"
-            title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
+            icon="users"
+            title={orgTab === 'IN_REVIEW' ? 'No groups waiting for approval' : 'No groups yet'}
           />
-        )
-      ) : section === 'messages' ? (
-        messageReports.data?.length ? (
-          messageReports.data.map((r) => <MessageReportRow key={r.id} report={r} />)
-        ) : (
-          <EmptyState
-            icon="flag"
-            title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
-          />
-        )
-      ) : orgs.data?.length ? (
-        orgs.data.map((o) => <OrgRow key={o.id} org={o} />)
-      ) : (
-        <EmptyState
-          icon="users"
-          title={orgTab === 'IN_REVIEW' ? 'No groups waiting for approval' : 'No groups yet'}
-        />
-      )}
+        )}
+      </div>
     </div>
   )
 }

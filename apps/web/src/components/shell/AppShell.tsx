@@ -22,8 +22,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const wide = useMediaQuery(RAIL)
 
   // A new page starts at the top — unless the link was to a spot on it.
+  // Instantly: the page is already easing in, and the page smooth-scrolls by
+  // default (index.css), which would otherwise glide up through the old one.
   useEffect(() => {
-    if (!hash) window.scrollTo({ top: 0 })
+    if (!hash) window.scrollTo({ top: 0, behavior: 'instant' })
   }, [pathname, hash])
 
   if (pathname === '/session')
