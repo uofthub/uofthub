@@ -2,16 +2,9 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 import { safeDiscordUrl, safeExternalUrl, safeGroupMeUrl } from '../lib/url.js'
-import { canViewOrg, verificationDeadlineFromNow, visibleOrgWhere } from '../lib/orgs.js'
-import { emailAdminsOfSubmission } from '../lib/orgEmails.js'
+import { canViewOrg, visibleOrgWhere } from '../lib/orgs.js'
+import { requireAdmin } from '../lib/admin.js'
 import { parseCampus } from '../lib/campus.js'
-
-const VERIFICATION_NOTE_MAX = 2000
-
-/** A verification submission is prose, not a form — it just can't be empty. */
-function readNote(raw: unknown): string {
-  return String(raw ?? '').trim().slice(0, VERIFICATION_NOTE_MAX)
-}
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // GET /orgs — verified groups, plus the caller's own whatever their state
@@ -27,9 +20,11 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
-  // POST /orgs — create org (auth required). Unlike before, this does not
-  // publish: the group enters PENDING_VERIFICATION with a 7-day deadline and
-  // is visible to nobody but its members until an admin approves it.
+  // POST /orgs — a moderator creates a group, already verified, and hands it
+  // to the exec who runs it (`execEmail` becomes its admin; otherwise the
+  // moderator is). Self-serve creation with its evidence, deadline and sweep
+  // was set aside: a group is a claim to speak for real people, and a
+  // moderator checking it once up front is simpler than a queue.
   app.post<{
     Body: {
       name: string
@@ -42,20 +37,26 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       groupMeUrl?: string
       contactEmail?: string
       contactRole?: string
+      execEmail?: string
     }
-  }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
+  }>('/', { preHandler: [app.authenticate, requireAdmin] }, async (request, reply) => {
     const { name, slug, type = 'CLUB', description, websiteUrl, discordUrl, groupMeUrl } = request.body
     if (!name?.trim() || !slug?.trim()) return reply.code(400).send({ error: 'name and slug are required' })
 
-    const contactEmail = (request.body.contactEmail ?? '').trim().toLowerCase()
-    const contactRole = (request.body.contactRole ?? '').trim()
-    // Both are what makes the claim reviewable at all — an admin needs
-    // somebody to ask, and a role to weigh the claim against.
-    if (!contactEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail)) {
-      return reply.code(400).send({ error: 'A contact email is required' })
+    const contactEmail = (request.body.contactEmail ?? '').trim().toLowerCase() || null
+    const contactRole = (request.body.contactRole ?? '').trim() || null
+    if (contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail)) {
+      return reply.code(400).send({ error: 'The contact email is not an email address' })
     }
-    if (!contactRole) {
-      return reply.code(400).send({ error: 'Your role in the group is required' })
+
+    // The exec who will run the page. They must already have an account, so
+    // the page never belongs to an address nobody has signed in with.
+    let adminId = request.user.sub
+    const execEmail = (request.body.execEmail ?? '').trim().toLowerCase()
+    if (execEmail) {
+      const exec = await db.user.findUnique({ where: { email: execEmail }, select: { id: true } })
+      if (!exec) return reply.code(404).send({ error: 'No uofthub account with that email yet' })
+      adminId = exec.id
     }
 
     const slugified = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
@@ -95,9 +96,9 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         groupMeUrl: safeGroupMe,
         contactEmail,
         contactRole,
-        status: 'PENDING_VERIFICATION',
-        verificationDeadline: verificationDeadlineFromNow(),
-        members: { create: { userId: request.user.sub, role: 'ADMIN' } },
+        status: 'VERIFIED',
+        verifiedAt: new Date(),
+        members: { create: { userId: adminId, role: 'ADMIN' } },
       },
       include: {
         members: { include: { user: { select: { id: true, name: true } } } },
@@ -216,45 +217,6 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     })
     return updated
   })
-
-  // POST /orgs/:slug/verify — the group submits its verification material
-  app.post<{ Params: { slug: string }; Body: { note?: string } }>(
-    '/:slug/verify',
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
-      if (!org) return reply.code(404).send({ error: 'Not found' })
-
-      const member = await db.orgMember.findUnique({
-        where: { orgId_userId: { orgId: org.id, userId: request.user.sub } },
-      })
-      if (member?.role !== 'ADMIN') return reply.code(403).send({ error: 'Admins only' })
-
-      if (org.status === 'VERIFIED') return reply.code(409).send({ error: 'This group is already verified' })
-      if (org.status === 'IN_REVIEW') {
-        return reply.code(409).send({ error: 'This group is already in review' })
-      }
-
-      // The sweep deletes expired groups, but it runs on a schedule — so the
-      // window is enforced here too rather than trusting the cron to have run.
-      if (org.verificationDeadline && org.verificationDeadline < new Date()) {
-        return reply.code(410).send({ error: 'The verification window for this group has closed' })
-      }
-
-      const note = readNote(request.body?.note)
-      if (!note) return reply.code(400).send({ error: 'Describe how we can verify the group' })
-
-      const updated = await db.organization.update({
-        where: { id: org.id },
-        // The deadline is cleared, not extended: the clock was on the group to
-        // submit, and review takes as long as it takes.
-        data: { status: 'IN_REVIEW', verificationNote: note, verificationDeadline: null },
-      })
-
-      await emailAdminsOfSubmission(updated, note)
-      return updated
-    }
-  )
 
   // ── ACTIVITIES ──────────────────────────────────────────────────────────────
 

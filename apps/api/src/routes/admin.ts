@@ -3,7 +3,6 @@ import type { OrgStatus, ReportStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
-import { verificationDeadlineFromNow } from '../lib/orgs.js'
 import { emailContactOfDecision } from '../lib/orgEmails.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
@@ -77,7 +76,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         include: { project: { select: { id: true, title: true, ownerId: true } } },
       })
       if (!report) return reply.code(404).send({ error: 'Not found' })
-      if (report.status !== 'OPEN') return reply.code(409).send({ error: 'This report has already been decided' })
+      if (report.status !== 'OPEN')
+        return reply.code(409).send({ error: 'This report has already been decided' })
 
       const decided = {
         status: DECISIONS[decision],
@@ -154,14 +154,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return orgs
   })
 
-  // POST /admin/orgs/:slug/decision — approve / request more info / deny
+  // POST /admin/orgs/:slug/decision — approve or deny a group left over from
+  // the old self-serve flow. "Request more info" went with that flow: there is
+  // no longer a way for the group to answer.
   app.post<{ Params: { slug: string }; Body: { decision?: string; note?: string } }>(
     '/orgs/:slug/decision',
     adminOnly,
     async (request, reply) => {
       const decision = request.body?.decision
-      if (decision !== 'APPROVE' && decision !== 'REQUEST_INFO' && decision !== 'DENY') {
-        return reply.code(400).send({ error: 'Decision must be APPROVE, REQUEST_INFO or DENY' })
+      if (decision !== 'APPROVE' && decision !== 'DENY') {
+        return reply.code(400).send({ error: 'Decision must be APPROVE or DENY' })
       }
       const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
 
@@ -178,21 +180,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         await emailContactOfDecision(org, 'DENY', note)
         await db.organization.delete({ where: { id: org.id } })
         return { ok: true, deleted: true }
-      }
-
-      if (decision === 'REQUEST_INFO') {
-        const updated = await db.organization.update({
-          where: { id: org.id },
-          // A fresh 7-day window, with the same auto-delete on timeout as a
-          // brand-new group: the clock is back on the group, not on us.
-          data: {
-            status: 'INFO_REQUESTED',
-            reviewNote: note,
-            verificationDeadline: verificationDeadlineFromNow(),
-          },
-        })
-        await emailContactOfDecision(updated, 'REQUEST_INFO', note)
-        return updated
       }
 
       const verifiedAt = new Date()

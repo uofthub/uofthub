@@ -1,10 +1,8 @@
 import type { Organization } from '@prisma/client'
-import { db } from '../db/client.js'
 import { CONTACT_EMAIL, sendEmail } from './email.js'
-import { VERIFICATION_WINDOW_DAYS } from './orgs.js'
 
 /**
- * Verification emails — the first real caller of lib/email.ts. Every send is
+ * Emails about a group left over from the old self-serve verification flow. Every send is
  * best-effort: `sendEmail` already no-ops without `RESEND_API_KEY`, and a
  * failed send must never fail the request that triggered it, so the caller's
  * decision is committed to the database first and these are awaited only for
@@ -23,28 +21,7 @@ ${body}
 </div>`
 }
 
-/** Tells the moderators a group is waiting in the review queue. */
-export async function emailAdminsOfSubmission(org: Organization, note: string): Promise<void> {
-  const admins = await db.user.findMany({ where: { isAdmin: true }, select: { email: true } })
-  if (admins.length === 0) {
-    console.warn(`No admin accounts to notify about ${org.slug}'s verification submission`)
-    return
-  }
-
-  const body = layout(`<p><strong>${escape(org.name)}</strong> (${escape(org.type)}) has submitted verification.</p>
-<p><strong>Claimed role:</strong> ${escape(org.contactRole ?? '—')}<br>
-<strong>Contact:</strong> ${escape(org.contactEmail ?? '—')}</p>
-<p><strong>What they submitted:</strong><br>${escape(note)}</p>
-<p><a href="${webUrl()}/admin">Review it in the admin queue →</a></p>`)
-
-  await Promise.all(
-    admins.map((admin) =>
-      sendEmail({ to: admin.email, subject: `Verification request: ${org.name}`, html: body })
-    )
-  )
-}
-
-type Decision = 'APPROVE' | 'REQUEST_INFO' | 'DENY'
+type Decision = 'APPROVE' | 'DENY'
 
 /** Tells the group's contact what was decided. */
 export async function emailContactOfDecision(
@@ -63,13 +40,6 @@ export async function emailContactOfDecision(
       body: `<p><strong>${escape(org.name)}</strong> has been verified. The page is now listed publicly.</p>
 ${noteHtml}
 <p><a href="${link}">View the group page →</a></p>`,
-    },
-    REQUEST_INFO: {
-      subject: `More information needed to verify ${org.name}`,
-      body: `<p>We could not verify <strong>${escape(org.name)}</strong> from what was submitted.</p>
-${noteHtml}
-<p>You have another ${VERIFICATION_WINDOW_DAYS} days to reply. If nothing is submitted by then, the group is deleted automatically.</p>
-<p><a href="${link}">Submit more detail →</a></p>`,
     },
     DENY: {
       subject: `${org.name} was not verified on uofthub`,

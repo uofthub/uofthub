@@ -2,20 +2,11 @@ import type { Organization, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 
 /**
- * Verification rules for student groups, in one place so the routes, the
- * sweep and the admin portal all agree. Policy lives in
- * docs/student-groups.md.
+ * Who can see a student group. Groups are created by moderators, already
+ * verified (see POST /orgs); the unverified states only remain for groups
+ * created by the old self-serve flow, which a moderator can still approve or
+ * deny from the queue. Policy lives in docs/student-groups.md.
  */
-
-/** How long a group has to submit (or re-submit) verification material. */
-export const VERIFICATION_WINDOW_DAYS = 7
-
-export function verificationDeadlineFromNow(now: Date = new Date()): Date {
-  return new Date(now.getTime() + VERIFICATION_WINDOW_DAYS * 24 * 60 * 60 * 1000)
-}
-
-/** Statuses whose deadline the sweep enforces; VERIFIED and IN_REVIEW have none. */
-export const EXPIRING_STATUSES = ['PENDING_VERIFICATION', 'INFO_REQUESTED'] as const
 
 /**
  * Prisma `where` fragment for the groups this caller may see: the verified
