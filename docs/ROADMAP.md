@@ -218,6 +218,6 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Courses a student takes — shape the home feed like their own course tags
 - [x] Import a project from a link — GitHub via its API, any page via its own metadata, guarded against reaching private addresses
 - [x] "Open to" and personal links on profiles — GitHub and LinkedIn links must point at those sites
-- [ ] Messages: block and report a conversation
+- [x] Messages: block and report a conversation — blocking closes it both ways without telling the blocked person; a report files the last 30 messages, blocks by default, and a moderator can warn or suspend the sender's messaging
 - [ ] Messages and notifications: push instead of polling
 

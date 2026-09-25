@@ -44,6 +44,7 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | website_url, github_url, linkedin_url | string? | http(s) only; GitHub and LinkedIn must point at those hosts (`lib/url.ts`) |
 | courses | string[] | course codes the student takes; added to the feed's course affinity |
 | allow_messages | bool | false stops new conversations, never replies |
+| messaging_suspended_at | timestamp? | set when a moderator suspends the student's messaging after a message report; while set they can read but not send. Cleared to lift it |
 | avatar_url | string? | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage) |
 | avatar_key | string? | R2 object key when the avatar lives in our bucket; internal, never sent to the client |
 | avatar_is_custom | bool | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it |
@@ -72,6 +73,9 @@ A curator's titled set of projects. Readable by anyone; the projects in it are a
 
 ### Message
 One direct message (sender, recipient, body, read_at). A conversation is just the messages between two people.
+
+### UserBlock
+(blocker, blocked). Closes the conversation both ways until the blocker lifts it. The blocked student gets the same "not taking new messages" as an opt-out, so a block is never revealed.
 
 ### ProjectCollaborator
 | Field | Type | Notes |
@@ -181,6 +185,9 @@ One row per person per project per open complaint. See [Moderation](#moderation)
 | reviewed_at | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides |
 | reviewed_by_id | uuid? | FK → User (the moderator) |
 | review_note | text? | shown to the owner on a warning or take-down |
+
+### MessageReport
+A reported conversation. Same reasons, statuses and review fields as `Report`, but about a person (`reported_id`) rather than a project, and with `messages` — a JSON snapshot of the last 30 messages between the two, taken when the report is filed. Only someone the reported student has messaged can file one. The moderator's decisions are dismiss, warn, or suspend messaging (stored as `TAKEN_DOWN`); a suspension closes every other open report about the same person.
 
 ---
 
