@@ -56,7 +56,16 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         courses: true,
         allowMessages: true,
         createdAt: true,
-        _count: { select: { ownedProjects: true, followers: true, following: true } },
+        _count: {
+          select: {
+            ownedProjects: true,
+            followers: true,
+            following: true,
+            // Credited on somebody else's project — an invitation counts once
+            // it is accepted, not before.
+            collaborations: { where: { accepted: true, role: 'COLLABORATOR' } },
+          },
+        },
       },
     })
     if (!user) return reply.code(404).send({ error: 'Not found' })
@@ -111,6 +120,33 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     })
     return decorate(projects, callerId)
   })
+
+  // GET /users/:id/collaborations?take&skip — projects this person is credited
+  // on without owning. The profile's Collaborations tab.
+  app.get<{ Params: { id: string }; Querystring: { take?: string; skip?: string } }>(
+    '/:id/collaborations',
+    async (request) => {
+      const callerId = await getOptionalUserId(request)
+      const { take = '24', skip = '0' } = request.query
+      const projects = await db.project.findMany({
+        where: {
+          AND: [
+            {
+              collaborators: {
+                some: { userId: request.params.id, accepted: true, role: 'COLLABORATOR' },
+              },
+            },
+            visibleProjectWhere(callerId),
+          ],
+        },
+        include: CARD_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Math.max(Number(take) || 24, 1), 50),
+        skip: Math.max(Number(skip) || 0, 0),
+      })
+      return decorate(projects, callerId)
+    }
+  )
 
   // GET /users/me/orgs — the groups the caller belongs to, for linking a
   // project to one. Verified only: an unverified group has no public page to
