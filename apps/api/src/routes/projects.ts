@@ -24,6 +24,7 @@ import {
   decorate,
   emptyReactions,
 } from '../lib/projectShape.js'
+import { recordView } from '../lib/views.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -195,20 +196,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: 'Not found' })
     }
 
-    // Count views from everyone except the owner, so analytics reflect real
-    // interest rather than the owner reloading their own page.
-    if (callerId !== project.ownerId) {
-      const today = new Date()
-      today.setUTCHours(0, 0, 0, 0)
-      await Promise.all([
-        db.project.update({ where: { id: project.id }, data: { viewCount: { increment: 1 } } }),
-        db.projectDailyView.upsert({
-          where: { projectId_date: { projectId: project.id, date: today } },
-          update: { count: { increment: 1 } },
-          create: { projectId: project.id, date: today, count: 1 },
-        }),
-      ])
-    }
+    // The owner reloading their own page is not interest.
+    if (callerId !== project.ownerId) await recordView(project.id, request, callerId)
 
     const [shaped] = await decorate(
       [{ ...project, collaborators: project.collaborators.filter((c) => c.accepted) }],
