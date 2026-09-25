@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/client.js'
-import { cookieFor, createUser, getApp, resetDb } from '../test/helpers.js'
+import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/helpers.js'
 
 beforeEach(resetDb)
 
 /**
  * Student groups as they work now: a moderator creates the page, already
- * verified, and hands it to the exec who runs it.
+ * verified, and hands it to the exec who runs it. Members link their projects
+ * to it, which is what puts "Built with …" on a card.
  */
 
 type User = { id: string; email: string }
@@ -125,6 +126,55 @@ describe('groups left over from self-serve verification', () => {
       (await call('POST', '/admin/orgs/old-group/decision', creator, { decision: 'APPROVE' }))
         .statusCode
     ).toBe(403)
+  })
+})
+
+describe('"Built with"', () => {
+  async function setup() {
+    const mod = await createUser({ isAdmin: true })
+    const member = await createUser()
+    await call('POST', '/orgs', mod, { ...NEW_ORG, execEmail: member.email })
+    const project = await createProject(member.id, { title: 'Rover', visibility: 'PUBLIC' })
+    return { mod, member, project }
+  }
+
+  it('shows a linked group on the project card', async () => {
+    const { member, project } = await setup()
+    expect(
+      (await call('POST', '/orgs/robotics/projects', member, { projectId: project.id })).statusCode
+    ).toBe(201)
+
+    const [card] = (await call('GET', '/projects')).json()
+    expect(card.orgProjects).toEqual([
+      { org: { slug: 'robotics', name: 'Robotics Association', type: 'CLUB' } },
+    ])
+  })
+
+  it('lists the caller’s own groups for linking', async () => {
+    const { member } = await setup()
+    const mine = (await call('GET', '/users/me/orgs', member)).json()
+    expect(mine.map((o: { slug: string }) => o.slug)).toEqual(['robotics'])
+  })
+
+  it('only lets the owner link, and the owner or a group admin unlink', async () => {
+    const { member, project } = await setup()
+    const outsider = await createUser()
+    await db.orgMember.create({
+      data: { orgId: (await db.organization.findFirstOrThrow()).id, userId: outsider.id },
+    })
+    expect(
+      (await call('POST', '/orgs/robotics/projects', outsider, { projectId: project.id }))
+        .statusCode
+    ).toBe(403)
+
+    await call('POST', '/orgs/robotics/projects', member, { projectId: project.id })
+    expect(
+      (await call('DELETE', `/orgs/robotics/projects/${project.id}`, outsider)).statusCode
+    ).toBe(403)
+    expect((await call('DELETE', `/orgs/robotics/projects/${project.id}`, member)).statusCode).toBe(
+      200
+    )
+    expect(await db.orgProject.count()).toBe(0)
   })
 })
 

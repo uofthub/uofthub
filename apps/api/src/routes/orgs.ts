@@ -356,6 +356,28 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
+  // DELETE /orgs/:slug/projects/:projectId — unlink a project. The project's
+  // owner can take their work off a group's page, and a group admin can take
+  // a project off theirs.
+  app.delete<{ Params: { slug: string; projectId: string } }>(
+    '/:slug/projects/:projectId',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
+      if (!org) return reply.code(404).send({ error: 'Org not found' })
+      const [project, member] = await Promise.all([
+        db.project.findUnique({ where: { id: request.params.projectId }, select: { ownerId: true } }),
+        db.orgMember.findUnique({ where: { orgId_userId: { orgId: org.id, userId: request.user.sub } } }),
+      ])
+      if (!project) return reply.code(404).send({ error: 'Project not found' })
+      if (project.ownerId !== request.user.sub && member?.role !== 'ADMIN') {
+        return reply.code(403).send({ error: 'Only the project owner or a group admin can unlink it' })
+      }
+      await db.orgProject.deleteMany({ where: { orgId: org.id, projectId: request.params.projectId } })
+      return { ok: true }
+    }
+  )
+
   // POST /orgs/:slug/members — add a member by email
   app.post<{ Params: { slug: string }; Body: { email: string; role?: string } }>(
     '/:slug/members',

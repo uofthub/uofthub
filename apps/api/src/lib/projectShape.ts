@@ -28,6 +28,12 @@ export const CARD_INCLUDE = {
     select: { user: { select: { id: true, name: true, avatarUrl: true } } },
   },
   _count: { select: { comments: true } },
+  // "Built with UofT Robotics" — only verified groups: an unverified page is
+  // invisible to everyone but its members, and so is being linked to it.
+  orgProjects: {
+    where: { org: { status: 'VERIFIED' } },
+    select: { org: { select: { slug: true, name: true, type: true } } },
+  },
 } satisfies Prisma.ProjectInclude
 
 type CardRow = { id: string; ownerId: string; viewCount: number }

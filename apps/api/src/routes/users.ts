@@ -98,6 +98,17 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     return decorate(projects, callerId)
   })
 
+  // GET /users/me/orgs — the groups the caller belongs to, for linking a
+  // project to one. Verified only: an unverified group has no public page to
+  // be "built with".
+  app.get('/me/orgs', { preHandler: [app.authenticate] }, async (request) => {
+    return db.organization.findMany({
+      where: { status: 'VERIFIED', members: { some: { userId: request.user.sub } } },
+      select: { id: true, slug: true, name: true, type: true },
+      orderBy: { name: 'asc' },
+    })
+  })
+
   // GET /users/me/saved?take&skip — the caller's own bookmarks, newest save
   // first. Only ever the caller's: a save is private.
   app.get<{ Querystring: { take?: string; skip?: string } }>(
