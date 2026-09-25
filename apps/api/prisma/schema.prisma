@@ -7,10 +7,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Who can open a project:
+///   PRIVATE  — a draft: the owner and accepted collaborators
+///   UOFT     — any signed-in U of T account
+///   PUBLIC   — anyone, and it is listed everywhere
+///   UNLISTED — anyone with the link, but never listed, searched or fanned out
 enum Visibility {
   PRIVATE
   UOFT
   PUBLIC
+  UNLISTED
+}
+
+/// What kind of work a project is. Decides a card's badge and main action,
+/// and which questions the post form asks. Null for projects from before it
+/// existed.
+enum ProjectType {
+  APP
+  RESEARCH
+  FILM
+  DESIGN
+  AUDIO
+  HARDWARE
+  WRITING
+  OTHER
+}
+
+/// Where a project stands. HELP_WANTED is what the "Looking for help" feed
+/// and Explore's toggle filter on.
+enum ProjectStatus {
+  IN_PROGRESS
+  SHIPPED
+  HELP_WANTED
 }
 
 enum CollaboratorRole {
@@ -134,13 +162,19 @@ model User {
 }
 
 model Project {
-  id           String     @id @default(uuid())
+  id           String         @id @default(uuid())
   ownerId      String
   title        String
+  /// The one line a card shows. Separate from the description (the story) so
+  /// a card never has to guess where one ends — see the project_fields
+  /// migration for how existing descriptions were split.
+  pitch        String?
   description  String?
-  tags         String[]   @default([])
-  visibility   Visibility @default(PRIVATE)
-  viewCount    Int        @default(0)
+  type         ProjectType?
+  status       ProjectStatus?
+  tags         String[]       @default([])
+  visibility   Visibility     @default(PRIVATE)
+  viewCount    Int            @default(0)
   forkedFromId String?
   /// When the project first stopped being PRIVATE. Distinct from createdAt: a
   /// capstone drafted in January and published in March belongs in March's
@@ -156,8 +190,8 @@ model Project {
   /// PRIVATE and the owner cannot re-open it while this is set. Null for every
   /// project that has never been actioned.
   takenDownAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   /// Postgres-generated tsvector over title, tags and description — see the
   /// `add_search_and_indexes` migration for the expression. Declared
@@ -185,6 +219,9 @@ model Project {
   @@index([ownerId, createdAt])
   /// The "trending" sort.
   @@index([viewCount])
+  /// The looking-for-help feed and Explore's type/status filters.
+  @@index([status])
+  @@index([type])
   /// The home feed's ordering — see routes/feed.ts.
   @@index([publishedAt])
   /// A profile's pinned strip: six rows out of however many the student owns.
@@ -218,6 +255,8 @@ model ProjectVersion {
   id          String   @id @default(uuid())
   projectId   String
   versionNum  Int
+  /// The release note — what changed. It is what the Updates timeline shows.
+  note        String?
   title       String
   description String?
   tags        String[] @default([])
