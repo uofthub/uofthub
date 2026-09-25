@@ -1,3 +1,13 @@
+# Local backing services. `docker compose up -d`, then `pnpm dev`.
+#
+#   db       PostgreSQL 16 on localhost:5433 (not 5432, so it can sit beside a
+#            Postgres already installed on the machine)
+#   storage  Adobe S3Mock — an S3-compatible stand-in for Cloudflare R2 — on
+#            localhost:9090. It creates the bucket itself, keeps files across
+#            restarts, and accepts any credentials, so signed URLs just work.
+#
+# Local development only; matches apps/api/.env.example.
+
 services:
   db:
     image: postgres:16-alpine
@@ -6,9 +16,29 @@ services:
       POSTGRES_PASSWORD: uofthub
       POSTGRES_DB: uofthub
     ports:
-      - "5432:5432"
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U uofthub -d uofthub']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  storage:
+    image: adobe/s3mock:5
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: uofthub-files
+      # Must be /s3mockroot for the named volume to be writable by the image's user.
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: 'true'
+    ports:
+      - '9090:9090'
+    volumes:
+      - storage_data:/s3mockroot
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  storage_data:

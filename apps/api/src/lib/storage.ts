@@ -19,6 +19,10 @@ function getClient(): S3Client {
       region: process.env.STORAGE_REGION || 'auto',
       endpoint: STORAGE_ENDPOINT,
       credentials: { accessKeyId: STORAGE_ACCESS_KEY, secretAccessKey: STORAGE_SECRET_KEY },
+      // The local S3 mock in docker-compose serves buckets as paths
+      // (localhost:9090/bucket); R2 accepts either, so this stays off unless a
+      // local setup asks for it.
+      forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE === 'true',
     })
   }
   return client

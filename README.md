@@ -69,14 +69,19 @@ git clone https://github.com/renfrrd-ai/uofthub.git
 cd uofthub
 pnpm install
 
-docker compose up -d                  # PostgreSQL on :5432
-cp apps/api/.env.example apps/api/.env # then fill in what you need
+docker compose up -d                   # Postgres on :5433, S3 mock on :9090
+cp apps/api/.env.example apps/api/.env # works as-is; set a real JWT_SECRET
 cp apps/web/.env.example apps/web/.env
+pnpm --filter @uofthub/api db:generate
 
-pnpm dev                              # API on :3001, web on :5173
+pnpm dev                               # API on :3001, web on :5173
 ```
 
-`pnpm dev` applies any pending migrations before the API starts. The `.env` you just copied works as-is for everything except sign-in: Microsoft OAuth needs real credentials, so use email + password locally unless you have them. **Every other integration is optional** — with no keys, file uploads fail, email and error reporting no-op with a warning, and AI search falls back to keyword search. Nothing else is blocked.
+`pnpm dev` applies any pending migrations before the API starts, and the API reads `apps/api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
+
+Sign in with email + password locally: Microsoft OAuth needs real credentials. **Every other integration is optional** — with no keys, email and error reporting no-op with a warning, and AI search falls back to keyword search.
+
+If `docker compose` says *permission denied* on `/var/run/docker.sock`, your user can't reach the Docker daemon yet — run it once with `sudo`, or add yourself to the `docker` group.
 
 ### The commands CI runs
 
