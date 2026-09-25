@@ -5,6 +5,7 @@ import { categoryFor, extOf, matchesDeclaredType } from '../lib/fileValidation.j
 import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
 import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
+import { isFaculty } from '../lib/faculties.js'
 import { parseCampus } from '../lib/campus.js'
 import { notifyOnce } from '../lib/notifications.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -135,6 +136,20 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   }>('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { name, faculty, campus, program, classYear, bio, avatarUrl } = request.body
 
+    // Faculty comes from a fixed list (lib/faculties.ts) so filters and the
+    // "Your program" feed can match it exactly. A value written before the
+    // list existed may be sent back unchanged; it just cannot be newly chosen.
+    if (faculty !== undefined && faculty !== '' && !isFaculty(faculty)) {
+      const current = await db.user.findUnique({
+        where: { id: request.user.sub },
+        select: { faculty: true },
+      })
+      if (current?.faculty !== faculty)
+        return reply.code(400).send({ error: 'Choose a faculty from the list' })
+    }
+    if (name !== undefined && !name.trim())
+      return reply.code(400).send({ error: 'Name is required' })
+
     // Empty string and null both mean "clear it" — the profile form sends the
     // empty option that way. Anything else has to be a real campus.
     let nextCampus: ReturnType<typeof parseCampus> | null | undefined
@@ -150,7 +165,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.user.sub },
       data: {
         ...(name !== undefined && { name: name.trim() }),
-        ...(faculty !== undefined && { faculty }),
+        ...(faculty !== undefined && { faculty: faculty || null }),
         ...(nextCampus !== undefined && { campus: nextCampus }),
         ...(program !== undefined && { program }),
         ...(classYear !== undefined && { classYear }),
