@@ -1,31 +1,48 @@
 import type { ReactionKind } from '@uofthub/types'
-import type { ChipColor } from '../components/ui'
+import type { IconName } from '../components/ui/Icon'
 
 /**
- * The four things a reader can say about a project in one tap.
+ * The three reactions on the Card system board: "three meaningful reactions
+ * instead of a like count". They are the app's only public engagement signal
+ * — likes were folded into Impressive when the redesign shipped.
  *
- * Deliberately not a rating and deliberately not a second Like. A blank
- * "Leave a comment…" box on a stranger's capstone collects nothing forever,
- * because writing a sentence about somebody else's work is a real decision.
- * These cost one tap and still say something specific — which is the whole
- * difference between feedback and a popularity score.
- *
- * `label` is the chip; `past` is how the project page reports the tally back
- * ("4 found this useful"), which reads better than a bare count beside a word.
+ * USEFUL keeps its API name and is shown as "Learned something". COLLAB is
+ * counted publicly, but who pressed it is only ever shown to the project's
+ * owner, who is told privately.
  */
-export const REACTIONS: { value: ReactionKind; label: string; past: string; icon: string; color: ChipColor }[] = [
-  { value: 'USEFUL', label: 'Useful', past: 'found this useful', icon: 'mdi-lightbulb-on-outline', color: 'yellow' },
-  { value: 'IMPRESSIVE', label: 'Impressive', past: 'were impressed', icon: 'mdi-star-outline', color: 'purple' },
+export type DesignReaction = {
+  kind: ReactionKind
+  label: string
+  icon: IconName
+  /** The tooltip — says what pressing it does, which for COLLAB matters. */
+  hint: string
+  /** How the owner's insights read the tally back: "12 learned something". */
+  past: string
+}
+
+export const REACTIONS: DesignReaction[] = [
   {
-    value: 'WELL_DOCUMENTED',
-    label: 'Well documented',
-    past: 'found it well documented',
-    icon: 'mdi-book-open-outline',
-    color: 'blue',
+    kind: 'IMPRESSIVE',
+    label: 'Impressive',
+    icon: 'star',
+    hint: 'Impressive work',
+    past: 'were impressed',
   },
-  { value: 'WOULD_USE', label: 'Would use this', past: 'would use this', icon: 'mdi-hand-back-right-outline', color: 'mint' },
+  {
+    kind: 'COLLAB',
+    label: 'Want to collab',
+    icon: 'userPlus',
+    hint: 'Tells the author privately that you would like to work on this with them',
+    past: 'want to collab',
+  },
+  {
+    kind: 'USEFUL',
+    label: 'Learned something',
+    icon: 'bulb',
+    hint: 'You learned something from it',
+    past: 'learned something',
+  },
 ]
 
-/** Total reactions across every kind — what the project page badges the row with. */
-export const reactionTotal = (counts: Record<ReactionKind, number>) =>
-  Object.values(counts).reduce((sum, n) => sum + n, 0)
+export const reactionLabel = (kind: ReactionKind) =>
+  REACTIONS.find((r) => r.kind === kind)?.label ?? kind
