@@ -1,8 +1,10 @@
 import { useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type FilePreview, type ProjectFile } from '../lib/api'
+import { CSV_ROW_CAP, parseCsv } from '../lib/csv'
 import { extOf, formatBytes, lookFor } from '../lib/files'
-import { Btn, Chip, Icon, Spinner } from './ui'
+import { Button, Chip, Icon, Spinner } from './ui'
 import Markdown from './Markdown'
 
 /**
@@ -14,54 +16,9 @@ import Markdown from './Markdown'
  * URL the API hands back (see GET /projects/:id/files/:fileId/preview).
  */
 
-/* ----------------------------------- CSV ----------------------------------- */
-
-/** Rows a table preview draws before it stops and points at the download. */
-const CSV_ROW_CAP = 200
-
-/** Enough of RFC 4180 to survive quoted commas, escaped quotes and CRLF. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let quoted = false
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"'
-          i++
-        } else quoted = false
-      } else field += c
-    } else if (c === '"') {
-      quoted = true
-    } else if (c === ',') {
-      row.push(field)
-      field = ''
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ''
-    } else {
-      field += c
-    }
-  }
-  if (field || row.length) {
-    row.push(field)
-    rows.push(row)
-  }
-  // A trailing newline leaves one empty row behind; drop it rather than drawing
-  // a blank line at the bottom of every table.
-  return rows.filter(r => r.some(cell => cell !== ''))
-}
-
 function CsvTable({ text }: { text: string }) {
   const rows = parseCsv(text)
-  if (rows.length === 0) return <p className="text--disabled">This file is empty.</p>
+  if (rows.length === 0) return <p className="muted">This file is empty.</p>
 
   const [header, ...body] = rows
   const shown = body.slice(0, CSV_ROW_CAP)
@@ -88,7 +45,7 @@ function CsvTable({ text }: { text: string }) {
           </tbody>
         </table>
       </div>
-      <p className="text--disabled" style={{ fontSize: '0.8125rem', marginTop: 12 }}>
+      <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
         {body.length > shown.length
           ? `Showing the first ${CSV_ROW_CAP} of ${body.length} rows — download the file for all of it.`
           : `${body.length} ${body.length === 1 ? 'row' : 'rows'}.`}
@@ -97,16 +54,14 @@ function CsvTable({ text }: { text: string }) {
   )
 }
 
-/* --------------------------------- Preview --------------------------------- */
-
 function Preview({ preview, name }: { preview: FilePreview; name: string }) {
   if (preview.kind === 'text') {
     const ext = extOf(name)
     return (
       <>
         {preview.truncated && (
-          <p className="text--disabled" style={{ fontSize: '0.8125rem', marginBottom: 12 }}>
-            <Icon name="mdi-information-outline" size={15} /> This file is large — only the beginning is shown.
+          <p className="muted row" style={{ fontSize: 13, marginBottom: 12, gap: 6 }}>
+            <Icon name="info" size={15} /> This file is large — only the beginning is shown.
             Download it for the rest.
           </p>
         )}
@@ -128,7 +83,13 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
       <img
         src={preview.url}
         alt={name}
-        style={{ maxWidth: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: 8 }}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '72vh',
+          objectFit: 'contain',
+          borderRadius: 10,
+          margin: '0 auto',
+        }}
       />
     )
   }
@@ -140,26 +101,43 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
       <iframe
         src={preview.url}
         title={name}
-        style={{ width: '100%', height: '74vh', border: 'none', borderRadius: 8, background: '#fff' }}
+        style={{
+          width: '100%',
+          height: '74vh',
+          border: 'none',
+          borderRadius: 10,
+          background: '#fff',
+        }}
       />
     )
   }
 
   if (preview.kind === 'video') {
     return (
-      <video src={preview.url} controls style={{ maxWidth: '100%', maxHeight: '72vh', borderRadius: 8 }} />
+      <video
+        src={preview.url}
+        controls
+        style={{ maxWidth: '100%', maxHeight: '72vh', borderRadius: 10, margin: '0 auto' }}
+      />
     )
   }
 
   return (
-    <div style={{ padding: '48px 0', textAlign: 'center' }}>
-      <Icon name="mdi-waveform" size={64} color="var(--tone-mint)" />
-      <audio src={preview.url} controls style={{ display: 'block', width: '100%', marginTop: 24 }} />
+    <div style={{ padding: '40px 0', textAlign: 'center' }}>
+      <span
+        className="empty__icon"
+        style={{ margin: '0 auto', width: 64, height: 64, borderRadius: 16 }}
+      >
+        <Icon name="music" size={30} />
+      </span>
+      <audio
+        src={preview.url}
+        controls
+        style={{ display: 'block', width: '100%', marginTop: 24 }}
+      />
     </div>
   )
 }
-
-/* ---------------------------------- Viewer --------------------------------- */
 
 export default function FileViewer({
   projectId,
@@ -175,7 +153,7 @@ export default function FileViewer({
   onSelect: (fileId: string) => void
   onClose: () => void
 }) {
-  const index = files.findIndex(f => f.id === fileId)
+  const index = files.findIndex((f) => f.id === fileId)
   const file = files[index]
 
   const { data, isLoading, error } = useQuery({
@@ -213,69 +191,103 @@ export default function FileViewer({
   if (!file) return null
   const look = lookFor(file.name)
 
-  return (
-    <div className="v-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <div className="v-dialog" style={{ maxWidth: 1000, display: 'flex', flexDirection: 'column' }}>
+  return createPortal(
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        className="dialog card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={file.name}
+        style={{ maxWidth: 1000 }}
+      >
         <div
+          className="row"
           style={{
-            display: 'flex',
-            alignItems: 'center',
             gap: 12,
-            padding: '14px 18px',
-            borderBottom: '1px solid var(--v-border-base)',
+            padding: '14px 16px 14px 20px',
+            borderBottom: '1px solid var(--line-soft)',
           }}
         >
-          <Icon name={look.icon} size={24} color={`var(--tone-${look.color})`} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="overflow-ellipsis" style={{ fontWeight: 500 }}>
+          <span
+            className="row"
+            style={{
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: look.bg,
+              color: look.ink,
+            }}
+          >
+            <Icon name={look.icon} size={20} />
+          </span>
+          <div className="grow">
+            <div className="clamp-1" style={{ fontWeight: 600 }}>
               {file.name}
             </div>
-            <div className="text--disabled" style={{ fontSize: '0.75rem' }}>
+            <div className="muted" style={{ fontSize: 13 }}>
               {formatBytes(file.sizeBytes)} · {new Date(file.uploadedAt).toLocaleDateString()}
             </div>
           </div>
 
           {files.length > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Btn icon onClick={() => step(-1)} disabled={index === 0} aria-label="Previous file">
-                <Icon name="mdi-chevron-left" />
-              </Btn>
-              <span className="text--disabled" style={{ fontSize: '0.8125rem' }}>
+            <div className="row" style={{ gap: 4 }}>
+              <Button
+                size="md"
+                variant="ghost"
+                iconOnly
+                icon="chevronLeft"
+                onClick={() => step(-1)}
+                disabled={index === 0}
+                aria-label="Previous file"
+              />
+              <span className="muted" style={{ fontSize: 13 }}>
                 {index + 1} / {files.length}
               </span>
-              <Btn icon onClick={() => step(1)} disabled={index === files.length - 1} aria-label="Next file">
-                <Icon name="mdi-chevron-right" />
-              </Btn>
+              <Button
+                size="md"
+                variant="ghost"
+                iconOnly
+                icon="chevronRight"
+                onClick={() => step(1)}
+                disabled={index === files.length - 1}
+                aria-label="Next file"
+              />
             </div>
           )}
 
-          <Btn variant="outlined" size="small" href={api.projects.downloadUrl(projectId, file.id)}>
-            <Icon name="mdi-download-outline" size={16} />
+          <Button size="md" icon="download" href={api.projects.downloadUrl(projectId, file.id)}>
             Download
-          </Btn>
-          <Btn icon onClick={onClose} aria-label="Close">
-            <Icon name="mdi-close" />
-          </Btn>
+          </Button>
+          <Button
+            size="md"
+            variant="ghost"
+            iconOnly
+            icon="close"
+            onClick={onClose}
+            aria-label="Close"
+          />
         </div>
 
-        <div style={{ padding: 20, overflow: 'auto', textAlign: data?.kind === 'image' ? 'center' : undefined }}>
+        <div style={{ padding: 20, overflow: 'auto' }}>
           {isLoading ? (
             <Spinner label="Opening…" />
           ) : error || !data ? (
-            <div className="text--disabled" style={{ textAlign: 'center', padding: '48px 16px' }}>
-              <Icon name="mdi-eye-off-outline" size={40} />
-              <p style={{ marginTop: 12, color: 'inherit' }}>
+            <div className="empty">
+              <span className="empty__icon">
+                <Icon name="eyeOff" size={22} />
+              </span>
+              <div className="empty__title">
                 {(error as Error | null)?.message ?? 'This file could not be opened.'}
-              </p>
-              <Chip small color="grey" style={{ marginTop: 8 }}>
-                {extOf(file.name).toUpperCase() || 'FILE'}
-              </Chip>
+              </div>
+              <Chip size="sm">{extOf(file.name).toUpperCase() || 'FILE'}</Chip>
             </div>
           ) : (
             <Preview preview={data} name={file.name} />
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

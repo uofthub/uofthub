@@ -142,7 +142,7 @@ export default function Markdown({ source }: { source: string }) {
     }
 
     if (RULE.test(line)) {
-      blocks.push(<hr key={key()} className="v-divider" style={{ margin: '20px 0' }} />)
+      blocks.push(<hr key={key()} className="md-rule" />)
       i += 1
       continue
     }
