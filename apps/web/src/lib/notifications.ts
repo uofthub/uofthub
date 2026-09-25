@@ -52,6 +52,13 @@ export function messageFor(n: Notification): { text: string; to: string } {
           : `A moderator reviewed a report about "${p.projectTitle}"`
       return { text: p.note ? `${action}: ${p.note}` : action, to }
     }
+    case 'MESSAGING_MODERATED': {
+      const action =
+        p.action === 'TAKEN_DOWN'
+          ? 'A moderator suspended your messaging after a report'
+          : 'A moderator reviewed a report about your messages'
+      return { text: p.note ? `${action}: ${p.note}` : action, to: '/messages' }
+    }
     case 'PROJECT_LIKED':
       return { text: `${p.actorName} liked "${p.projectTitle}"`, to }
     case 'PROJECT_COMMENTED':

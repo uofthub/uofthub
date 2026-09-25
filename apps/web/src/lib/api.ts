@@ -150,6 +150,8 @@ export type Conversation = {
   user: ChatPerson
   lastMessage: { id: string; body: string; fromMe: boolean; createdAt: string }
   unread: number
+  /** You blocked them — the conversation stays listed, closed. */
+  blocked: boolean
 }
 
 export type Message = {
@@ -161,9 +163,21 @@ export type Message = {
   readAt?: string | null
 }
 
+/**
+ * Why you can't send in a conversation: `suspended` by a moderator, `blocked`
+ * by you, or `unavailable` — they blocked you or don't take new messages, and
+ * the API deliberately doesn't say which.
+ */
+export type ThreadClosed = 'suspended' | 'blocked' | 'unavailable'
+
 export type Thread = {
   user: ChatPerson
   canMessage: boolean
+  closed: ThreadClosed | null
+  /** They have written to you, so there is something to report. */
+  canReport: boolean
+  /** You have an open report about this conversation. */
+  reported: boolean
   hasMore: boolean
   messages: Message[]
 }
@@ -352,6 +366,24 @@ export type AdminReport = {
 
 export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
 
+/** A reported conversation, with the thread as it was when it was reported. */
+export type AdminMessageReport = {
+  id: string
+  reason: ReportReason
+  details?: string
+  status: ReportStatus
+  createdAt: string
+  reviewedAt?: string
+  reviewNote?: string
+  messages: { senderId: string; body: string; createdAt: string }[]
+  reporter: Pick<User, 'id' | 'name' | 'email'>
+  reported: Pick<User, 'id' | 'name' | 'email'> & { messagingSuspendedAt: string | null }
+  reviewedBy?: { id: string; name: string }
+}
+
+/** SUSPEND stops the sender messaging anyone; it is recorded as TAKEN_DOWN. */
+export type MessageReportDecision = 'DISMISS' | 'WARN' | 'SUSPEND'
+
 /** A week's spotlight pick, as the moderation page lists them. */
 export type AdminSpotlight = {
   id: string
@@ -501,6 +533,14 @@ export const api = {
       request<AdminReport[]>(`/admin/reports?status=${status}`),
     decide: (id: string, body: { decision: ReportDecision; note?: string }) =>
       request<AdminReport>(`/admin/reports/${id}/decision`, post(body)),
+    messageReports: (status: ReportStatus | 'all' = 'OPEN') =>
+      request<AdminMessageReport[]>(`/admin/message-reports?status=${status}`),
+    decideMessageReport: (id: string, body: { decision: MessageReportDecision; note?: string }) =>
+      request<AdminMessageReport>(`/admin/message-reports/${id}/decision`, post(body)),
+    liftMessagingSuspension: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/messaging-suspension`, {
+        method: 'DELETE',
+      }),
     orgs: (status: OrgStatus | 'all' = 'IN_REVIEW') =>
       request<AdminOrg[]>(`/admin/orgs?status=${status}`),
     decideOrg: (slug: string, body: { decision: OrgDecision; note?: string }) =>
@@ -631,6 +671,11 @@ export const api = {
         `/messages/${userId}${before ? `?before=${encodeURIComponent(before)}` : ''}`
       ),
     send: (userId: string, body: string) => request<Message>(`/messages/${userId}`, post({ body })),
+    block: (userId: string) => request<{ blocked: boolean }>(`/messages/${userId}/block`, post()),
+    unblock: (userId: string) =>
+      request<{ blocked: boolean }>(`/messages/${userId}/block`, { method: 'DELETE' }),
+    report: (userId: string, body: { reason: ReportReason; details?: string; block: boolean }) =>
+      request<{ id: string; status: ReportStatus }>(`/messages/${userId}/report`, post(body)),
   },
   notifications: {
     list: () =>

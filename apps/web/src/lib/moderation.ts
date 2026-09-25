@@ -27,6 +27,18 @@ export const REPORT_REASONS: { value: ReportReason; label: string; short: string
   { value: 'OTHER', label: 'Something else', short: 'Other' },
 ]
 
+/**
+ * What a conversation can be reported for — the reasons that make sense for
+ * messages, in the order the dialog offers them. Shares the enum, so the
+ * moderation queue labels both kinds of report the same way.
+ */
+export const MESSAGE_REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'HARASSMENT', label: 'Harassment, threats or hateful messages' },
+  { value: 'SPAM', label: 'Spam, scams or advertising' },
+  { value: 'PRIVACY', label: 'Sharing someone’s personal information' },
+  { value: 'OTHER', label: 'Something else' },
+]
+
 export const reasonShort = (reason: ReportReason) =>
   REPORT_REASONS.find(r => r.value === reason)?.short ?? reason
 

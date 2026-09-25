@@ -48,6 +48,17 @@ describe('messageFor — administrative notifications', () => {
     expect(withNote.text).toContain('Solutions to live coursework')
     expect(without.text).toBe('"Autonomous gripper" was taken down after a report')
   })
+
+  it('tells a sender their messaging was suspended, and sends them to their messages', () => {
+    const { text, to } = messageFor(
+      notification('MESSAGING_MODERATED', { action: 'TAKEN_DOWN', note: 'Stop sending ads' })
+    )
+    expect(text).toBe('A moderator suspended your messaging after a report: Stop sending ads')
+    expect(to).toBe('/messages')
+    expect(messageFor(notification('MESSAGING_MODERATED', { action: 'WARNED' })).text).toBe(
+      'A moderator reviewed a report about your messages'
+    )
+  })
 })
 
 describe('messageFor — social notifications', () => {
@@ -182,6 +193,7 @@ describe('messageFor — malformed payloads', () => {
       'PROJECT_COLLAB_INTEREST',
       'COMMENT_REPLIED',
       'PROJECT_UPDATED',
+      'MESSAGING_MODERATED',
     ]
     for (const type of types) {
       expect(messageFor(notification(type, PROJECT)).text).toBeTruthy()

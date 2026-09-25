@@ -6,7 +6,18 @@ import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { PHONE, useDocumentTitle, useMediaQuery } from '../../lib/hooks'
 import { timeShort } from '../../lib/projectView'
-import { Avatar, Button, EmptyState, ErrorText, Icon, Spinner, cx } from '../../components/ui'
+import {
+  Avatar,
+  Button,
+  EmptyState,
+  ErrorText,
+  Icon,
+  Menu,
+  MenuItem,
+  Spinner,
+  cx,
+} from '../../components/ui'
+import { ReportConversationDialog } from './ReportConversationDialog'
 import './messages.css'
 
 const MESSAGE_MAX = 2000
@@ -44,8 +55,14 @@ function Conversations({ active }: { active?: string }) {
                 <span className="muted convo__when">{timeShort(c.lastMessage.createdAt)}</span>
               </span>
               <span className={cx('convo__last', c.unread > 0 && 'convo__last--unread')}>
-                {c.lastMessage.fromMe && 'You: '}
-                {c.lastMessage.body}
+                {c.blocked ? (
+                  'Blocked'
+                ) : (
+                  <>
+                    {c.lastMessage.fromMe && 'You: '}
+                    {c.lastMessage.body}
+                  </>
+                )}
               </span>
             </span>
             {c.unread > 0 && (
@@ -64,6 +81,7 @@ function Conversations({ active }: { active?: string }) {
 function ThreadView({ userId, back }: { userId: string; back: boolean }) {
   const qc = useQueryClient()
   const [draft, setDraft] = useState('')
+  const [reporting, setReporting] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   const thread = useInfiniteQuery({
@@ -101,6 +119,17 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
       qc.invalidateQueries({ queryKey: ['messages', 'conversations'] })
     },
   })
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['messages', 'thread', userId] })
+    qc.invalidateQueries({ queryKey: ['messages', 'conversations'] })
+    qc.invalidateQueries({ queryKey: ['messages', 'unread'] })
+  }
+  const block = useMutation({ mutationFn: () => api.messages.block(userId), onSuccess: refresh })
+  const unblock = useMutation({
+    mutationFn: () => api.messages.unblock(userId),
+    onSuccess: refresh,
+  })
+
   const submit = (e?: FormEvent) => {
     e?.preventDefault()
     const body = draft.trim()
@@ -121,6 +150,7 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
     return <EmptyState icon="inbox" title="That conversation isn’t available" />
 
   const other = first.user
+  const firstName = other.name.split(/\s+/)[0]
   const meta = [other.faculty, campusShort(other.campus)].filter(Boolean).join(' · ')
 
   return (
@@ -146,7 +176,53 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
             )}
           </span>
         </Link>
+        <span className="push" />
+        <Menu
+          width={240}
+          trigger={({ toggle, open }) => (
+            <Button
+              variant="ghost"
+              iconOnly
+              icon="more"
+              aria-label="Conversation options"
+              aria-expanded={open}
+              onClick={toggle}
+            />
+          )}
+        >
+          {(close) => (
+            <>
+              {first.closed === 'blocked' ? (
+                <MenuItem icon="eye" onSelect={() => unblock.mutate()} close={close}>
+                  Unblock {firstName}
+                </MenuItem>
+              ) : (
+                <MenuItem
+                  icon="eyeOff"
+                  onSelect={() =>
+                    confirm(
+                      `Block ${other.name}? Neither of you can message the other until you unblock them. They won’t be told.`
+                    ) && block.mutate()
+                  }
+                  close={close}
+                >
+                  Block {firstName}
+                </MenuItem>
+              )}
+              <MenuItem
+                icon="flag"
+                danger
+                disabled={!first.canReport || first.reported}
+                onSelect={() => setReporting(true)}
+                close={close}
+              >
+                {first.reported ? 'Reported — a moderator will review it' : 'Report conversation'}
+              </MenuItem>
+            </>
+          )}
+        </Menu>
       </header>
+      {reporting && <ReportConversationDialog person={other} onClose={() => setReporting(false)} />}
 
       <div className="thread__body">
         {thread.hasNextPage && (
@@ -183,7 +259,7 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
             maxLength={MESSAGE_MAX}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKey}
-            placeholder={`Message ${other.name.split(/\s+/)[0]}`}
+            placeholder={`Message ${firstName}`}
             aria-label="Message"
           />
           <Button
@@ -195,12 +271,30 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
             Send
           </Button>
         </form>
+      ) : first.closed === 'blocked' ? (
+        <p className="thread__closed muted">
+          <Icon name="eyeOff" size={15} /> You blocked {other.name}.
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => unblock.mutate()}
+            disabled={unblock.isPending}
+          >
+            Unblock
+          </Button>
+        </p>
+      ) : first.closed === 'suspended' ? (
+        <p className="thread__closed muted">
+          <Icon name="lock" size={15} /> A moderator has suspended your messaging.
+        </p>
       ) : (
         <p className="thread__closed muted">
           <Icon name="lock" size={15} /> {other.name} isn’t taking new messages.
         </p>
       )}
-      {send.isError && <ErrorText>{(send.error as Error).message}</ErrorText>}
+      {(send.error || block.error || unblock.error) && (
+        <ErrorText>{((send.error || block.error || unblock.error) as Error).message}</ErrorText>
+      )}
     </section>
   )
 }

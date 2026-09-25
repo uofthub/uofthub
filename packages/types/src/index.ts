@@ -88,6 +88,7 @@ export type NotificationType =
   | 'PROJECT_COLLAB_INTEREST'
   | 'COMMENT_REPLIED'
   | 'PROJECT_UPDATED'
+  | 'MESSAGING_MODERATED'
 
 export interface Notification {
   id: string
