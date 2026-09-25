@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
-import { useUI } from '../lib/ui'
-import logoBrand from '../assets/uofthub-logo.svg'
-import logoLight from '../assets/uofthub-logo-light.svg'
+import { useTheme } from '../../lib/theme'
+import logoBrand from '../../assets/uofthub-logo.svg'
+import logoLight from '../../assets/uofthub-logo-light.svg'
 
 /**
  * The full lockup: mark, wordmark and tagline.
@@ -20,20 +20,14 @@ export default function Logo({
   className?: string
   style?: CSSProperties
 }) {
-  const { darkMode } = useUI()
+  const { darkMode } = useTheme()
 
   return (
     <img
       src={darkMode ? logoLight : logoBrand}
       alt="uofthub"
       className={className}
-      style={{
-        display: 'block',
-        width,
-        maxWidth: '100%',
-        height: 'auto',
-        ...style,
-      }}
+      style={{ display: 'block', width, maxWidth: '100%', height: 'auto', ...style }}
     />
   )
 }
