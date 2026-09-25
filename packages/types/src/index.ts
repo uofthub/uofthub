@@ -87,6 +87,7 @@ export type NotificationType =
   | 'FOLLOWING_PUBLISHED'
   | 'PROJECT_COLLAB_INTEREST'
   | 'COMMENT_REPLIED'
+  | 'PROJECT_UPDATED'
 
 export interface Notification {
   id: string
@@ -121,12 +122,7 @@ export interface OrgActivity {
 }
 
 export type ReportReason =
-  | 'SPAM'
-  | 'HARASSMENT'
-  | 'ACADEMIC_INTEGRITY'
-  | 'INTELLECTUAL_PROPERTY'
-  | 'PRIVACY'
-  | 'OTHER'
+  'SPAM' | 'HARASSMENT' | 'ACADEMIC_INTEGRITY' | 'INTELLECTUAL_PROPERTY' | 'PRIVACY' | 'OTHER'
 
 /** `OPEN` until a moderator decides it; the rest are the decision taken. */
 export type ReportStatus = 'OPEN' | 'DISMISSED' | 'WARNED' | 'TAKEN_DOWN'

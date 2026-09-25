@@ -16,7 +16,13 @@ import {
   matchesDeclaredType,
   previewKindFor,
 } from '../lib/fileValidation.js'
-import { deleteObject, getObjectHead, objectKey, putObject, signedDownloadUrl } from '../lib/storage.js'
+import {
+  deleteObject,
+  getObjectHead,
+  objectKey,
+  putObject,
+  signedDownloadUrl,
+} from '../lib/storage.js'
 import {
   CARD_INCLUDE,
   OWNER_SELECT,
@@ -32,7 +38,7 @@ import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
-import { notify, notifyProjectOwner } from '../lib/notifications.js'
+import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
 import { announcePublish } from '../lib/publishing.js'
 import { bySession } from '../lib/rateLimit.js'
 
@@ -71,6 +77,8 @@ const VISIBILITIES: Visibility[] = ['PRIVATE', 'UOFT', 'PUBLIC', 'UNLISTED']
 
 /** A card's one line. Generous next to the form's 120, for pitches split out of old descriptions. */
 const PITCH_MAX = 280
+/** A version's release note — one line in the Updates timeline. */
+const NOTE_MAX = 280
 const COMMENT_MAX = 4000
 
 /** `undefined` leaves a field alone, `null` clears it, anything unknown is an error. */
@@ -212,11 +220,22 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // The owner reloading their own page is not interest.
     if (callerId !== project.ownerId) await recordView(project.id, request, callerId)
 
-    const [shaped] = await decorate(
-      [{ ...project, collaborators: project.collaborators.filter((c) => c.accepted) }],
+    const [shaped, following, followerCount] = await Promise.all([
+      decorate(
+        [{ ...project, collaborators: project.collaborators.filter((c) => c.accepted) }],
+        callerId
+      ).then(([p]) => p),
       callerId
-    )
-    return shaped
+        ? db.projectFollow
+            .findUnique({ where: { userId_projectId: { userId: callerId, projectId: project.id } } })
+            .then(Boolean)
+        : false,
+      // Like saves, who follows is private; the owner sees only how many.
+      callerId === project.ownerId
+        ? db.projectFollow.count({ where: { projectId: project.id } })
+        : undefined,
+    ])
+    return { ...shaped, following, ...(followerCount !== undefined && { followerCount }) }
   })
 
   // POST /projects
@@ -363,6 +382,39 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       }
       await db.projectSave.create({ data: { userId, projectId: id } })
       return { saved: true }
+    }
+  )
+
+  // POST /projects/:id/follow — toggles "tell me when this posts an update"
+  //
+  // Private like a save: the owner is not notified and sees only a count.
+  // Following your own project is refused — you wrote the update.
+  app.post<{ Params: { id: string } }>(
+    '/:id/follow',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { id } = request.params
+      const userId = request.user.sub
+      const project = await db.project.findUnique({
+        where: { id },
+        select: {
+          ownerId: true,
+          visibility: true,
+          collaborators: { select: { userId: true, accepted: true } },
+        },
+      })
+      if (!project || !canViewProject(project, userId))
+        return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId === userId)
+        return reply.code(400).send({ error: 'You get your own updates already' })
+
+      const where = { userId_projectId: { userId, projectId: id } }
+      if (await db.projectFollow.findUnique({ where })) {
+        await db.projectFollow.delete({ where })
+        return { following: false }
+      }
+      await db.projectFollow.create({ data: { userId, projectId: id } })
+      return { following: true }
     }
   )
 
@@ -959,13 +1011,21 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // POST /projects/:id/versions — snapshot current state as a new version
-  app.post<{ Params: { id: string }; Body: { label?: string } }>(
+  //
+  // With a note it is also an update: the note is the line the project's
+  // Updates timeline shows ("Added Gerstein Library and a quiet-floors filter").
+  app.post<{ Params: { id: string }; Body: { note?: string } }>(
     '/:id/versions',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const project = await db.project.findUnique({ where: { id: request.params.id } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      const note = request.body?.note?.trim() || null
+      if (note && note.length > NOTE_MAX) {
+        return reply.code(400).send({ error: `An update note is at most ${NOTE_MAX} characters` })
+      }
 
       const latest = await db.projectVersion.findFirst({
         where: { projectId: project.id },
@@ -976,11 +1036,34 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         data: {
           projectId: project.id,
           versionNum: (latest?.versionNum ?? 0) + 1,
+          note,
           title: project.title,
           description: project.description,
           tags: project.tags,
         },
       })
+
+      // A version with a note is an update, and its followers asked to hear
+      // about those. Only the ones who can still see the project are told —
+      // it may have gone back to a draft since they followed it.
+      if (note && !project.takenDownAt) {
+        const [followers, collaborators] = await Promise.all([
+          db.projectFollow.findMany({ where: { projectId: project.id }, select: { userId: true } }),
+          db.projectCollaborator.findMany({
+            where: { projectId: project.id },
+            select: { userId: true, accepted: true },
+          }),
+        ])
+        const audience = followers
+          .map((f) => f.userId)
+          .filter((userId) => canViewProject({ ...project, collaborators }, userId))
+        await notifyMany(
+          audience,
+          'PROJECT_UPDATED',
+          { projectId: project.id, projectTitle: project.title, note },
+          `update:${version.id}`
+        )
+      }
       return reply.code(201).send(version)
     }
   )
@@ -1058,7 +1141,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         select: {
           ownerId: true,
           viewCount: true,
-          _count: { select: { comments: true, forks: true, saves: true } },
+          _count: { select: { comments: true, forks: true, saves: true, followers: true } },
         },
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
@@ -1109,6 +1192,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         forks: project._count.forks,
         // How many people bookmarked it. Never who: a save is private.
         saves: project._count.saves,
+        followers: project._count.followers,
         // Two adjacent weeks rather than one number, so the owner can tell
         // "quiet" apart from "slowing down" — the single total never could.
         viewsThisWeek: viewsBetween(sevenDaysAgo),
