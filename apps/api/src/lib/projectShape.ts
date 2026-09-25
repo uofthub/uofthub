@@ -114,12 +114,34 @@ function withoutContent<T extends object>(row: T): Omit<T, 'sections' | 'details
   return rest
 }
 
-/** A decorated single project with its sections and details back on. */
+/** What a single project carries that a card does not. */
+export const CONTENT_INCLUDE = {
+  references: {
+    orderBy: { position: 'asc' },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      url: true,
+      doi: true,
+      authors: true,
+      year: true,
+      note: true,
+      key: true,
+    },
+  },
+} satisfies Prisma.ProjectInclude
+
+/** A decorated single project with its long-form content back on. */
 export function withContent<T extends object>(
   shaped: T,
-  row: { sections: Prisma.JsonValue; details: Prisma.JsonValue }
+  row: {
+    sections: Prisma.JsonValue
+    details: Prisma.JsonValue
+    references: Prisma.ProjectGetPayload<{ include: typeof CONTENT_INCLUDE }>['references']
+  }
 ) {
-  return { ...shaped, sections: row.sections, details: row.details }
+  return { ...shaped, sections: row.sections, details: row.details, references: row.references }
 }
 
 /** Rows come back from `where: { id: { in } }` in no useful order; restore it. */

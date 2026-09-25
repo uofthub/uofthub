@@ -1,8 +1,11 @@
+import { useQuery } from '@tanstack/react-query'
 import type { ProjectSection } from '@uofthub/types'
-import type { ProjectDetail } from '../../lib/api'
+import { api, type ProjectDetail } from '../../lib/api'
+import { REFERENCE_KINDS, referenceByline, referenceHref } from '../../lib/references'
 import { sectionAnchor, sectionLabel, shownSections } from '../../lib/sections'
 import Markdown from '../../components/Markdown'
-import { Panel } from '../../components/ui'
+import { MiniRow } from '../../components/project'
+import { Icon, Panel } from '../../components/ui'
 
 /**
  * What a project says about itself: the overview, then each section it has.
@@ -58,6 +61,68 @@ export function ProjectSections({ project }: { project: ProjectDetail }) {
 }
 
 /**
+ * What the project drew on, each with the other projects that cited the same
+ * thing ("also used in…"). Those come from their own request, since they are
+ * other people's projects, filtered to the ones this reader can see.
+ */
+export function References({ project }: { project: ProjectDetail }) {
+  const references = project.references ?? []
+  const { data: shared = [] } = useQuery({
+    queryKey: ['shared-references', project.id],
+    queryFn: () => api.projects.sharedReferences(project.id),
+    enabled: references.some((r) => r.key),
+    staleTime: 5 * 60 * 1000,
+  })
+  if (references.length === 0) return null
+  const alsoUsed = new Map(shared.map((s) => [s.reference.key, s.projects]))
+  const listed = new Set<string>()
+
+  return (
+    <Panel title="References" size="main" gap={16} style={PANEL_STYLE} id="references">
+      <ol className="references">
+        {references.map((ref) => {
+          const kind = REFERENCE_KINDS[ref.kind]
+          const href = referenceHref(ref)
+          const byline = referenceByline(ref)
+          // A thing cited twice gets its "also used in" once.
+          const others = ref.key && !listed.has(ref.key) ? alsoUsed.get(ref.key) : undefined
+          if (ref.key) listed.add(ref.key)
+          return (
+            <li key={ref.id} className="reference">
+              <span className="reference__icon" title={kind.label}>
+                <Icon name={kind.icon} size={16} />
+              </span>
+              <div className="stack" style={{ gap: 4, minWidth: 0 }}>
+                <span className="reference__title">
+                  {href ? (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {ref.title}
+                    </a>
+                  ) : (
+                    ref.title
+                  )}
+                  <span className="muted"> · {kind.label}</span>
+                </span>
+                {byline && <span className="muted">{byline}</span>}
+                {ref.note && <span>{ref.note}</span>}
+                {others && others.length > 0 && (
+                  <div className="stack" style={{ gap: 8, paddingTop: 6 }}>
+                    <span className="lbl">Also used in</span>
+                    {others.map((p) => (
+                      <MiniRow key={p.id} project={p} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </Panel>
+  )
+}
+
+/**
  * Links to the overview and each section, for a project long enough to need
  * them. Built from what actually rendered, so it never lists an empty one.
  */
@@ -68,6 +133,7 @@ export function Contents({ project }: { project: ProjectDetail }) {
       href: `#${sectionAnchor(s)}`,
       label: sectionLabel(s, project.type),
     })),
+    ...(project.references?.length ? [{ href: '#references', label: 'References' }] : []),
   ]
   if (entries.length < 2) return null
   return (

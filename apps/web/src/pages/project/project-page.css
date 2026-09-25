@@ -294,3 +294,35 @@ img.gallery__media {
 .contents a {
   color: var(--ink);
 }
+
+/* ---------- References ---------- */
+
+.references {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.reference {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.reference__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--navy-ink);
+}
+.reference__title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

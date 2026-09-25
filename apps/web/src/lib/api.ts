@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectDetailItem,
   ProjectLink,
+  ProjectReference,
   ProjectSection,
   ProjectStatus,
   ProjectType,
@@ -93,10 +94,17 @@ export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
     accepted: boolean
   }[]
   files: ProjectFile[]
+  references: ProjectReference[]
   /** Whether the caller follows this project's updates. */
   following?: boolean
   /** Owner only: how many people follow it. */
   followerCount?: number
+}
+
+/** One of a project's references, and other projects that cited the same thing. */
+export type SharedReference = {
+  reference: Pick<ProjectReference, 'id' | 'key' | 'title' | 'kind'>
+  projects: ProjectSummary[]
 }
 
 /** The fields a project form writes. `null` clears a field. */
@@ -110,6 +118,8 @@ export type ProjectFields = {
   visibility: Visibility
   sections: ProjectSection[] | null
   details: ProjectDetailItem[] | null
+  /** Replaced as a whole list. */
+  references: Omit<ProjectReference, 'id' | 'key'>[] | null
   /** A calendar day (`2026-12-20`), read as midnight in Toronto. */
   showFrom: string | null
 }
@@ -447,6 +457,8 @@ export const api = {
     },
     facets: () => request<Facets>('/projects/facets'),
     get: (id: string) => request<ProjectDetail>(`/projects/${id}`),
+    sharedReferences: (id: string) =>
+      request<SharedReference[]>(`/projects/${id}/shared-references`),
     create: (
       body: Partial<ProjectFields> & { title: string; links?: { label: string; url: string }[] }
     ) => request<ProjectSummary>('/projects', post(body)),

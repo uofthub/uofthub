@@ -111,6 +111,18 @@ enum ReactionKind {
   COLLAB
 }
 
+/// What a project drew on. Decides the icon and the "also used in…" wording.
+enum ReferenceKind {
+  DATASET
+  PAPER
+  SOFTWARE
+  MODEL
+  BOOK
+  ARCHIVE
+  WEBSITE
+  OTHER
+}
+
 enum ReportReason {
   SPAM
   HARASSMENT
@@ -256,6 +268,7 @@ model Project {
   collaborators   ProjectCollaborator[]
   files           ProjectFile[]
   links           ProjectLink[]
+  references      ProjectReference[]
   reactions       ProjectReaction[]
   saves           ProjectSave[]
   comments        Comment[]
@@ -409,6 +422,38 @@ model ProjectFile {
   @@index([projectId])
   /// Per-group storage usage aggregates.
   @@index([orgId])
+}
+
+/// A dataset, paper, piece of software, model, book or archive the project
+/// used. Replaced as a whole list whenever the project is saved with one.
+model ProjectReference {
+  id        String        @id @default(uuid())
+  projectId String
+  kind      ReferenceKind
+  title     String
+  /// http(s) only, checked by safeExternalUrl.
+  url       String?
+  /// Bare and lower-cased: 10.1000/xyz.
+  doi       String?
+  authors   String?
+  year      Int?
+  /// "Used the 2019 split", "baseline only".
+  note      String?
+  /// Normalized identity — doi:…, arxiv:…, github:owner/repo, hf:…, kaggle:…
+  /// or a canonical URL — so two projects citing the same thing match however
+  /// they pasted it. Null with neither a URL nor a DOI. See lib/references.ts.
+  key       String?
+  position  Int
+
+  /// Generated over title and authors; see the `references` migration.
+  searchVector Unsupported("tsvector")?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
+  /// "Also used in…": other projects with the same key.
+  @@index([key])
+  @@index([searchVector], type: Gin)
 }
 
 model ProjectLink {

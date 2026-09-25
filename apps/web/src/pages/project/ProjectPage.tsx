@@ -11,7 +11,7 @@ import { Button, EmptyState, Icon, Spinner } from '../../components/ui'
 import { Gallery } from './Gallery'
 import { InfoCard } from './InfoCard'
 import { UpdateDialog } from './OwnerDialogs'
-import { Contents, Overview, ProjectSections } from './Content'
+import { Contents, Overview, ProjectSections, References } from './Content'
 import { Comments, Related, Updates } from './Sections'
 import './project-page.css'
 
@@ -112,6 +112,7 @@ export default function ProjectPage() {
         <div className="stack" style={{ gap: 24, minWidth: 0 }}>
           <Overview project={project} />
           <ProjectSections project={project} />
+          <References project={project} />
           <Updates
             project={project}
             versions={versions}

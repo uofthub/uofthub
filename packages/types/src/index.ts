@@ -67,6 +67,24 @@ export interface ProjectSection {
   items?: ProjectSectionItem[]
 }
 
+/** What a project drew on. */
+export type ReferenceKind =
+  'DATASET' | 'PAPER' | 'SOFTWARE' | 'MODEL' | 'BOOK' | 'ARCHIVE' | 'WEBSITE' | 'OTHER'
+
+export interface ProjectReference {
+  id: string
+  kind: ReferenceKind
+  title: string
+  url?: string | null
+  /** Bare: 10.1000/xyz. */
+  doi?: string | null
+  authors?: string | null
+  year?: number | null
+  note?: string | null
+  /** Normalized identity shared by every project citing the same thing. */
+  key?: string | null
+}
+
 /** A short labelled fact: Supervisor, Runtime, Performers. */
 export interface ProjectDetailItem {
   label: string

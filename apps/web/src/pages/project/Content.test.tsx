@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import type { ProjectDetail } from '../../lib/api'
-import { Contents, Overview, ProjectSections } from './Content'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
+import { api, type ProjectDetail, type ProjectSummary } from '../../lib/api'
+import { Contents, Overview, ProjectSections, References } from './Content'
 
 const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   id: 'p1',
@@ -14,6 +16,7 @@ const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   links: [],
   collaborators: [],
   files: [],
+  references: [],
   _count: { comments: 0 },
   reactions: { USEFUL: 0, IMPRESSIVE: 0, COLLAB: 0 },
   reactionTotal: 0,
@@ -102,5 +105,47 @@ describe('a project’s content', () => {
 
     const single = page(project({ description: 'Only an overview.' }))
     expect(single.querySelector('nav')).toBeNull()
+  })
+})
+
+describe('a project’s references', () => {
+  const withQueries = (p: ProjectDetail) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <References project={p} />
+          <Contents project={p} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    ).container
+
+  it('renders nothing without any', () => {
+    expect(withQueries(project()).textContent).toBe('')
+  })
+
+  it('links each to its source and names who else used it', async () => {
+    const other = { ...project(), id: 'p2', title: 'Bike lanes study' } as ProjectSummary
+    const shared = vi.spyOn(api.projects, 'sharedReferences').mockResolvedValue([
+      { reference: { id: 'r1', key: 'doi:10.1000/census', title: 'Census', kind: 'DATASET' }, projects: [other] },
+    ])
+    const c = withQueries(
+      project({
+        description: 'What it is.',
+        references: [
+          { id: 'r1', kind: 'DATASET', title: 'Census', doi: '10.1000/census', key: 'doi:10.1000/census', year: 2021 },
+          { id: 'r2', kind: 'PAPER', title: 'Unlinked note', key: null },
+        ],
+      })
+    )
+    expect(screen.getByRole('link', { name: 'Census' }).getAttribute('href')).toBe(
+      'https://doi.org/10.1000/census'
+    )
+    expect(await screen.findByText('Also used in')).toBeTruthy()
+    expect(screen.getByText('Bike lanes study')).toBeTruthy()
+    expect(shared).toHaveBeenCalledWith('p1')
+    // The title with no link stays text, never an empty href.
+    expect(screen.queryByRole('link', { name: 'Unlinked note' })).toBeNull()
+    const contents = [...c.querySelectorAll('nav a')].map((a) => a.textContent)
+    expect(contents).toEqual(['Overview', 'References'])
   })
 })
