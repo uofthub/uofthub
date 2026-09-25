@@ -229,14 +229,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // DELETE /projects/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const project = await db.project.findUnique({ where: { id: request.params.id } })
-    if (!project) return reply.code(404).send({ error: 'Not found' })
-    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+  app.delete<{ Params: { id: string } }>(
+    '/:id',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-    await db.project.delete({ where: { id: project.id } })
-    return { ok: true }
-  })
+      await db.project.delete({ where: { id: project.id } })
+      return { ok: true }
+    }
+  )
 
   // POST /projects/:id/like — toggles like
   app.post<{ Params: { id: string } }>('/:id/like', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -324,31 +328,37 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // POST /projects/:id/pin — toggles this project on the owner's profile strip
-  app.post<{ Params: { id: string } }>('/:id/pin', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const project = await db.project.findUnique({
-      where: { id: request.params.id },
-      select: { id: true, ownerId: true, pinnedAt: true },
-    })
-    if (!project) return reply.code(404).send({ error: 'Not found' })
-    // Pinning arranges the owner's own profile, so it is theirs alone to do —
-    // a collaborator pinning it would move somebody else's furniture.
-    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+  app.post<{ Params: { id: string } }>(
+    '/:id/pin',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, ownerId: true, pinnedAt: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      // Pinning arranges the owner's own profile, so it is theirs alone to do —
+      // a collaborator pinning it would move somebody else's furniture.
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-    if (project.pinnedAt) {
-      await db.project.update({ where: { id: project.id }, data: { pinnedAt: null } })
-      return { pinned: false }
+      if (project.pinnedAt) {
+        await db.project.update({ where: { id: project.id }, data: { pinnedAt: null } })
+        return { pinned: false }
+      }
+
+      const pinned = await db.project.count({
+        where: { ownerId: project.ownerId, pinnedAt: { not: null } },
+      })
+      if (pinned >= PIN_LIMIT) {
+        return reply
+          .code(400)
+          .send({ error: `You can pin ${PIN_LIMIT} projects — unpin one to make room.` })
+      }
+
+      await db.project.update({ where: { id: project.id }, data: { pinnedAt: new Date() } })
+      return { pinned: true }
     }
-
-    const pinned = await db.project.count({ where: { ownerId: project.ownerId, pinnedAt: { not: null } } })
-    if (pinned >= PIN_LIMIT) {
-      return reply
-        .code(400)
-        .send({ error: `You can pin ${PIN_LIMIT} projects — unpin one to make room.` })
-    }
-
-    await db.project.update({ where: { id: project.id }, data: { pinnedAt: new Date() } })
-    return { pinned: true }
-  })
+  )
 
   // GET /projects/:id/comments
   app.get<{ Params: { id: string } }>('/:id/comments', async (request, reply) => {
@@ -418,12 +428,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         where: { email: (request.body.email ?? '').trim().toLowerCase() },
       })
       if (!invitee) return reply.code(404).send({ error: 'User not found' })
-      if (invitee.id === request.user.sub) return reply.code(400).send({ error: 'Cannot invite yourself' })
+      if (invitee.id === request.user.sub)
+        return reply.code(400).send({ error: 'Cannot invite yourself' })
 
       const collab = await db.projectCollaborator.upsert({
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
         update: {},
-        create: { projectId: project.id, userId: invitee.id, role: 'COLLABORATOR', accepted: false },
+        create: {
+          projectId: project.id,
+          userId: invitee.id,
+          role: 'COLLABORATOR',
+          accepted: false,
+        },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
 
@@ -445,7 +461,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { id, userId } = request.params
 
-      const project = await db.project.findUnique({ where: { id }, select: { id: true, title: true, ownerId: true } })
+      const project = await db.project.findUnique({
+        where: { id },
+        select: { id: true, title: true, ownerId: true },
+      })
       if (!project) return reply.code(404).send({ error: 'Not found' })
 
       // Without this, responding to an invite that does not exist throws
@@ -460,8 +479,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       // A VIEWER row is a TA/professor access request (see POST
       // .../request-access) rather than an owner-issued invite, so it's the
       // owner — not the requester — who decides it.
-      const isOwnerDecidingAccessRequest = !isSelf && request.user.sub === project.ownerId && invite.role === 'VIEWER'
-      if (!isSelf && !isOwnerDecidingAccessRequest) return reply.code(403).send({ error: 'Forbidden' })
+      const isOwnerDecidingAccessRequest =
+        !isSelf && request.user.sub === project.ownerId && invite.role === 'VIEWER'
+      if (!isSelf && !isOwnerDecidingAccessRequest)
+        return reply.code(403).send({ error: 'Forbidden' })
 
       const collab = await db.projectCollaborator.update({
         where: { projectId_userId: { projectId: id, userId } },
@@ -493,7 +514,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const { id, userId } = request.params
-      const project = await db.project.findUnique({ where: { id }, select: { id: true, title: true, ownerId: true } })
+      const project = await db.project.findUnique({
+        where: { id },
+        select: { id: true, title: true, ownerId: true },
+      })
       if (!project) return reply.code(404).send({ error: 'Not found' })
 
       const isOwner = project.ownerId === request.user.sub
@@ -650,20 +674,23 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   )
 
   // GET /projects/:id/files/:fileId/download — redirects to a short-lived signed URL
-  app.get<{ Params: { id: string; fileId: string } }>('/:id/files/:fileId/download', async (request, reply) => {
-    const callerId = await getOptionalUserId(request)
-    if (!(await canViewProjectId(request.params.id, callerId))) {
-      return reply.code(404).send({ error: 'Not found' })
+  app.get<{ Params: { id: string; fileId: string } }>(
+    '/:id/files/:fileId/download',
+    async (request, reply) => {
+      const callerId = await getOptionalUserId(request)
+      if (!(await canViewProjectId(request.params.id, callerId))) {
+        return reply.code(404).send({ error: 'Not found' })
+      }
+
+      const file = await db.projectFile.findFirst({
+        where: { id: request.params.fileId, projectId: request.params.id },
+      })
+      if (!file) return reply.code(404).send({ error: 'File not found' })
+
+      const url = await signedDownloadUrl(file.storageKey, file.name)
+      return reply.redirect(url)
     }
-
-    const file = await db.projectFile.findFirst({
-      where: { id: request.params.fileId, projectId: request.params.id },
-    })
-    if (!file) return reply.code(404).send({ error: 'File not found' })
-
-    const url = await signedDownloadUrl(file.storageKey, file.name)
-    return reply.redirect(url)
-  })
+  )
 
   // GET /projects/:id/files/:fileId/preview — what the in-app viewer renders
   //
@@ -673,39 +700,42 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   // this API would arrive signed out and 404 on anything not public. Fetching
   // the signed URL here instead, over a credentialed XHR, lets the browser then
   // load the bytes straight from storage where no cookie is needed.
-  app.get<{ Params: { id: string; fileId: string } }>('/:id/files/:fileId/preview', async (request, reply) => {
-    const callerId = await getOptionalUserId(request)
-    if (!(await canViewProjectId(request.params.id, callerId))) {
-      return reply.code(404).send({ error: 'Not found' })
-    }
+  app.get<{ Params: { id: string; fileId: string } }>(
+    '/:id/files/:fileId/preview',
+    async (request, reply) => {
+      const callerId = await getOptionalUserId(request)
+      if (!(await canViewProjectId(request.params.id, callerId))) {
+        return reply.code(404).send({ error: 'Not found' })
+      }
 
-    const file = await db.projectFile.findFirst({
-      where: { id: request.params.fileId, projectId: request.params.id },
-    })
-    if (!file) return reply.code(404).send({ error: 'File not found' })
+      const file = await db.projectFile.findFirst({
+        where: { id: request.params.fileId, projectId: request.params.id },
+      })
+      if (!file) return reply.code(404).send({ error: 'File not found' })
 
-    const kind = previewKindFor(extOf(file.name))
-    if (!kind) return reply.code(415).send({ error: 'This file type cannot be previewed' })
+      const kind = previewKindFor(extOf(file.name))
+      if (!kind) return reply.code(415).send({ error: 'This file type cannot be previewed' })
 
-    // Text is returned inline: reading it in the page would otherwise need a
-    // cross-origin fetch of the storage URL, and the bucket sends no CORS
-    // headers. Media is handed over as a URL for the browser to stream itself.
-    if (kind === 'text') {
-      const head = await getObjectHead(file.storageKey, TEXT_PREVIEW_MAX_BYTES)
+      // Text is returned inline: reading it in the page would otherwise need a
+      // cross-origin fetch of the storage URL, and the bucket sends no CORS
+      // headers. Media is handed over as a URL for the browser to stream itself.
+      if (kind === 'text') {
+        const head = await getObjectHead(file.storageKey, TEXT_PREVIEW_MAX_BYTES)
+        return {
+          kind,
+          name: file.name,
+          text: head.toString('utf8'),
+          truncated: file.sizeBytes > head.length,
+        }
+      }
+
       return {
         kind,
         name: file.name,
-        text: head.toString('utf8'),
-        truncated: file.sizeBytes > head.length,
+        url: await signedDownloadUrl(file.storageKey, file.name, { disposition: 'inline' }),
       }
     }
-
-    return {
-      kind,
-      name: file.name,
-      url: await signedDownloadUrl(file.storageKey, file.name, { disposition: 'inline' }),
-    }
-  })
+  )
 
   // ── VERSIONING ─────────────────────────────────────────────────────────────
 
@@ -788,7 +818,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           visibility: 'PRIVATE',
           forkedFromId: original.id,
           links: original.links.length
-            ? { create: original.links.map(l => ({ label: l.label, url: l.url })) }
+            ? { create: original.links.map((l) => ({ label: l.label, url: l.url })) }
             : undefined,
         },
         include: {
@@ -894,7 +924,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       const [requester] = await Promise.all([
         db.user.findUnique({ where: { id: request.user.sub }, select: { name: true } }),
         db.projectCollaborator.create({
-          data: { projectId: project.id, userId: request.user.sub, role: 'VIEWER', accepted: false },
+          data: {
+            projectId: project.id,
+            userId: request.user.sub,
+            role: 'VIEWER',
+            accepted: false,
+          },
         }),
       ])
 
@@ -910,18 +945,24 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   )
 
   // GET /projects/:id/access-requests — owner sees pending VIEWER requests
-  app.get<{ Params: { id: string } }>('/:id/access-requests', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const project = await db.project.findUnique({ where: { id: request.params.id } })
-    if (!project) return reply.code(404).send({ error: 'Not found' })
-    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+  app.get<{ Params: { id: string } }>(
+    '/:id/access-requests',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-    const requests = await db.projectCollaborator.findMany({
-      where: { projectId: project.id, role: 'VIEWER', accepted: false },
-      include: { user: { select: { id: true, name: true, email: true, faculty: true, campus: true } } },
-      orderBy: { invitedAt: 'desc' },
-    })
-    return requests
-  })
+      const requests = await db.projectCollaborator.findMany({
+        where: { projectId: project.id, role: 'VIEWER', accepted: false },
+        include: {
+          user: { select: { id: true, name: true, email: true, faculty: true, campus: true } },
+        },
+        orderBy: { invitedAt: 'desc' },
+      })
+      return requests
+    }
+  )
 
   // ── MODERATION ──────────────────────────────────────────────────────────────
 
@@ -945,7 +986,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       // only visible to its owner and accepted collaborators, so there is
       // nothing for a moderator to act on.
       if (project.visibility === 'PRIVATE') {
-        return reply.code(403).send({ error: 'Only U of T-visible or public projects can be reported' })
+        return reply
+          .code(403)
+          .send({ error: 'Only U of T-visible or public projects can be reported' })
       }
       if (project.ownerId === request.user.sub) {
         return reply.code(400).send({ error: 'You cannot report your own project' })

@@ -161,7 +161,9 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
       const buffer = await data.toBuffer()
       if (data.file.truncated || buffer.length > category.maxSizeBytes) {
-        return reply.code(413).send({ error: `Avatar exceeds the ${category.maxSizeBytes / (1024 * 1024)}MB limit` })
+        return reply
+          .code(413)
+          .send({ error: `Avatar exceeds the ${category.maxSizeBytes / (1024 * 1024)}MB limit` })
       }
       if (!(await matchesDeclaredType(buffer, ext))) {
         return reply.code(400).send({ error: 'File content does not match its extension' })
@@ -183,7 +185,10 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   // DELETE /users/me/avatar
   app.delete('/me/avatar', { preHandler: [app.authenticate] }, async (request, reply) => {
     const userId = request.user.sub
-    const existing = await db.user.findUnique({ where: { id: userId }, select: { avatarKey: true } })
+    const existing = await db.user.findUnique({
+      where: { id: userId },
+      select: { avatarKey: true },
+    })
     if (existing?.avatarKey) await deleteObject(existing.avatarKey)
 
     await db.user.update({
@@ -196,7 +201,10 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/:id/avatar — public redirect to a signed URL; avatars aren't
   // visibility-gated the way project files are, so no auth check here.
   app.get<{ Params: { id: string } }>('/:id/avatar', async (request, reply) => {
-    const user = await db.user.findUnique({ where: { id: request.params.id }, select: { avatarKey: true } })
+    const user = await db.user.findUnique({
+      where: { id: request.params.id },
+      select: { avatarKey: true },
+    })
     if (!user?.avatarKey) return reply.code(404).send({ error: 'No avatar' })
 
     const url = await signedDownloadUrl(user.avatarKey, 'avatar', { disposition: 'inline' })
@@ -204,48 +212,60 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // POST /users/:id/follow — toggles follow
-  app.post<{ Params: { id: string } }>('/:id/follow', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const followerId = request.user.sub
-    const followingId = request.params.id
+  app.post<{ Params: { id: string } }>(
+    '/:id/follow',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const followerId = request.user.sub
+      const followingId = request.params.id
 
-    if (followerId === followingId) return reply.code(400).send({ error: 'Cannot follow yourself' })
+      if (followerId === followingId)
+        return reply.code(400).send({ error: 'Cannot follow yourself' })
 
-    // Without this, following a nonexistent id fails the foreign key and
-    // surfaces as a 500 rather than a 404.
-    const target = await db.user.findUnique({ where: { id: followingId }, select: { id: true } })
-    if (!target) return reply.code(404).send({ error: 'User not found' })
+      // Without this, following a nonexistent id fails the foreign key and
+      // surfaces as a 500 rather than a 404.
+      const target = await db.user.findUnique({ where: { id: followingId }, select: { id: true } })
+      if (!target) return reply.code(404).send({ error: 'User not found' })
 
-    const existing = await db.follow.findUnique({
-      where: { followerId_followingId: { followerId, followingId } },
-    })
+      const existing = await db.follow.findUnique({
+        where: { followerId_followingId: { followerId, followingId } },
+      })
 
-    if (existing) {
-      await db.follow.delete({ where: { followerId_followingId: { followerId, followingId } } })
-      return { following: false }
+      if (existing) {
+        await db.follow.delete({ where: { followerId_followingId: { followerId, followingId } } })
+        return { following: false }
+      }
+
+      await db.follow.create({ data: { followerId, followingId } })
+
+      // Keyed on the follower, so unfollow-refollow is not a way to ping
+      // somebody repeatedly — you announce yourself to a person once.
+      const follower = await db.user.findUnique({
+        where: { id: followerId },
+        select: { name: true },
+      })
+      await notifyOnce(followingId, 'FOLLOWED_YOU', `follow:${followerId}`, {
+        actorId: followerId,
+        actorName: follower?.name,
+      })
+
+      return { following: true }
     }
-
-    await db.follow.create({ data: { followerId, followingId } })
-
-    // Keyed on the follower, so unfollow-refollow is not a way to ping
-    // somebody repeatedly — you announce yourself to a person once.
-    const follower = await db.user.findUnique({ where: { id: followerId }, select: { name: true } })
-    await notifyOnce(followingId, 'FOLLOWED_YOU', `follow:${followerId}`, {
-      actorId: followerId,
-      actorName: follower?.name,
-    })
-
-    return { following: true }
-  })
+  )
 
   // GET /users/:id/follow/me — check if current user follows
-  app.get<{ Params: { id: string } }>('/:id/follow/me', { preHandler: [app.authenticate] }, async (request) => {
-    const followerId = request.user.sub
-    const followingId = request.params.id
-    const row = await db.follow.findUnique({
-      where: { followerId_followingId: { followerId, followingId } },
-    })
-    return { following: !!row }
-  })
+  app.get<{ Params: { id: string } }>(
+    '/:id/follow/me',
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const followerId = request.user.sub
+      const followingId = request.params.id
+      const row = await db.follow.findUnique({
+        where: { followerId_followingId: { followerId, followingId } },
+      })
+      return { following: !!row }
+    }
+  )
 
   // GET /users/me/notifications — most recent first, for the notification bell
   app.get('/me/notifications', { preHandler: [app.authenticate] }, async (request) => {
