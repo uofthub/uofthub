@@ -1,6 +1,7 @@
 import type { Prisma, ReactionKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import { withCovers } from './covers.js'
+import { signedDownloadUrl } from './storage.js'
 
 /**
  * The one shape every project list returns — directory, feed, profile,
@@ -107,7 +108,11 @@ export async function decorate<T extends CardRow>(projects: T[], callerId: strin
  * project put it back with `withContent`.
  */
 function withoutContent<T extends object>(row: T): Omit<T, 'sections' | 'details'> {
-  const { sections: _sections, details: _details, ...rest } = row as T & {
+  const {
+    sections: _sections,
+    details: _details,
+    ...rest
+  } = row as T & {
     sections?: unknown
     details?: unknown
   }
@@ -130,18 +135,55 @@ export const CONTENT_INCLUDE = {
       key: true,
     },
   },
+  outputs: {
+    orderBy: { position: 'asc' },
+    select: {
+      id: true,
+      kind: true,
+      label: true,
+      fileId: true,
+      linkId: true,
+      primaryOfProjectId: true,
+      thumbnailKey: true,
+    },
+  },
 } satisfies Prisma.ProjectInclude
 
-/** A decorated single project with its long-form content back on. */
-export function withContent<T extends object>(
-  shaped: T,
-  row: {
-    sections: Prisma.JsonValue
-    details: Prisma.JsonValue
-    references: Prisma.ProjectGetPayload<{ include: typeof CONTENT_INCLUDE }>['references']
+type ContentRow = Prisma.ProjectGetPayload<{ include: typeof CONTENT_INCLUDE }>
+
+/** A signed thumbnail URL, or undefined where storage is not configured. */
+async function signThumbnail(key: string | null): Promise<string | undefined> {
+  if (!key) return undefined
+  try {
+    return await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' })
+  } catch {
+    return undefined
   }
+}
+
+/**
+ * A decorated single project with its long-form content back on. Outputs are
+ * sent with a signed thumbnail URL and a `primary` flag in place of the
+ * storage key and the uniqueness marker, neither of which a client needs.
+ */
+export async function withContent<T extends object>(
+  shaped: T,
+  row: Pick<ContentRow, 'sections' | 'details' | 'references' | 'outputs'>
 ) {
-  return { ...shaped, sections: row.sections, details: row.details, references: row.references }
+  const outputs = await Promise.all(
+    row.outputs.map(async ({ thumbnailKey, primaryOfProjectId, ...o }) => ({
+      ...o,
+      primary: primaryOfProjectId !== null,
+      thumbnailUrl: await signThumbnail(thumbnailKey),
+    }))
+  )
+  return {
+    ...shaped,
+    sections: row.sections,
+    details: row.details,
+    references: row.references,
+    outputs,
+  }
 }
 
 /** Rows come back from `where: { id: { in } }` in no useful order; restore it. */

@@ -54,6 +54,14 @@ import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.j
 import { ImportError, importFromLink } from '../lib/linkImport.js'
 import { parseDetails, parseSections } from '../lib/projectContent.js'
 import { parseReferences, type ReferenceRow } from '../lib/references.js'
+import {
+  OutputError,
+  THUMBNAIL_MAX_BYTES,
+  applyOutputs,
+  parseOutputs,
+  thumbnailKeyFor,
+  thumbnailType,
+} from '../lib/outputs.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -165,6 +173,25 @@ function parseFields(body: {
     details: details && asJson(details.value),
     references: references?.value,
   }
+}
+
+/** An output of a project the caller owns, or the status to refuse with. */
+async function ownOutput(projectId: string, outputId: string, userId: string) {
+  const output = await db.projectOutput.findFirst({
+    where: { id: outputId, projectId },
+    select: { id: true, thumbnailKey: true, project: { select: { ownerId: true } } },
+  })
+  if (!output) return { status: 404 as const }
+  if (output.project.ownerId !== userId) return { status: 403 as const }
+  return output
+}
+
+/**
+ * Delete storage objects nothing points at any more. Best effort: a failure
+ * leaves an unreferenced object behind, which costs bytes, not correctness.
+ */
+async function deleteObjects(keys: (string | null | undefined)[]) {
+  await Promise.all(keys.flatMap((k) => (k ? [deleteObject(k).catch(() => undefined)] : [])))
 }
 
 /** How many other projects "also used in…" names per reference. */
@@ -310,7 +337,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         : undefined,
     ])
     return {
-      ...withContent(shaped, project),
+      ...(await withContent(shaped, project)),
       following,
       ...(followerCount !== undefined && { followerCount }),
     }
@@ -374,7 +401,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const publishedAt = await announcePublish(project)
 
     const [shaped] = await decorate([{ ...project, publishedAt }], request.user.sub)
-    return reply.code(201).send(withContent(shaped, project))
+    return reply.code(201).send(await withContent(shaped, project))
   })
 
   // PATCH /projects/:id
@@ -392,6 +419,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       sections?: unknown
       details?: unknown
       references?: unknown
+      outputs?: unknown
     }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
@@ -404,6 +432,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const fields = parseFields(request.body)
     if ('error' in fields) return reply.code(400).send({ error: fields.error })
     const { visibility } = fields
+    const outputs =
+      request.body.outputs === undefined ? undefined : parseOutputs(request.body.outputs)
+    if (outputs && 'error' in outputs) return reply.code(400).send({ error: outputs.error })
 
     // A take-down would be worth nothing if the owner could just set the
     // project public again; only a moderator can clear `takenDownAt`.
@@ -413,33 +444,44 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'This project was taken down by a moderator. Contact the team to appeal.' })
     }
 
-    // One transaction: an edit that replaces the references either lands
-    // whole or not at all.
-    const updated = await db.$transaction(async (tx) => {
-      if (fields.references) {
-        await tx.projectReference.deleteMany({ where: { projectId: project.id } })
-        if (fields.references.length)
-          await tx.projectReference.createMany({
-            data: fields.references.map((r) => ({ ...r, projectId: project.id })),
-          })
-      }
-      return tx.project.update({
-        where: { id: project.id },
-        data: {
-          ...(title !== undefined && { title: title.trim() }),
-          ...(description !== undefined && { description: description.trim() || null }),
-          ...(tags !== undefined && { tags }),
-          ...(fields.pitch !== undefined && { pitch: fields.pitch }),
-          ...(fields.type !== undefined && { type: fields.type }),
-          ...(fields.status !== undefined && { status: fields.status }),
-          ...(visibility !== undefined && { visibility }),
-          ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
-          ...(fields.sections !== undefined && { sections: fields.sections }),
-          ...(fields.details !== undefined && { details: fields.details }),
-        },
-        include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
+    // One transaction: an edit that replaces the references or the outputs
+    // either lands whole or not at all.
+    let orphanedThumbnails: string[] = []
+    let updated
+    try {
+      updated = await db.$transaction(async (tx) => {
+        if (outputs) orphanedThumbnails = await applyOutputs(tx, project.id, outputs.value)
+        if (fields.references) {
+          await tx.projectReference.deleteMany({ where: { projectId: project.id } })
+          if (fields.references.length)
+            await tx.projectReference.createMany({
+              data: fields.references.map((r) => ({ ...r, projectId: project.id })),
+            })
+        }
+        return tx.project.update({
+          where: { id: project.id },
+          data: {
+            ...(title !== undefined && { title: title.trim() }),
+            ...(description !== undefined && { description: description.trim() || null }),
+            ...(tags !== undefined && { tags }),
+            ...(fields.pitch !== undefined && { pitch: fields.pitch }),
+            ...(fields.type !== undefined && { type: fields.type }),
+            ...(fields.status !== undefined && { status: fields.status }),
+            ...(visibility !== undefined && { visibility }),
+            ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
+            ...(fields.sections !== undefined && { sections: fields.sections }),
+            ...(fields.details !== undefined && { details: fields.details }),
+          },
+          include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
+        })
       })
-    })
+    } catch (err) {
+      if (err instanceof OutputError) return reply.code(400).send({ error: err.message })
+      throw err
+    }
+    // After the commit: a failed delete leaves an unreferenced object, never a
+    // referenced one missing.
+    await deleteObjects(orphanedThumbnails)
 
     // The edit that opens a draft up is the one that counts as publishing it,
     // and an edit to a still-unannounced project's show-from date moves when
@@ -447,7 +489,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const publishedAt = await announcePublish(updated)
 
     const [shaped] = await decorate([{ ...updated, publishedAt }], request.user.sub)
-    return withContent(shaped, updated)
+    return await withContent(shaped, updated)
   })
 
   // DELETE /projects/:id
@@ -926,12 +968,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
+      const output = await db.projectOutput.findFirst({
+        where: { linkId: request.params.linkId, projectId: project.id },
+        select: { thumbnailKey: true },
+      })
       // Scope the delete to this project: owning one project must not grant
       // the ability to delete another project's link by id.
       const { count } = await db.projectLink.deleteMany({
         where: { id: request.params.linkId, projectId: project.id },
       })
       if (count === 0) return reply.code(404).send({ error: 'Link not found' })
+      await deleteObjects([output?.thumbnailKey])
 
       return { ok: true }
     }
@@ -1017,8 +1064,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!file) return reply.code(404).send({ error: 'File not found' })
 
+      const output = await db.projectOutput.findUnique({
+        where: { fileId: file.id },
+        select: { thumbnailKey: true },
+      })
       await deleteObject(file.storageKey)
+      // Its output, if it was one, goes with it (a cascade), and so does the
+      // thumbnail made from it.
       await db.projectFile.delete({ where: { id: file.id } })
+      await deleteObjects([output?.thumbnailKey])
       return { ok: true }
     }
   )
@@ -1144,6 +1198,57 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return projects.length ? [{ reference, projects }] : []
     })
   })
+
+  // ── OUTPUT THUMBNAILS ──────────────────────────────────────────────────────
+
+  // PUT /projects/:id/outputs/:outputId/thumbnail — multipart, owner only
+  //
+  // The picture a poster, a video or a large image is shown by: made in the
+  // author's browser (a first page, a frame, a scaled-down copy) or chosen by
+  // hand. Untrusted, so checked by its bytes and capped small. See
+  // docs/structured-projects.md for why it is not made on the server.
+  app.put<{ Params: { id: string; outputId: string } }>(
+    '/:id/outputs/:outputId/thumbnail',
+    { preHandler: [app.authenticate], config: uploadRateLimit },
+    async (request, reply) => {
+      const output = await ownOutput(request.params.id, request.params.outputId, request.user.sub)
+      if ('status' in output)
+        return reply
+          .code(output.status)
+          .send({ error: output.status === 404 ? 'Not found' : 'Forbidden' })
+
+      const data = await request.file()
+      if (!data) return reply.code(400).send({ error: 'No image uploaded' })
+      const buffer = await data.toBuffer()
+      if (data.file.truncated || buffer.length > THUMBNAIL_MAX_BYTES)
+        return reply.code(413).send({ error: 'A thumbnail is at most 512KB' })
+      const contentType = await thumbnailType(buffer)
+      if (!contentType)
+        return reply.code(400).send({ error: 'A thumbnail must be a PNG, JPEG or WebP image' })
+
+      const key = thumbnailKeyFor(request.params.id, output.id, contentType)
+      await putObject(key, buffer, contentType)
+      await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: key } })
+      await deleteObjects([output.thumbnailKey])
+      return { thumbnailUrl: await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' }) }
+    }
+  )
+
+  // DELETE /projects/:id/outputs/:outputId/thumbnail — back to no thumbnail
+  app.delete<{ Params: { id: string; outputId: string } }>(
+    '/:id/outputs/:outputId/thumbnail',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const output = await ownOutput(request.params.id, request.params.outputId, request.user.sub)
+      if ('status' in output)
+        return reply
+          .code(output.status)
+          .send({ error: output.status === 404 ? 'Not found' : 'Forbidden' })
+      await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: null } })
+      await deleteObjects([output.thumbnailKey])
+      return { ok: true }
+    }
+  )
 
   // ── VERSIONING ─────────────────────────────────────────────────────────────
 
@@ -1286,7 +1391,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
 
       const [shaped] = await decorate([fork], request.user.sub)
-      return reply.code(201).send(withContent(shaped, fork))
+      return reply.code(201).send(await withContent(shaped, fork))
     }
   )
 

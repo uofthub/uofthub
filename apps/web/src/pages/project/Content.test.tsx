@@ -17,6 +17,7 @@ const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   collaborators: [],
   files: [],
   references: [],
+  outputs: [],
   _count: { comments: 0 },
   reactions: { USEFUL: 0, IMPRESSIVE: 0, COLLAB: 0 },
   reactionTotal: 0,

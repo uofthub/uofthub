@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
+import { api, safeUrl, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { previewKindFor } from '../../lib/files'
@@ -34,6 +34,7 @@ import {
   MenuDivider,
   MenuItem,
   type AvatarPerson,
+  type IconName,
 } from '../../components/ui'
 import {
   EditProjectDialog,
@@ -45,6 +46,14 @@ import {
   GroupsDialog,
 } from './OwnerDialogs'
 import { AddToCollectionDialog } from '../../components/collection'
+import FileViewer from '../../components/FileViewer'
+import {
+  OUTPUT_KINDS,
+  outputLabel,
+  primaryOutput,
+  resolveOutputs,
+  type ResolvedOutput,
+} from '../../lib/outputs'
 
 type Open =
   | 'edit'
@@ -98,6 +107,22 @@ function Maker({
   )
 }
 
+type OutputTarget = { href?: string; onClick?: () => void }
+
+/**
+ * How an output opens: a link in a new tab, a file the browser can show in
+ * the in-app viewer, anything else as a download.
+ */
+function outputTarget(
+  projectId: string,
+  o: ResolvedOutput,
+  view: (fileId: string) => void
+): OutputTarget {
+  if (o.link) return { href: safeUrl(o.link.url) }
+  if (o.file && previewKindFor(o.file.name)) return { onClick: () => view(o.file!.id) }
+  return o.file ? { href: api.projects.downloadUrl(projectId, o.file.id) } : {}
+}
+
 /**
  * The card beside the gallery: what it is, what you can do with it, who made
  * it, and the facts. Everything the owner can change lives behind the More
@@ -113,16 +138,34 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const [pinError, setPinError] = useState<string | null>(null)
 
   const isOwner = user?.id === project.ownerId
-  const links = safeLinks(project.links)
-  const action = primaryAction(links)
-  const code = codeLink(links)
+  const outputs = resolveOutputs(project)
+  const primary = primaryOutput(outputs)
+  const [viewing, setViewing] = useState<string | null>(null)
+  const previewable = project.files.filter((f) => previewKindFor(f.name))
+  // An output's file or link is listed with the outputs, not again below.
+  const outputFiles = new Set(outputs.flatMap((o) => (o.file ? [o.file.id] : [])))
+  const outputLinks = new Set(outputs.flatMap((o) => (o.link ? [o.link.id] : [])))
+  const links = safeLinks(project.links.filter((l) => !outputLinks.has(l.id)))
+  const target = (o: ResolvedOutput) => outputTarget(project.id, o, setViewing)
+  // The primary output decides the main button when there is one; otherwise
+  // it is read off the links, as before outputs existed.
+  const action: (OutputTarget & { label: string; icon: IconName }) | undefined = primary
+    ? {
+        label: OUTPUT_KINDS[primary.kind].action,
+        icon: OUTPUT_KINDS[primary.kind].icon,
+        ...target(primary),
+      }
+    : primaryAction(safeLinks(project.links))
+  // "View code" beside it, unless the main button already is that.
+  const code = primary?.kind === 'CODE' ? undefined : codeLink(safeLinks(project.links))
   const course = courseOf(project.tags)
   const pitch = project.pitch
   const tags = topicTags(project.tags)
   const documents = project.files.filter((f) => {
     const kind = previewKindFor(f.name)
-    return kind !== 'image' && kind !== 'video'
+    return kind !== 'image' && kind !== 'video' && !outputFiles.has(f.id)
   })
+
   const posted = postedAt(project)
   const edited = new Date(project.updatedAt).getTime() - new Date(posted).getTime() > 60 * 60 * 1000
 
@@ -148,6 +191,15 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
 
   return (
     <section className="card info-card">
+      {viewing && (
+        <FileViewer
+          projectId={project.id}
+          files={previewable}
+          fileId={viewing}
+          onSelect={setViewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {open === 'edit' && <EditProjectDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'update' && <UpdateDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'groups' && <GroupsDialog project={project} onClose={() => setOpen(null)} />}
@@ -191,9 +243,15 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
 
       <div className="row" style={{ gap: 8 }}>
         {action ? (
-          <Button variant="primary" icon={action.icon} href={action.href} className="grow">
-            {action.label}
-          </Button>
+          action.href ? (
+            <Button variant="primary" icon={action.icon} href={action.href} className="grow">
+              {action.label}
+            </Button>
+          ) : (
+            <Button variant="primary" icon={action.icon} onClick={action.onClick} className="grow">
+              {action.label}
+            </Button>
+          )
         ) : code ? (
           <Button variant="primary" icon="code" href={code.href} className="grow">
             View code
@@ -383,6 +441,44 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           {timeAgo(posted)}
           {edited && ` · updated ${timeAgo(project.updatedAt)}`}
         </dd>
+        {outputs.length > 0 && (
+          <>
+            <dt className="muted">Outputs</dt>
+            <dd className="stack" style={{ gap: 6 }}>
+              {outputs.map((o) => {
+                const { href, onClick } = target(o)
+                const body = (
+                  <>
+                    <Icon name={OUTPUT_KINDS[o.kind].icon} size={14} />
+                    <span className="clamp-1">{outputLabel(o)}</span>
+                    {o.primary && <span className="muted">· main</span>}
+                  </>
+                )
+                return href ? (
+                  <a
+                    key={o.id}
+                    href={href}
+                    className="row"
+                    style={{ gap: 4 }}
+                    {...(o.link && { target: '_blank', rel: 'noopener noreferrer' })}
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className="link-btn row"
+                    style={{ gap: 4, justifyContent: 'flex-start' }}
+                    onClick={onClick}
+                  >
+                    {body}
+                  </button>
+                )
+              })}
+            </dd>
+          </>
+        )}
         {links.length > 0 && (
           <>
             <dt className="muted">Links</dt>

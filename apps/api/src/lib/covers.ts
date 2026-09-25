@@ -4,42 +4,67 @@ import { signedDownloadUrl } from './storage.js'
 /**
  * Cover thumbnails for a list of projects.
  *
- * A project's cover is the first image it had uploaded. The URL is signed the
- * same way a download is — the bucket is private, so a directory card can only
- * show a thumbnail the caller was already allowed to see. Callers are
- * responsible for having filtered the list by visibility first; this only
- * signs what it is handed.
+ * A project's cover is, in order:
+ *   1. its primary output's thumbnail — a poster's first page, a video frame,
+ *      a large image scaled down, or one the author chose by hand;
+ *   2. its primary output's own file, when that is an image;
+ *   3. otherwise the first image it had uploaded, as before outputs existed.
+ *
+ * The URL is signed the same way a download is — the bucket is private, so a
+ * directory card can only show a thumbnail the caller was already allowed to
+ * see. Callers are responsible for having filtered the list by visibility
+ * first; this only signs what it is handed.
  */
 
 // Mirrors the images category in fileValidation.ts. Matched on the filename
 // rather than mimeType because the extension is what upload validates against
 // — mimeType is whatever the browser claimed at the time.
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']
+const isImage = (name: string) =>
+  IMAGE_EXTENSIONS.includes((name.split('.').pop() ?? '').toLowerCase())
+
+type Source = { key: string; name: string }
 
 export async function coverUrls(projectIds: string[]): Promise<Map<string, string>> {
   if (projectIds.length === 0) return new Map()
 
-  const files = await db.projectFile.findMany({
-    where: {
-      projectId: { in: projectIds },
-      OR: IMAGE_EXTENSIONS.map((ext) => ({
-        name: { endsWith: `.${ext}`, mode: 'insensitive' as const },
-      })),
-    },
-    orderBy: { uploadedAt: 'asc' },
-    select: { projectId: true, storageKey: true, name: true },
-  })
+  const [primaries, images] = await Promise.all([
+    db.projectOutput.findMany({
+      where: { primaryOfProjectId: { in: projectIds } },
+      select: {
+        projectId: true,
+        thumbnailKey: true,
+        file: { select: { storageKey: true, name: true } },
+      },
+    }),
+    db.projectFile.findMany({
+      where: {
+        projectId: { in: projectIds },
+        OR: IMAGE_EXTENSIONS.map((ext) => ({
+          name: { endsWith: `.${ext}`, mode: 'insensitive' as const },
+        })),
+      },
+      orderBy: { uploadedAt: 'asc' },
+      select: { projectId: true, storageKey: true, name: true },
+    }),
+  ])
 
-  // One per project — the earliest, since findMany came back in that order.
-  const firsts = new Map<string, { storageKey: string; name: string }>()
-  for (const file of files) {
-    if (!firsts.has(file.projectId)) firsts.set(file.projectId, file)
+  const sources = new Map<string, Source>()
+  for (const p of primaries) {
+    if (p.thumbnailKey) sources.set(p.projectId, { key: p.thumbnailKey, name: 'cover' })
+    else if (p.file && isImage(p.file.name))
+      sources.set(p.projectId, { key: p.file.storageKey, name: p.file.name })
+  }
+  // The earliest image, since findMany came back in that order.
+  for (const file of images) {
+    if (!sources.has(file.projectId))
+      sources.set(file.projectId, { key: file.storageKey, name: file.name })
   }
 
   try {
     const signed = await Promise.all(
-      [...firsts].map(async ([projectId, file]) => {
-        const url = await signedDownloadUrl(file.storageKey, file.name, { disposition: 'inline' })
+      [...sources].map(async ([projectId, source]) => {
+        const url = await signedDownloadUrl(source.key, source.name, { disposition: 'inline' })
         return [projectId, url] as const
       })
     )

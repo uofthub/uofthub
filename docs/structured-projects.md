@@ -134,7 +134,8 @@ model ProjectOutput {
   fileId       String?    @unique
   linkId       String?    @unique
   position     Int
-  isPrimary    Boolean    @default(false)
+  /// The project's id on its primary output, null on every other one.
+  primaryOfProjectId String? @unique
   /// R2 key of a browser-generated thumbnail (WebP or JPEG). Null when none
   /// was made, e.g. a small image that is its own thumbnail.
   thumbnailKey String?
@@ -149,7 +150,9 @@ model ProjectOutput {
 Two constraints go into the migration SQL because Prisma's schema language can't express them:
 
 - `CHECK (("fileId" IS NULL) <> ("linkId" IS NULL))`: exactly one target.
-- `CREATE UNIQUE INDEX … ON "ProjectOutput"("projectId") WHERE "isPrimary"`: at most one primary per project, enforced by the database rather than by route code remembering to.
+- `CHECK ("primaryOfProjectId" IS NULL OR "primaryOfProjectId" = "projectId")`: the primary marker can only name the output's own project.
+
+At most one primary per project is enforced by the database, through `primaryOfProjectId` being unique, rather than by route code remembering to. The plan first had an `isPrimary` boolean with a partial unique index; Prisma's schema can't express that index and would drop it on the next `prisma migrate dev`, while a unique nullable column it can express.
 
 Deleting a file or link deletes its output, and its thumbnail object is deleted in the same route. If that output was primary, the project simply has no primary, and the cover falls back as described below.
 
@@ -283,7 +286,7 @@ A project matches a faculty when its owner's faculty matches, **or any accepted 
 | Route | Change |
 |---|---|
 | `POST /projects` | Also accepts `sections`, `details`, `courseCode`, `showFrom`, `references[]`. |
-| `PATCH /projects/:id` | Same fields plus `outputs[]`, all written in **one transaction**. `references` and `outputs` replace the whole list when present. |
+| `PATCH /projects/:id` | Same fields plus `outputs[]`, all written in **one transaction**. `references` and `outputs` replace the whole list when present. Outputs are rewritten whole (deleted and recreated in order, keeping each kept output's id and thumbnail), because the one-target CHECK allows no intermediate state for moving unique targets between rows. Removing an output leaves its file or link in place. Outputs aren't accepted on `POST`: files are uploaded after the draft exists. |
 | List routes | Never carry `sections` or `details`: a card draws none of it and sections can run to 100 KB. `decorate` drops them, and the single-project routes (`GET`, `POST`, `PATCH`, fork) put them back. |
 | `GET /projects/:id` | Returns `sections`, `details`, `courseCode`, `showFrom` (only ever in the future for the project's makers, who are the only ones who can load it then), `references`, and `outputs` with signed `thumbnailUrl`s. |
 | `GET /projects?course=` | New course filter; the faculty filter now also matches collaborators. |
@@ -378,7 +381,7 @@ Each phase is independently shippable, and the old post form keeps working until
 
 ## New dependencies
 
-- **`pdfjs-dist`** (web only), for PDF first-page thumbnails. No browser API renders a PDF to a canvas, and the poster PDF is the primary output of the first course template, so this can't be skipped. It's loaded with a dynamic `import()` only when a PDF is picked in the editor, so it stays out of every other page's bundle (the same reasoning as the lazy routes in `App.tsx`). Its worker is loaded via Vite's `?url`, with `isEvalSupported: false`, and pinned to a version past CVE-2024-4367.
+- **`pdfjs-dist`** (web only), for PDF first-page thumbnails. No browser API renders a PDF to a canvas, and the poster PDF is the primary output of the first course template, so this can't be skipped. It's loaded with a dynamic `import()` only when a PDF is picked in the editor, so it stays out of every other page's bundle (the same reasoning as the lazy routes in `App.tsx`). Its worker is loaded via Vite's `?url`. It's on the 5.x line, which is past CVE-2024-4367 and has no eval path left to disable: the font compiler behind that CVE was removed along with the `isEvalSupported` option. 6.x raises the minimum browser versions, so 5.x it stays for now.
 
 Nothing else. Zod is already an API dependency. The web app doesn't get it: the API validates and returns the normalized content, and the editor's own checks are limits it can express directly.
 
@@ -387,7 +390,7 @@ Nothing else. Zod is already an API dependency. The web app doesn't get it: the 
 ## What I'd do differently, and why
 
 1. **Course templates in code, not a seeded table** (decided). Templates are plain typed objects in `apps/api/src/lib/courseTemplates.ts`, each with a `version`. A template is product copy that changes rarely and benefits from review, and there's no admin UI to edit a row. Each project stores `templateCode` and `templateVersion`, so templates can move to the database later if instructors need to edit them.
-2. **Primary as `isPrimary` plus a partial unique index**, rather than `Project.primaryOutputId`. Ownership of the primary is inherent (it can't point at another project's output), and deleting it can't leave a dangling pointer.
+2. **Primary as a unique `primaryOfProjectId` on the output**, rather than `Project.primaryOutputId`. Ownership of the primary is inherent (a CHECK keeps it equal to the output's own project), and deleting it can't leave a dangling pointer.
 3. **Followers are told when a project appears, not when it's saved** (decided). This needs `announcedAt` and the app's first background job. Never notifying for projects with a show-from date would have been simpler, but it would quietly drop exactly the course work the feature is for.
 4. **Course codes leave `tags`.** Keeping both would mean two sources of truth, and `facets.ts` and `projectView.ts` already disagree on edge cases.
 5. **References are searched by union, not denormalized** onto `Project`. See migration 3.

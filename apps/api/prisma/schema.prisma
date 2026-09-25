@@ -123,6 +123,19 @@ enum ReferenceKind {
   OTHER
 }
 
+/// What an output is. Decides its label ("View poster") and icon.
+enum OutputKind {
+  POSTER
+  SLIDES
+  PAPER
+  VIDEO
+  AUDIO
+  DEMO
+  CODE
+  DATASET
+  OTHER
+}
+
 enum ReportReason {
   SPAM
   HARASSMENT
@@ -269,6 +282,7 @@ model Project {
   files           ProjectFile[]
   links           ProjectLink[]
   references      ProjectReference[]
+  outputs         ProjectOutput[]
   reactions       ProjectReaction[]
   saves           ProjectSave[]
   comments        Comment[]
@@ -415,8 +429,9 @@ model ProjectFile {
   mimeType   String?
   uploadedAt DateTime @default(now())
 
-  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  org     Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  org     Organization?  @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  output  ProjectOutput?
 
   /// Cover lookups, per-project file lists and the file-count cap.
   @@index([projectId])
@@ -462,7 +477,37 @@ model ProjectLink {
   label     String
   url       String
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  output  ProjectOutput?
+}
+
+/// What a project produced, in the author's order: an ordered layer over its
+/// files and links. Exactly one of `fileId` and `linkId` is set (a CHECK in
+/// the `outputs` migration), and deleting the target deletes the output.
+model ProjectOutput {
+  id                 String     @id @default(uuid())
+  projectId          String
+  kind               OutputKind
+  /// Overrides the kind's label: "Final poster".
+  label              String?
+  fileId             String?    @unique
+  linkId             String?    @unique
+  position           Int
+  /// The project's id on its primary output, null on every other one. Unique,
+  /// so a project has at most one primary; a CHECK in the migration keeps it
+  /// equal to `projectId`. The primary output's thumbnail is the project's
+  /// image everywhere — see lib/covers.ts.
+  primaryOfProjectId String?    @unique
+  /// R2 key of a thumbnail made in the author's browser (a poster's first
+  /// page, a video frame, a large image scaled down) or chosen by hand. Null
+  /// when there is none; a small image is its own thumbnail.
+  thumbnailKey       String?
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  file    ProjectFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  link    ProjectLink? @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
 }
 
 /// A private bookmark. Unlike a reaction it is never shown to anyone but the

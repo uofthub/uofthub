@@ -85,6 +85,24 @@ export interface ProjectReference {
   key?: string | null
 }
 
+/** What an output is. */
+export type OutputKind =
+  'POSTER' | 'SLIDES' | 'PAPER' | 'VIDEO' | 'AUDIO' | 'DEMO' | 'CODE' | 'DATASET' | 'OTHER'
+
+/** Something the project produced: one of its files or links, in the author's order. */
+export interface ProjectOutput {
+  id: string
+  kind: OutputKind
+  /** Overrides the kind's label. */
+  label?: string | null
+  fileId?: string | null
+  linkId?: string | null
+  /** The one the project leads with; its thumbnail is the project's image. */
+  primary: boolean
+  /** Signed and short-lived. Absent when there is no thumbnail. */
+  thumbnailUrl?: string
+}
+
 /** A short labelled fact: Supervisor, Runtime, Performers. */
 export interface ProjectDetailItem {
   label: string

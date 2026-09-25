@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type ProjectDetail, type ProjectFile } from '../../lib/api'
+import { api, safeUrl, type ProjectDetail, type ProjectFile } from '../../lib/api'
 import { lookFor, previewKindFor } from '../../lib/files'
+import { OUTPUT_KINDS, outputLabel, primaryOutput, resolveOutputs } from '../../lib/outputs'
 import FileViewer from '../../components/FileViewer'
 import { Cover, CoverTag } from '../../components/project'
 import { ErrorText, Icon } from '../../components/ui'
@@ -61,6 +62,36 @@ function Thumb({
   )
 }
 
+/** The primary output shown by its thumbnail: opens the output itself. */
+function LeadFrame({
+  src,
+  label,
+  href,
+  onOpen,
+}: {
+  src: string
+  label: string
+  href?: string
+  onOpen: () => void
+}) {
+  const image = <img src={src} alt="" className="gallery__media" style={{ objectFit: 'contain' }} />
+  return href ? (
+    <a
+      className="gallery__open"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+    >
+      {image}
+    </a>
+  ) : (
+    <button type="button" className="gallery__open" onClick={onOpen} aria-label={label}>
+      {image}
+    </button>
+  )
+}
+
 function MainMedia({
   projectId,
   file,
@@ -96,18 +127,37 @@ function MainMedia({
   )
 }
 
+/** The id the lead frame is selected by, when it is not one of the media. */
+const LEAD = 'lead'
+
 /**
  * The project page's media: one large frame and a strip of thumbnails under
- * it. Images and videos the project has uploaded fill it; a project with none
- * shows its cover. Every other file (a PDF, a CSV) is listed in the details
- * card instead, since a thumbnail of a spreadsheet says nothing.
+ * it. The primary output leads — its own image or video, or for a poster PDF
+ * or a link its thumbnail, which opens the thing itself. Images and videos the
+ * project has uploaded follow; a project with none of either shows its cover.
+ * Every other file (a PDF, a CSV) is listed in the details card instead, since
+ * a thumbnail of a spreadsheet says nothing.
  */
 export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner: boolean }) {
   const qc = useQueryClient()
-  const media = project.files.filter(isMedia)
-  const [selectedId, setSelectedId] = useState<string | undefined>(media[0]?.id)
+  const primary = primaryOutput(resolveOutputs(project))
+  // A primary image or video simply goes first among the media; anything else
+  // with a thumbnail gets a frame of its own in front of them.
+  const primaryMedia = primary?.file && isMedia(primary.file) ? primary.file : undefined
+  const lead = !primaryMedia && primary?.thumbnailUrl ? primary : undefined
+  const media = [
+    ...(primaryMedia ? [primaryMedia] : []),
+    ...project.files.filter((f) => isMedia(f) && f.id !== primaryMedia?.id),
+  ]
+  const [selectedId, setSelectedId] = useState<string | undefined>(lead ? LEAD : media[0]?.id)
   const [viewing, setViewing] = useState<string | null>(null)
-  const selected = media.find((f) => f.id === selectedId) ?? media[0]
+  const showingLead = !!lead && (selectedId === LEAD || media.length === 0)
+  const selected = showingLead ? undefined : (media.find((f) => f.id === selectedId) ?? media[0])
+  const leadHref = lead?.link ? safeUrl(lead.link.url) : undefined
+  const openLead = () => {
+    if (lead?.file && previewKindFor(lead.file.name)) setViewing(lead.file.id)
+    else if (lead?.file) window.location.assign(api.projects.downloadUrl(project.id, lead.file.id))
+  }
 
   const upload = useMutation({
     mutationFn: (file: File) => api.projects.uploadFile(project.id, file),
@@ -140,7 +190,14 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
       )}
 
       <div className="gallery__frame">
-        {selected ? (
+        {showingLead && lead ? (
+          <LeadFrame
+            src={lead.thumbnailUrl!}
+            label={`${OUTPUT_KINDS[lead.kind].action}: ${outputLabel(lead)}`}
+            href={leadHref}
+            onOpen={openLead}
+          />
+        ) : selected ? (
           <MainMedia
             projectId={project.id}
             file={selected}
@@ -157,9 +214,20 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
         )}
       </div>
 
-      {(media.length > 1 || isOwner) && (
+      {(media.length + (lead ? 1 : 0) > 1 || isOwner) && (
         <div className="gallery__strip">
-          {media.slice(0, STRIP).map((f) => (
+          {lead && (
+            <button
+              type="button"
+              className={showingLead ? 'thumb thumb--on' : 'thumb'}
+              aria-label={`Show ${outputLabel(lead)}`}
+              aria-pressed={showingLead}
+              onClick={() => setSelectedId(LEAD)}
+            >
+              <img src={lead.thumbnailUrl} alt="" />
+            </button>
+          )}
+          {media.slice(0, STRIP - (lead ? 1 : 0)).map((f) => (
             <Thumb
               key={f.id}
               projectId={project.id}
@@ -185,9 +253,9 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
               />
             </label>
           )}
-          {media.length > 0 && (
+          {media.length > 0 && selected && (
             <span className="muted gallery__count">
-              {media.indexOf(selected!) + 1} of {media.length} · {summary}
+              {media.indexOf(selected) + 1} of {media.length} · {summary}
             </span>
           )}
         </div>
