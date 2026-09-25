@@ -92,6 +92,8 @@ enum NotificationType {
   PROJECT_COLLAB_INTEREST
   /// Somebody replied to your comment.
   COMMENT_REPLIED
+  /// A project you follow posted an update (a version with a note).
+  PROJECT_UPDATED
 }
 
 /// The three reactions on a project — the app's only public engagement
@@ -142,6 +144,20 @@ model User {
   /// account, so it never overwrites this.
   avatarIsCustom Boolean  @default(false)
   bio            String?
+  /// What the student is looking for — "Collaboration", "Summer 2027
+  /// internships". Free text, a handful of short items; the profile's
+  /// "Open to" chips.
+  openTo         String[] @default([])
+  /// Personal links on the profile. http(s) only, checked by safeExternalUrl.
+  websiteUrl     String?
+  githubUrl      String?
+  linkedinUrl    String?
+  /// Course codes the student says they take (CSC343, MAT137). Adds to the
+  /// courses inferred from their own projects' tags — see routes/feed.ts.
+  courses        String[] @default([])
+  /// Whether other students may start a conversation with them. Replies in an
+  /// existing conversation are unaffected by turning this off.
+  allowMessages  Boolean  @default(true)
   /// Platform moderator. Set directly in the database (see
   /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
   /// grants it, so it can't be escalated to through the API.
@@ -163,6 +179,10 @@ model User {
   reportsFiled     Report[]              @relation("Reporter")
   reportsReviewed  Report[]              @relation("Reviewer")
   orgActivities    OrgActivity[]
+  projectFollows   ProjectFollow[]
+  collections      Collection[]
+  sentMessages     Message[]             @relation("SentMessages")
+  receivedMessages Message[]             @relation("ReceivedMessages")
 }
 
 model Project {
@@ -216,6 +236,8 @@ model Project {
   spotlights      Spotlight[]
   orgProjects     OrgProject[]
   reports         Report[]
+  followers       ProjectFollow[]
+  collectionItems CollectionItem[]
   forkedFrom      Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
   forks           Project[]             @relation("ProjectForks")
 
@@ -560,4 +582,68 @@ model OrgProject {
   project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@id([orgId, projectId])
+}
+
+/// "Follow updates" on a project: told when the owner posts an update. Private
+/// to the follower, like a save; the owner sees only a count.
+model ProjectFollow {
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  /// The fan-out on a new update reads by project.
+  @@index([projectId])
+}
+
+/// A hand-picked set of projects with a curator ("Best of UTM 2026"). Anyone
+/// may read one; each reader only sees the projects they could see anyway.
+model Collection {
+  id          String   @id @default(uuid())
+  ownerId     String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items CollectionItem[]
+
+  @@index([ownerId, updatedAt])
+  @@index([updatedAt])
+}
+
+model CollectionItem {
+  collectionId String
+  projectId    String
+  addedAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, projectId])
+  @@index([projectId])
+}
+
+/// One direct message. A conversation is the set of messages between two
+/// people — no separate row, since there is nothing to store about it.
+model Message {
+  id          String    @id @default(uuid())
+  senderId    String
+  recipientId String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  sender    User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  /// A thread, read from either side.
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, senderId, createdAt])
+  /// The unread badge.
+  @@index([recipientId, readAt])
 }
