@@ -3,7 +3,9 @@ import type {
   CommentThread,
   User,
   Project,
+  ProjectDetailItem,
   ProjectLink,
+  ProjectSection,
   ProjectStatus,
   ProjectType,
   Notification,
@@ -106,6 +108,10 @@ export type ProjectFields = {
   status: ProjectStatus | null
   tags: string[]
   visibility: Visibility
+  sections: ProjectSection[] | null
+  details: ProjectDetailItem[] | null
+  /** A calendar day (`2026-12-20`), read as midnight in Toronto. */
+  showFrom: string | null
 }
 
 export type ProfileUser = {

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { Prisma, ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
+import { Prisma, type ProjectStatus, type ProjectType, type ReactionKind, type Visibility } from '@prisma/client'
 import { db } from '../db/client.js'
 import {
   VIEW_CHECK_SELECT,
@@ -31,6 +31,7 @@ import {
   decorate,
   emptyReactions,
   inOrder,
+  withContent,
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
 import { trendingIds } from '../lib/trending.js'
@@ -44,6 +45,7 @@ import { announcePublish } from '../lib/publishing.js'
 import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 import { ImportError, importFromLink } from '../lib/linkImport.js'
+import { parseDetails, parseSections } from '../lib/projectContent.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -95,6 +97,10 @@ function parseShowFrom(value: unknown): Date | null | undefined | false {
   return Number.isNaN(at.getTime()) ? false : at
 }
 
+/** A parsed JSON column for Prisma, where "none" has to be spelled `DbNull`. */
+const asJson = (value: object | null) =>
+  value === null ? Prisma.DbNull : (value as Prisma.InputJsonValue)
+
 /** The editable fields shared by create and update, validated once. */
 function parseFields(body: {
   pitch?: string | null
@@ -102,6 +108,8 @@ function parseFields(body: {
   status?: string | null
   visibility?: string
   showFrom?: string | null
+  sections?: unknown
+  details?: unknown
 }):
   | { error: string }
   | {
@@ -110,6 +118,8 @@ function parseFields(body: {
       status?: ProjectStatus | null
       visibility?: Visibility
       showFrom?: Date | null
+      sections?: Prisma.InputJsonValue | typeof Prisma.DbNull
+      details?: Prisma.InputJsonValue | typeof Prisma.DbNull
     } {
   const type = parseEnum(body.type, PROJECT_TYPES)
   if (type === false) return { error: 'Unknown project type' }
@@ -121,13 +131,25 @@ function parseFields(body: {
   }
   const showFrom = parseShowFrom(body.showFrom)
   if (showFrom === false) return { error: 'Show from must be a date like 2026-12-20' }
+  const sections = body.sections === undefined ? undefined : parseSections(body.sections)
+  if (sections && 'error' in sections) return { error: sections.error }
+  const details = body.details === undefined ? undefined : parseDetails(body.details)
+  if (details && 'error' in details) return { error: details.error }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
     pitch = body.pitch?.trim() || null
     if (pitch && pitch.length > PITCH_MAX)
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
   }
-  return { pitch, type, status, visibility: visibility || undefined, showFrom }
+  return {
+    pitch,
+    type,
+    status,
+    visibility: visibility || undefined,
+    showFrom,
+    sections: sections && asJson(sections.value),
+    details: details && asJson(details.value),
+  }
 }
 
 /** How much of a comment rides along in the notification that announces it. */
@@ -266,7 +288,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ? db.projectFollow.count({ where: { projectId: project.id } })
         : undefined,
     ])
-    return { ...shaped, following, ...(followerCount !== undefined && { followerCount }) }
+    return {
+      ...withContent(shaped, project),
+      following,
+      ...(followerCount !== undefined && { followerCount }),
+    }
   })
 
   // POST /projects
@@ -280,6 +306,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       tags?: string[]
       visibility?: string
       showFrom?: string | null
+      sections?: unknown
+      details?: unknown
       links?: { label: string; url: string }[]
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -310,6 +338,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         tags,
         visibility: fields.visibility ?? 'PRIVATE',
         showFrom: fields.showFrom ?? undefined,
+        sections: fields.sections,
+        details: fields.details,
         links: safeLinks.length ? { create: safeLinks } : undefined,
       },
       include: CARD_INCLUDE,
@@ -320,11 +350,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // on the PATCH that flips a draft open later.
     const publishedAt = await announcePublish(project)
 
-    const [shaped] = await decorate(
-      [{ ...project, publishedAt }],
-      request.user.sub
-    )
-    return reply.code(201).send(shaped)
+    const [shaped] = await decorate([{ ...project, publishedAt }], request.user.sub)
+    return reply.code(201).send(withContent(shaped, project))
   })
 
   // PATCH /projects/:id
@@ -339,6 +366,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       tags?: string[]
       visibility?: string
       showFrom?: string | null
+      sections?: unknown
+      details?: unknown
     }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
@@ -371,6 +400,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ...(fields.status !== undefined && { status: fields.status }),
         ...(visibility !== undefined && { visibility }),
         ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
+        ...(fields.sections !== undefined && { sections: fields.sections }),
+        ...(fields.details !== undefined && { details: fields.details }),
       },
       include: CARD_INCLUDE,
     })
@@ -380,11 +411,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // it will appear.
     const publishedAt = await announcePublish(updated)
 
-    const [shaped] = await decorate(
-      [{ ...updated, publishedAt }],
-      request.user.sub
-    )
-    return shaped
+    const [shaped] = await decorate([{ ...updated, publishedAt }], request.user.sub)
+    return withContent(shaped, updated)
   })
 
   // DELETE /projects/:id
@@ -1069,6 +1097,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           note,
           title: project.title,
           description: project.description,
+          sections: project.sections ?? Prisma.DbNull,
+          details: project.details ?? Prisma.DbNull,
           tags: project.tags,
         },
       })
@@ -1133,6 +1163,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           title: `${original.title} (fork)`,
           pitch: original.pitch,
           description: original.description,
+          sections: original.sections ?? Prisma.DbNull,
+          details: original.details ?? Prisma.DbNull,
           type: original.type,
           // A fork starts its own life: it is not "shipped" because the
           // original was.
@@ -1155,7 +1187,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
 
       const [shaped] = await decorate([fork], request.user.sub)
-      return reply.code(201).send(shaped)
+      return reply.code(201).send(withContent(shaped, fork))
     }
   )
 

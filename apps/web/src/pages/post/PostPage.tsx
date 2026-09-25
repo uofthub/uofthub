@@ -28,7 +28,14 @@ import {
   TextArea,
   type IconName,
 } from '../../components/ui'
-import { composeDescription, composeLinks, placeLinks, typeForUrl, TYPE_FORMS } from './compose'
+import {
+  composeDescription,
+  composeDetails,
+  composeLinks,
+  placeLinks,
+  typeForUrl,
+  TYPE_FORMS,
+} from './compose'
 import { TagInput } from './TagInput'
 import './post.css'
 
@@ -165,6 +172,7 @@ export default function PostPage() {
         description:
           [composeDescription(type, answers), about.trim()].filter(Boolean).join('\n\n') ||
           undefined,
+        details: composeDetails(type, answers),
         type,
         status,
         tags: allTags,
@@ -376,7 +384,7 @@ export default function PostPage() {
           {about && (
             <Field
               label="About"
-              hint="Imported from the link — Markdown works. It becomes the project’s story."
+              hint="Imported from the link — Markdown works. It becomes the project’s overview."
             >
               <TextArea rows={8} value={about} onChange={(e) => setAbout(e.target.value)} />
             </Field>

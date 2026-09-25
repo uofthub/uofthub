@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
@@ -346,6 +346,14 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
             </dd>
           </>
         )}
+        {/* The author's own facts — Supervisor, Runtime, Performers — in
+            their order. The API drops a row missing either side. */}
+        {(project.details ?? []).map((d, i) => (
+          <Fragment key={`${d.label}-${i}`}>
+            <dt className="muted">{d.label}</dt>
+            <dd style={{ overflowWrap: 'anywhere' }}>{d.value}</dd>
+          </Fragment>
+        ))}
         {project.owner?.campus && (
           <>
             <dt className="muted">Campus</dt>

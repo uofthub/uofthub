@@ -10,8 +10,9 @@ import { CONTACT_EMAIL } from '../../lib/site'
 import { Button, EmptyState, Icon, Spinner } from '../../components/ui'
 import { Gallery } from './Gallery'
 import { InfoCard } from './InfoCard'
-import { EditProjectDialog, UpdateDialog } from './OwnerDialogs'
-import { Comments, Related, Story, Updates } from './Sections'
+import { UpdateDialog } from './OwnerDialogs'
+import { Contents, Overview, ProjectSections } from './Content'
+import { Comments, Related, Updates } from './Sections'
 import './project-page.css'
 
 /** The Project page board. */
@@ -19,7 +20,6 @@ export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const { hash } = useLocation()
   const { user } = useAuth()
-  const [editing, setEditing] = useState(false)
   const [updating, setUpdating] = useState(false)
 
   const { data: project, isLoading } = useQuery({
@@ -64,7 +64,6 @@ export default function ProjectPage() {
 
   return (
     <div className="page project-page">
-      {editing && <EditProjectDialog project={project} onClose={() => setEditing(false)} />}
       {updating && <UpdateDialog project={project} onClose={() => setUpdating(false)} />}
 
       <nav aria-label="Breadcrumb" className="crumbs muted">
@@ -111,7 +110,8 @@ export default function ProjectPage() {
 
       <div className="project-grid project-grid--lower">
         <div className="stack" style={{ gap: 24, minWidth: 0 }}>
-          <Story project={project} isOwner={isOwner} onEdit={() => setEditing(true)} />
+          <Overview project={project} />
+          <ProjectSections project={project} />
           <Updates
             project={project}
             versions={versions}
@@ -120,7 +120,10 @@ export default function ProjectPage() {
           />
           <Comments project={project} />
         </div>
-        <Related project={project} />
+        <aside className="stack" style={{ gap: 20 }}>
+          <Contents project={project} />
+          <Related project={project} />
+        </aside>
       </div>
     </div>
   )

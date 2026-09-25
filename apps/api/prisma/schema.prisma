@@ -205,6 +205,13 @@ model Project {
   /// migration for how existing descriptions were split.
   pitch        String?
   description  String?
+  /// Optional sections beyond the overview (motivation, method, results…) —
+  /// an ordered JSON list validated and stripped of empties by
+  /// lib/projectContent.ts. Null when there are none.
+  sections     Json?
+  /// Short labelled facts (Supervisor, Runtime, Performers) as an ordered
+  /// `[{ label, value }]` list. Null when there are none.
+  details      Json?
   type         ProjectType?
   status       ProjectStatus?
   tags         String[]       @default([])
@@ -238,8 +245,9 @@ model Project {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  /// Postgres-generated tsvector over title, tags and description — see the
-  /// `add_search_and_indexes` migration for the expression. Declared
+  /// Postgres-generated tsvector over title, pitch, tags, description,
+  /// sections and details — see the `structured_content` migration for the
+  /// current expression. Declared
   /// `Unsupported` because Prisma has no tsvector type: nothing reads it
   /// through the client, only `lib/search.ts` via raw SQL.
   searchVector Unsupported("tsvector")?
@@ -310,6 +318,8 @@ model ProjectVersion {
   note        String?
   title       String
   description String?
+  sections    Json?
+  details     Json?
   tags        String[] @default([])
   createdAt   DateTime @default(now())
 

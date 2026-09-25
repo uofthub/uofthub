@@ -75,7 +75,7 @@ The label is computed at render time from `kind` and the project's `type`, not s
 | reflection | Reflection | Reflection | Reflection | What I learned | Reflection |
 | conclusion | Conclusion | Conclusion | Conclusion | Conclusion | Conclusion |
 
-The kind list and label table live in `packages/types`, which already ships as TypeScript source, so both apps import one copy. Zod itself stays API-only (see *New dependencies*).
+The `SectionKind` type lives in `packages/types`. Only types can be shared that way: the package ships TypeScript source, which the built API can't import at runtime on Node 22. So the API repeats the kind list as a value in `lib/projectContent.ts`, compile-checked against the type in both directions, and the label table lives on the web side in `lib/sections.ts`, the only place that needs it. Zod itself stays API-only (see *New dependencies*).
 
 #### `details` shape
 
@@ -284,6 +284,7 @@ A project matches a faculty when its owner's faculty matches, **or any accepted 
 |---|---|
 | `POST /projects` | Also accepts `sections`, `details`, `courseCode`, `showFrom`, `references[]`. |
 | `PATCH /projects/:id` | Same fields plus `outputs[]`, all written in **one transaction**. `references` and `outputs` replace the whole list when present. |
+| List routes | Never carry `sections` or `details`: a card draws none of it and sections can run to 100 KB. `decorate` drops them, and the single-project routes (`GET`, `POST`, `PATCH`, fork) put them back. |
 | `GET /projects/:id` | Returns `sections`, `details`, `courseCode`, `showFrom` (only ever in the future for the project's makers, who are the only ones who can load it then), `references`, and `outputs` with signed `thumbnailUrl`s. |
 | `GET /projects?course=` | New course filter; the faculty filter now also matches collaborators. |
 | `PUT /projects/:id/outputs/:outputId/thumbnail` | New. Multipart, owner only, validated as above. |
@@ -319,7 +320,7 @@ Editing a project that is already visible saves straight to it. Steps 2–4 are 
 
 ### Project page
 
-- The Overview (`description`), then each non-empty section in order, then Details, References and Outputs.
+- The Overview (`description`), then each non-empty section in order. Details are rows in the info card's facts list, next to Course and Campus, where short labelled facts already live. References and Outputs follow in later phases.
 - An in-page contents list, built from the sections that actually rendered.
 - References show "Also used in…" from `shared-references`.
 - The gallery leads with the primary output.
@@ -349,7 +350,7 @@ Each is its own Prisma migration, landing with its phase:
    - add a plain index on `showFrom` for the sweep. Not a partial one: Prisma's schema can't declare a partial index, and one it can't see gets dropped by the next `prisma migrate dev`. The same limit applies to the outputs table's partial unique index in Phase 4, which will need its own answer.
 2. **`structured_content`**:
    - add `sections` and `details` (on `Project` and `ProjectVersion`)
-   - **backfill details**: move whole paragraphs matching `^\*\*(Supervisor or lab|Runtime|Credits|Performers|Published in):\*\* (.+)$`, the five labels `compose.ts` ever wrote, out of `description` and into `details`, in order; set `description` to null if nothing is left. Only those exact labels are moved, so a student's own bold text is untouched.
+   - **backfill details** through `uofthub_split_legacy_details(text)`, kept in the database so the tests can run it against fixtures: move whole paragraphs matching `^\*\*(Supervisor or lab|Runtime|Credits|Performers|Published in):\*\* (.+)$`, the five labels `compose.ts` ever wrote, out of `description` and into `details`, in order; set `description` to null if nothing is left. Only those exact labels are moved, so a student's own bold text is untouched.
    - add IMMUTABLE `uofthub_sections_text(jsonb)` and `uofthub_details_text(jsonb)` (the same narrowing argument as `uofthub_tags_text`)
    - drop and re-add `searchVector` with sections and details at weight C
 3. **`references`**: add the enum, the table, a generated `searchVector` on `ProjectReference`, and the indexes. `searchProjectIds` unions matches from both tables, ranking a reference match below a project match. That keeps "generated, so it can't be forgotten" and avoids denormalizing reference text onto `Project`.

@@ -86,7 +86,8 @@ export async function decorate<T extends CardRow>(projects: T[], callerId: strin
   for (const r of mine)
     myReactions.set(r.projectId, [...(myReactions.get(r.projectId) ?? []), r.kind])
 
-  return withCover.map(({ viewCount, ...project }) => {
+  return withCover.map((row) => {
+    const { viewCount, ...project } = withoutContent(row)
     const counts = reactions.get(project.id) ?? emptyReactions()
     return {
       ...project,
@@ -98,6 +99,27 @@ export async function decorate<T extends CardRow>(projects: T[], callerId: strin
       saved: savedIds.has(project.id),
     }
   })
+}
+
+/**
+ * A row without its long-form content. Sections can run to 100KB, and a card
+ * draws none of it, so lists never carry it; the routes that return a single
+ * project put it back with `withContent`.
+ */
+function withoutContent<T extends object>(row: T): Omit<T, 'sections' | 'details'> {
+  const { sections: _sections, details: _details, ...rest } = row as T & {
+    sections?: unknown
+    details?: unknown
+  }
+  return rest
+}
+
+/** A decorated single project with its sections and details back on. */
+export function withContent<T extends object>(
+  shaped: T,
+  row: { sections: Prisma.JsonValue; details: Prisma.JsonValue }
+) {
+  return { ...shaped, sections: row.sections, details: row.details }
 }
 
 /** Rows come back from `where: { id: { in } }` in no useful order; restore it. */

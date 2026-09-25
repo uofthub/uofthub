@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeDescription, composeLinks, placeLinks, typeForUrl } from './compose'
+import { composeDescription, composeDetails, composeLinks, placeLinks, typeForUrl } from './compose'
 
 describe('the post form’s answers', () => {
   it('turns URL answers into labelled links the project page understands', () => {
@@ -15,24 +15,27 @@ describe('the post form’s answers', () => {
     expect(composeLinks('APP', { live: '', repo: '   ' })).toEqual([])
   })
 
-  it('keeps free-text answers in the story, leaving links out of it', () => {
-    expect(
-      composeDescription('FILM', {
-        runtime: '6:12',
-        credits: 'Aisha, Omar',
-        video: 'https://youtu.be/x',
-      })
-    ).toBe('**Runtime:** 6:12\n\n**Credits:** Aisha, Omar')
+  it('turns short free-text answers into labelled details, in the form’s order', () => {
+    const answers = { credits: 'Aisha, Omar', runtime: '6:12', video: 'https://youtu.be/x' }
+    expect(composeDetails('FILM', answers)).toEqual([
+      { label: 'Runtime', value: '6:12' },
+      { label: 'Credits', value: 'Aisha, Omar' },
+    ])
+    // None of it is written into the overview any more.
+    expect(composeDescription('FILM', answers)).toBe('')
   })
 
-  it('writes a research abstract as a paragraph of its own', () => {
-    expect(
-      composeDescription('RESEARCH', { abstract: 'We sampled nine sites.', supervisor: 'Lab X' })
-    ).toBe('We sampled nine sites.\n\n**Supervisor or lab:** Lab X')
+  it('makes a research abstract the overview, and the supervisor a detail', () => {
+    const answers = { abstract: 'We sampled nine sites.', supervisor: 'Lab X' }
+    expect(composeDescription('RESEARCH', answers)).toBe('We sampled nine sites.')
+    expect(composeDetails('RESEARCH', answers)).toEqual([
+      { label: 'Supervisor or lab', value: 'Lab X' },
+    ])
   })
 
   it('ignores answers from a type the student switched away from', () => {
     expect(composeDescription('APP', { runtime: '6:12' })).toBe('')
+    expect(composeDetails('APP', { runtime: '6:12' })).toEqual([])
   })
 })
 

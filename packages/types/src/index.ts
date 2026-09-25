@@ -31,14 +31,62 @@ export interface User {
   createdAt: string
 }
 
+/**
+ * The optional sections a project can hold beyond its overview. Each is shown
+ * only when it has something in it. `custom` may repeat and carries its own
+ * title; every other kind appears at most once. Mirrored as a value list in
+ * apps/api/src/lib/projectContent.ts, which is compile-checked against this.
+ */
+export type SectionKind =
+  | 'motivation'
+  | 'method'
+  | 'approaches'
+  | 'data'
+  | 'results'
+  | 'examples'
+  | 'considerations'
+  | 'reflection'
+  | 'conclusion'
+  | 'custom'
+
+/** One approach of an "approaches compared" section, or one example. */
+export interface ProjectSectionItem {
+  label: string
+  body?: string
+}
+
+export interface ProjectSection {
+  /** Stable per project; the section's anchor on the page. */
+  id: string
+  kind: SectionKind
+  /** Overrides the label the project's type gives this kind. Required for `custom`. */
+  title?: string
+  /** Markdown. */
+  body?: string
+  /** `approaches` and `examples` only. */
+  items?: ProjectSectionItem[]
+}
+
+/** A short labelled fact: Supervisor, Runtime, Performers. */
+export interface ProjectDetailItem {
+  label: string
+  value: string
+}
+
 export interface Project {
   id: string
   ownerId: string
   title: string
   /** The one line a card shows. */
   pitch?: string
-  /** The story, in Markdown. */
+  /** The overview, in Markdown. */
   description?: string
+  /** Only on a single project, never on list rows. Absent or null when there are none. */
+  sections?: ProjectSection[] | null
+  /** Only on a single project, never on list rows. Absent or null when there are none. */
+  details?: ProjectDetailItem[] | null
+  /** Set while the project is hidden until a date (only its makers see it then). */
+  showFrom?: string | null
   type?: ProjectType
   status?: ProjectStatus
   tags: string[]

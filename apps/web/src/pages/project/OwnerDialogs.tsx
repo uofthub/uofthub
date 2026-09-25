@@ -48,6 +48,10 @@ export function EditProjectDialog({
     tags: project.tags.join(', '),
     visibility: project.visibility,
   })
+  // Short labelled facts. Rows left half-filled are dropped by the API.
+  const [details, setDetails] = useState(project.details ?? [])
+  const setDetail = (i: number, key: 'label' | 'value', value: string) =>
+    setDetails((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)))
   const save = useMutation({
     mutationFn: () =>
       api.projects.update(project.id, {
@@ -56,6 +60,7 @@ export function EditProjectDialog({
         description: form.description,
         type: form.type || null,
         status: form.status || null,
+        details,
         tags: form.tags
           .split(',')
           .map((t) => t.trim())
@@ -117,12 +122,54 @@ export function EditProjectDialog({
           </Select>
         </Field>
       </div>
-      <Field
-        label="The story"
-        hint="Markdown. Headings like ## What we built become its sections on the project page."
-      >
+      <Field label="Overview" hint="Markdown. Leave it empty and the project page won’t show it.">
         <TextArea rows={10} value={form.description} onChange={set('description')} />
       </Field>
+      <div className="stack" style={{ gap: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Details</span>
+        {details.map((d, i) => (
+          <div key={i} className="row" style={{ gap: 8 }}>
+            <Input
+              aria-label={`Detail ${i + 1} label`}
+              value={d.label}
+              onChange={(e) => setDetail(i, 'label', e.target.value)}
+              placeholder="Supervisor"
+              maxLength={40}
+              style={{ width: 160 }}
+            />
+            <Input
+              aria-label={`Detail ${i + 1} value`}
+              value={d.value}
+              onChange={(e) => setDetail(i, 'value', e.target.value)}
+              placeholder="Prof. Ada Lovelace"
+              maxLength={200}
+              className="grow"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              iconOnly
+              icon="close"
+              aria-label={`Remove detail ${i + 1}`}
+              onClick={() => setDetails((rows) => rows.filter((_, j) => j !== i))}
+            />
+          </div>
+        ))}
+        {details.length < 12 && (
+          <div>
+            <Button
+              size="sm"
+              icon="plus"
+              onClick={() => setDetails((rows) => [...rows, { label: '', value: '' }])}
+            >
+              Add a detail
+            </Button>
+          </div>
+        )}
+        <span className="muted" style={{ fontSize: 13 }}>
+          Short facts like a supervisor, a runtime or who performed.
+        </span>
+      </div>
       <Field
         label="Tags"
         hint="Comma-separated. A course code like CSC309 files it under that course."
