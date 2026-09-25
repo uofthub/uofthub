@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { extOf, formatBytes, lookFor, previewKindFor } from './files'
-import { parseCsv } from '../components/FileViewer'
+import { parseCsv } from './csv'
 
 describe('previewKindFor', () => {
   it.each([
@@ -49,12 +49,13 @@ describe('formatBytes', () => {
 
 describe('lookFor', () => {
   it('gives known types their own icon', () => {
-    expect(lookFor('a.pdf').icon).toBe('mdi-file-pdf-box')
-    expect(lookFor('a.xlsx').icon).toBe('mdi-file-table-outline')
+    expect(lookFor('a.pdf').icon).toBe('file')
+    expect(lookFor('a.xlsx').icon).toBe('grid')
+    expect(lookFor('clip.MP4').icon).toBe('video')
   })
 
   it('falls back rather than returning undefined for an unknown type', () => {
-    expect(lookFor('mystery.qqq')).toEqual({ icon: 'mdi-file-outline', color: 'grey' })
+    expect(lookFor('mystery.qqq')).toEqual({ icon: 'file', bg: '#EFEDE6', ink: '#4A4538' })
   })
 })
 
