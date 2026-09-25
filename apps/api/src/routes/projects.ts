@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Prisma, ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
 import { db } from '../db/client.js'
 import {
+  VIEW_CHECK_SELECT,
   canViewProject,
   canViewProjectId,
   getOptionalUserId,
@@ -35,7 +36,7 @@ import { recordView } from '../lib/views.js'
 import { trendingIds } from '../lib/trending.js'
 import { facetsFor } from '../lib/facets.js'
 import { parseCampus } from '../lib/campus.js'
-import { startOfUtcDay } from '../lib/dates.js'
+import { startOfTorontoDay, startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
@@ -78,12 +79,29 @@ function parseEnum<T extends string>(value: unknown, allowed: T[]): T | null | u
   return allowed.includes(value as T) ? (value as T) : false
 }
 
+/**
+ * A show-from date as the editor sends it: a calendar day (`2026-12-20`), read
+ * as the start of that day in Toronto, or a full ISO instant. `undefined`
+ * leaves it alone, `null` or `''` clears it, and anything else is `false`.
+ */
+function parseShowFrom(value: unknown): Date | null | undefined | false {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  if (typeof value !== 'string') return false
+  const day = startOfTorontoDay(value)
+  if (day) return day
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return false
+  const at = new Date(value)
+  return Number.isNaN(at.getTime()) ? false : at
+}
+
 /** The editable fields shared by create and update, validated once. */
 function parseFields(body: {
   pitch?: string | null
   type?: string | null
   status?: string | null
   visibility?: string
+  showFrom?: string | null
 }):
   | { error: string }
   | {
@@ -91,6 +109,7 @@ function parseFields(body: {
       type?: ProjectType | null
       status?: ProjectStatus | null
       visibility?: Visibility
+      showFrom?: Date | null
     } {
   const type = parseEnum(body.type, PROJECT_TYPES)
   if (type === false) return { error: 'Unknown project type' }
@@ -100,13 +119,15 @@ function parseFields(body: {
   if (visibility === false || visibility === null) {
     if (body.visibility !== undefined) return { error: 'Unknown visibility' }
   }
+  const showFrom = parseShowFrom(body.showFrom)
+  if (showFrom === false) return { error: 'Show from must be a date like 2026-12-20' }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
     pitch = body.pitch?.trim() || null
     if (pitch && pitch.length > PITCH_MAX)
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
   }
-  return { pitch, type, status, visibility: visibility || undefined }
+  return { pitch, type, status, visibility: visibility || undefined, showFrom }
 }
 
 /** How much of a comment rides along in the notification that announces it. */
@@ -258,6 +279,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       status?: string
       tags?: string[]
       visibility?: string
+      showFrom?: string | null
       links?: { label: string; url: string }[]
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -287,6 +309,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         status: fields.status ?? undefined,
         tags,
         visibility: fields.visibility ?? 'PRIVATE',
+        showFrom: fields.showFrom ?? undefined,
         links: safeLinks.length ? { create: safeLinks } : undefined,
       },
       include: CARD_INCLUDE,
@@ -298,7 +321,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const publishedAt = await announcePublish(project)
 
     const [shaped] = await decorate(
-      [{ ...project, publishedAt: publishedAt ?? project.publishedAt }],
+      [{ ...project, publishedAt }],
       request.user.sub
     )
     return reply.code(201).send(shaped)
@@ -315,6 +338,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       status?: string | null
       tags?: string[]
       visibility?: string
+      showFrom?: string | null
     }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
@@ -346,15 +370,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ...(fields.type !== undefined && { type: fields.type }),
         ...(fields.status !== undefined && { status: fields.status }),
         ...(visibility !== undefined && { visibility }),
+        ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
       },
       include: CARD_INCLUDE,
     })
 
-    // The edit that opens a draft up is the one that counts as publishing it.
+    // The edit that opens a draft up is the one that counts as publishing it,
+    // and an edit to a still-unannounced project's show-from date moves when
+    // it will appear.
     const publishedAt = await announcePublish(updated)
 
     const [shaped] = await decorate(
-      [{ ...updated, publishedAt: publishedAt ?? updated.publishedAt }],
+      [{ ...updated, publishedAt }],
       request.user.sub
     )
     return shaped
@@ -405,14 +432,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { id } = request.params
       const userId = request.user.sub
-      const project = await db.project.findUnique({
-        where: { id },
-        select: {
-          ownerId: true,
-          visibility: true,
-          collaborators: { select: { userId: true, accepted: true } },
-        },
-      })
+      const project = await db.project.findUnique({ where: { id }, select: VIEW_CHECK_SELECT })
       if (!project || !canViewProject(project, userId))
         return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId === userId)
@@ -1230,8 +1250,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: 'Only faculty/TAs can request access' })
       }
 
-      const project = await db.project.findUnique({ where: { id: request.params.id } })
-      if (!project) return reply.code(404).send({ error: 'Not found' })
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: { collaborators: { select: { userId: true, accepted: true } } },
+      })
+      // 404, like every read: a 403 here would confirm that a private or
+      // still-hidden project exists to anyone who guessed its id.
+      if (!project || !canViewProject(project, request.user.sub))
+        return reply.code(404).send({ error: 'Not found' })
       if (project.visibility === 'PRIVATE') {
         return reply.code(403).send({ error: 'Cannot request access to a private project' })
       }
@@ -1298,9 +1324,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const project = await db.project.findUnique({
         where: { id: request.params.id },
-        select: { id: true, ownerId: true, visibility: true },
+        select: { id: true, ...VIEW_CHECK_SELECT },
       })
-      if (!project) return reply.code(404).send({ error: 'Not found' })
+      // 404 for anything the reporter cannot see, as every read does — a 403
+      // would confirm a private or still-hidden project exists.
+      if (!project || !canViewProject(project, request.user.sub))
+        return reply.code(404).send({ error: 'Not found' })
 
       // Reporting exists for work that has an audience. A PRIVATE project is
       // only visible to its owner and accepted collaborators, so there is

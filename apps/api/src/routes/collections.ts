@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import type { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
-import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
+import { getOptionalUserId, isListed, visibleProjectWhere } from '../lib/visibility.js'
 import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { withCovers } from '../lib/covers.js'
 
@@ -102,13 +102,13 @@ async function summaries(
   }))
 }
 
-/** A project that can be put in a collection: listed already, and not taken down. */
+/** A project that can be put in a collection: listed already — see `isListed`. */
 async function listable(projectId: string) {
   const project = await db.project.findUnique({
     where: { id: projectId },
-    select: { visibility: true, takenDownAt: true },
+    select: { visibility: true, takenDownAt: true, showFrom: true },
   })
-  return !!project && ['PUBLIC', 'UOFT'].includes(project.visibility) && !project.takenDownAt
+  return !!project && isListed(project)
 }
 
 export const collectionRoutes: FastifyPluginAsync = async (app) => {

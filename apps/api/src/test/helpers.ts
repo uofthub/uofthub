@@ -91,6 +91,13 @@ export async function createProject(
      * order a feed, or `null` for a project that was never visible.
      */
     publishedAt?: Date | null
+    /** Hidden from everyone but its makers until then. */
+    showFrom?: Date | null
+    /**
+     * Defaults the way the routes leave it: announced when published, unless
+     * a future show-from date means the sweep has yet to announce it.
+     */
+    announcedAt?: Date | null
     viewCount?: number
     /**
      * Unique views recorded today — what trending ranks by. `viewCount` alone
@@ -104,12 +111,18 @@ export async function createProject(
 ) {
   seq += 1
   const visibility = overrides.visibility ?? 'PRIVATE'
+  const showFrom = overrides.showFrom ?? null
+  const hidden = !!showFrom && showFrom > new Date()
   const published =
     overrides.publishedAt !== undefined
       ? overrides.publishedAt
       : visibility === 'PRIVATE'
         ? null
-        : new Date()
+        : hidden
+          ? showFrom
+          : new Date()
+  const announced =
+    overrides.announcedAt !== undefined ? overrides.announcedAt : hidden ? null : published
 
   const project = await db.project.create({
     data: {
@@ -122,6 +135,8 @@ export async function createProject(
       tags: overrides.tags ?? [],
       visibility,
       publishedAt: published,
+      showFrom,
+      announcedAt: announced,
       viewCount: overrides.viewCount ?? overrides.recentViews ?? 0,
     },
   })

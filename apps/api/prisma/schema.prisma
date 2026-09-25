@@ -217,6 +217,16 @@ model Project {
   /// the owner, which is also what stops the follower fan-out firing twice on
   /// a project that is toggled UOFT → PRIVATE → UOFT.
   publishedAt  DateTime?
+  /// Until this moment only the owner and accepted collaborators can see the
+  /// project, whatever its visibility — course work stays hidden until after
+  /// grading. Enforced in lib/visibility.ts and nowhere else. Null for most
+  /// projects, which show as soon as their visibility allows.
+  showFrom     DateTime?
+  /// When the owner's followers were told about it. Separate from publishedAt
+  /// because a project with a future show-from date is published (publishedAt
+  /// is set to that date, so it enters feeds when it appears) long before it
+  /// can be announced — see lib/announcements.ts.
+  announcedAt  DateTime?
   /// Set while the owner has pinned this to the top of their profile. Pinned
   /// projects are the only ones a profile renders as cards — see
   /// docs/feed-and-density.md for why everything else is a list.
@@ -265,6 +275,8 @@ model Project {
   @@index([publishedAt])
   /// A profile's pinned strip: six rows out of however many the student owns.
   @@index([ownerId, pinnedAt])
+  /// The announcement sweep: hidden projects whose show-from date has passed.
+  @@index([showFrom])
   @@index([searchVector], type: Gin)
 }
 

@@ -1,8 +1,8 @@
-import type { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { startOfUtcDay } from './dates.js'
 import { isCourseCode } from './faculties.js'
 import { TRENDING_WINDOW_DAYS } from './trending.js'
+import { listedProjectWhere } from './visibility.js'
 
 /**
  * The counts Explore and the home rails decorate their links with: projects
@@ -26,14 +26,6 @@ export type Facets = {
 const TTL_MS = 5 * 60 * 1000
 const cache = new Map<string, { at: number; facets: Facets }>()
 
-/** Signed-out visitors see public work only; any account sees U of T work too. */
-function audienceWhere(signedIn: boolean): Prisma.ProjectWhereInput {
-  return {
-    visibility: { in: signedIn ? ['PUBLIC', 'UOFT'] : ['PUBLIC'] },
-    takenDownAt: null,
-  }
-}
-
 function top<T extends { count: number }>(rows: T[], n: number, label: (r: T) => string): T[] {
   return rows.sort((a, b) => b.count - a.count || label(a).localeCompare(label(b))).slice(0, n)
 }
@@ -44,7 +36,8 @@ export async function facetsFor(signedIn: boolean): Promise<Facets> {
   if (hit && Date.now() - hit.at < TTL_MS) return hit.facets
 
   const rows = await db.project.findMany({
-    where: audienceWhere(signedIn),
+    // Signed-out visitors count public work only; any account U of T work too.
+    where: listedProjectWhere(signedIn),
     select: {
       tags: true,
       type: true,

@@ -205,7 +205,7 @@ Link outputs (a YouTube video, a demo site) can get a thumbnail from the existin
   `OR: [{ visibility in [PUBLIC, UOFT], OR: [{ showFrom: null }, { showFrom: { lte: now } }] }, owner…, collaborator…]`.
   `users.ts` spreads this fragment next to other keys, so its top level must stay a single `OR`. I'll check each call site.
 - **New `listedProjectWhere(signedIn)` and `isListed(project)`.** These replace three checks that live outside `visibility.ts` today: `audienceWhere` in `facets.ts`, `listable` in `collections.ts`, and the spotlight check in `admin.ts`. Without this, facets would count and reveal a hidden project's course, and it could be added to a collection or spotlighted.
-- **Report and request-access.** Both compare `visibility === 'PRIVATE'` directly, which already confirms a private id exists (403 instead of 404). They'll call `canViewProject` first and 404.
+- **Report and request-access.** Both compared `visibility === 'PRIVATE'` directly, which confirmed a private id exists (403 instead of 404). They now call `canViewProject` first and 404. One consequence: a TA can't request access to a course project before its show-from date, because as far as they can tell it doesn't exist yet. The owner can still invite them.
 
 **Publishing.** `announcePublish` stamps `publishedAt` with the reveal time, `max(now, showFrom)`, so a hidden project enters feeds on the day it appears rather than the day it was saved. Followers are told once, at that moment:
 
@@ -284,7 +284,7 @@ A project matches a faculty when its owner's faculty matches, **or any accepted 
 |---|---|
 | `POST /projects` | Also accepts `sections`, `details`, `courseCode`, `showFrom`, `references[]`. |
 | `PATCH /projects/:id` | Same fields plus `outputs[]`, all written in **one transaction**. `references` and `outputs` replace the whole list when present. |
-| `GET /projects/:id` | Returns `sections`, `details`, `courseCode`, `showFrom` (members only), `references`, and `outputs` with signed `thumbnailUrl`s. |
+| `GET /projects/:id` | Returns `sections`, `details`, `courseCode`, `showFrom` (only ever in the future for the project's makers, who are the only ones who can load it then), `references`, and `outputs` with signed `thumbnailUrl`s. |
 | `GET /projects?course=` | New course filter; the faculty filter now also matches collaborators. |
 | `PUT /projects/:id/outputs/:outputId/thumbnail` | New. Multipart, owner only, validated as above. |
 | `GET /projects/:id/shared-references` | New. `[{ reference, projects[] }]` for references with a `key`, visibility-filtered, at most 3 projects each. |
@@ -346,7 +346,7 @@ Each is its own Prisma migration, landing with its phase:
 1. **`show_from`**:
    - add `showFrom` and `announcedAt`
    - backfill `announcedAt = publishedAt`
-   - add a partial index on `showFrom WHERE "showFrom" IS NOT NULL` for the sweep
+   - add a plain index on `showFrom` for the sweep. Not a partial one: Prisma's schema can't declare a partial index, and one it can't see gets dropped by the next `prisma migrate dev`. The same limit applies to the outputs table's partial unique index in Phase 4, which will need its own answer.
 2. **`structured_content`**:
    - add `sections` and `details` (on `Project` and `ProjectVersion`)
    - **backfill details**: move whole paragraphs matching `^\*\*(Supervisor or lab|Runtime|Credits|Performers|Published in):\*\* (.+)$`, the five labels `compose.ts` ever wrote, out of `description` and into `details`, in order; set `description` to null if nothing is left. Only those exact labels are moved, so a student's own bold text is untouched.
