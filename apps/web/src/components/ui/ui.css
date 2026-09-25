@@ -1,0 +1,329 @@
+/* ---------- Panel ---------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+.panel--rail {
+  padding: 18px 20px;
+  gap: 14px;
+}
+.panel--main {
+  padding: 26px 30px;
+  gap: 18px;
+}
+@media (max-width: 720px) {
+  .panel--main {
+    padding: 20px 18px;
+  }
+}
+.panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---------- Tabs ---------- */
+
+.seg-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--fill-soft);
+  padding: 4px;
+  border-radius: 12px;
+}
+.seg-tab {
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.seg-tab--on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.line-tabs {
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.line-tabs::-webkit-scrollbar {
+  display: none;
+}
+.line-tab {
+  height: 44px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.line-tab--on {
+  color: var(--ink);
+  box-shadow: inset 0 -3px 0 var(--navy);
+}
+
+/* ---------- Dialog ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(21, 23, 28, 0.42);
+  animation: fade-in 0.15s ease-out;
+}
+.dialog {
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-pop);
+  animation: pop-in 0.16s ease-out;
+}
+.dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 6px 24px;
+}
+.dialog__body {
+  padding: 12px 24px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dialog__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ---------- Menu ---------- */
+
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+.menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 60;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  animation: pop-in 0.12s ease-out;
+}
+.menu__panel--right {
+  right: 0;
+}
+.menu__panel--left {
+  left: 0;
+}
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.menu__item:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--ink);
+}
+.menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.menu__item--danger,
+.menu__item--danger:hover {
+  color: var(--red);
+}
+.menu__rule {
+  margin: 6px 4px;
+}
+
+/* ---------- Toggle ---------- */
+
+.toggle {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toggle__track {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  position: relative;
+  display: inline-block;
+  transition: background-color 0.15s ease;
+}
+.toggle__track--on {
+  background: var(--navy);
+}
+.toggle__knob {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.toggle__track--on .toggle__knob {
+  transform: translateX(18px);
+}
+.toggle:has(input:focus-visible) .toggle__track {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* ---------- Spinner / empty ---------- */
+
+.spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 16px;
+  font-size: 14px;
+}
+.spinner__ring {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid var(--navy-tint);
+  border-top-color: var(--navy-ink);
+  animation: spin 0.8s linear infinite;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 44px 20px;
+}
+.empty--compact {
+  padding: 20px 8px;
+}
+.empty__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--navy-tint);
+  color: var(--navy-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty__title {
+  font-size: 16px;
+  font-weight: 600;
+  max-width: 44ch;
+}
+.empty__body {
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 52ch;
+}
+.empty__action {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ---------- Chip input ---------- */
+
+.chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 44px;
+  padding: 6px 8px;
+  cursor: text;
+}
+.chip-input:focus-within {
+  outline: 2px solid var(--navy-soft);
+  outline-offset: 0;
+  border-color: var(--navy-ink);
+}
+.chip-input--bad {
+  border-color: var(--red);
+}
+.chip-input input {
+  flex: 1 1 120px;
+  min-width: 100px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 4px;
+}
+.chip-input__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 999px;
+  background: var(--fill);
+  font-size: 14px;
+  font-weight: 500;
+}
+.chip-input__item button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chip-input__item button:hover {
+  color: var(--ink);
+  background: var(--line);
+}
