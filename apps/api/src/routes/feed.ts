@@ -1,9 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { Campus, Prisma } from '@prisma/client'
+import type { Campus, Prisma, ProjectType } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds } from '../lib/trending.js'
+import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 
 /**
@@ -50,7 +51,27 @@ type Affinity = {
    */
   tagQuery: string[]
   campus: Campus | null
+  faculty: string | null
 }
+
+const PROJECT_TYPES: ProjectType[] = [
+  'APP',
+  'RESEARCH',
+  'FILM',
+  'DESIGN',
+  'AUDIO',
+  'HARDWARE',
+  'WRITING',
+  'OTHER',
+]
+
+/**
+ * The feed's tabs. `all` is the blended feed described above; the others are
+ * one connection each, newest first, with no trending top-up — a tab called
+ * Following that filled up with strangers would be lying.
+ */
+type Scope = 'all' | 'following' | 'campus' | 'program'
+const SCOPES: Scope[] = ['all', 'following', 'campus', 'program']
 
 async function affinityFor(userId: string): Promise<Affinity> {
   const [follows, mine, me] = await Promise.all([
@@ -64,7 +85,10 @@ async function affinityFor(userId: string): Promise<Affinity> {
       orderBy: { createdAt: 'desc' },
       take: TAG_SOURCE_LIMIT,
     }),
-    db.user.findUnique({ where: { id: userId }, select: { campus: true } }),
+    db.user.findUnique({
+      where: { id: userId },
+      select: { campus: true, faculty: true },
+    }),
   ])
 
   const tags = mine.flatMap((p) => p.tags)
@@ -74,6 +98,7 @@ async function affinityFor(userId: string): Promise<Affinity> {
     tags: new Set(tags.map((t) => t.toLowerCase())),
     tagQuery: [...new Set(tags.flatMap((t) => [t, t.toUpperCase(), t.toLowerCase()]))],
     campus: me?.campus ?? null,
+    faculty: me?.faculty ?? null,
   }
 }
 
@@ -83,7 +108,11 @@ async function affinityFor(userId: string): Promise<Affinity> {
  * campus and tagged with one of their courses.
  */
 function reasonFor(
-  project: { ownerId: string; tags: string[]; owner: { id: string; name: string; campus: Campus | null } | null },
+  project: {
+    ownerId: string
+    tags: string[]
+    owner: { id: string; name: string; campus: Campus | null } | null
+  },
   affinity: Affinity
 ): FeedReason {
   if (project.owner && affinity.followeeIds.has(project.ownerId)) {
@@ -101,84 +130,117 @@ function reasonFor(
 }
 
 export const feedRoutes: FastifyPluginAsync = async (app) => {
-  // GET /feed?skip&take — the home stream
-  app.get<{ Querystring: { skip?: string; take?: string } }>(
-    '/',
-    { preHandler: [app.authenticate] },
-    async (request) => {
-      const userId = request.user.sub
-      const take = Math.min(Math.max(Number(request.query.take) || PAGE_SIZE, 1), MAX_PAGE_SIZE)
-      const skip = Math.max(Number(request.query.skip) || 0, 0)
+  // GET /feed?scope=all|following|campus|program&campus&type&skip&take
+  //
+  // `campus` narrows any scope to one campus (the rail's campus chips) and
+  // `type` to one kind of work (the phone feed's chips). On the campus tab a
+  // campus chip replaces the student's own campus rather than stacking on it.
+  app.get<{
+    Querystring: { skip?: string; take?: string; scope?: string; campus?: string; type?: string }
+  }>('/', { preHandler: [app.authenticate] }, async (request) => {
+    const userId = request.user.sub
+    const take = Math.min(Math.max(Number(request.query.take) || PAGE_SIZE, 1), MAX_PAGE_SIZE)
+    const skip = Math.max(Number(request.query.skip) || 0, 0)
+    const scope = SCOPES.includes(request.query.scope as Scope)
+      ? (request.query.scope as Scope)
+      : 'all'
+    const onCampus = parseCampus(request.query.campus)
+    const type = PROJECT_TYPES.includes(request.query.type as ProjectType)
+      ? (request.query.type as ProjectType)
+      : null
 
-      const affinity = await affinityFor(userId)
+    const affinity = await affinityFor(userId)
 
-      // Shared by both halves: something the caller may read, that somebody
-      // else published. A student's own work belongs on their profile and in
-      // the activity summary, not in the stream of what other people are doing.
-      const eligible: Prisma.ProjectWhereInput[] = [
-        visibleProjectWhere(userId),
-        { ownerId: { not: userId } },
-        { publishedAt: { not: null } },
-        { takenDownAt: null },
-      ]
+    const eligible: Prisma.ProjectWhereInput[] = [
+      visibleProjectWhere(userId),
+      { ownerId: { not: userId } },
+      // Only ever-published projects: a draft opened up yesterday belongs in
+      // today's feed, and publishedAt is when that happened.
+      { publishedAt: { not: null } },
+      { takenDownAt: null },
+      ...(onCampus && scope !== 'campus' ? [{ owner: { campus: onCampus } }] : []),
+      ...(type ? [{ type }] : []),
+    ]
 
-      const connectedOr: Prisma.ProjectWhereInput[] = []
-      if (affinity.followeeIds.size > 0) connectedOr.push({ ownerId: { in: [...affinity.followeeIds] } })
-      if (affinity.tagQuery.length > 0) connectedOr.push({ tags: { hasSome: affinity.tagQuery } })
-      if (affinity.campus) connectedOr.push({ owner: { campus: affinity.campus } })
-
-      const connectedWhere: Prisma.ProjectWhereInput = { AND: [...eligible, { OR: connectedOr }] }
-
-      // The top-up is everything *else*, not everything. Two disjoint sets are
-      // what make paging exact: each half is skipped independently, and no row
-      // can land on two pages because the connected half narrowed underneath
-      // it. It is also what makes the reason correct without a special case —
-      // nothing in this half can match a connection, so every row here is
-      // genuinely trending rather than a campus project relabelled.
-      const trendingWhere: Prisma.ProjectWhereInput = {
-        AND: [...eligible, ...(connectedOr.length > 0 ? [{ NOT: { OR: connectedOr } }] : [])],
-      }
-
-      // Skipped entirely for an account with no follows, no projects and no
-      // campus — there is nothing for the connected half to match, and
-      // everything they see comes from the trending top-up below.
-      const connectedTotal = connectedOr.length > 0 ? await db.project.count({ where: connectedWhere }) : 0
-
-      const connected =
-        skip < connectedTotal
-          ? await db.project.findMany({
-              where: connectedWhere,
-              include: CARD_INCLUDE,
-              // Publish time, not creation time: a capstone drafted in January
-              // and opened up in March is March's news.
-              orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-              skip,
-              take,
-            })
-          : []
-
-      // The two halves are one list to the caller, so paging past the end of
-      // the connected half continues into trending rather than stopping.
-      const trendingSkip = skip < connectedTotal ? 0 : skip - connectedTotal
-      const trendingTake = take - connected.length
-
-      // Ranked by this week's activity (lib/trending.ts), not all-time views.
-      let trending: typeof connected = []
-      if (trendingTake > 0) {
-        const ids = await trendingIds(trendingWhere, { skip: trendingSkip, take: trendingTake })
-        trending = inOrder(
-          await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE }),
-          ids
-        )
-      }
-
-      const projects = await decorate([...connected, ...trending], userId)
-
+    const decorateItems = async (
+      rows: Prisma.ProjectGetPayload<{ include: typeof CARD_INCLUDE }>[]
+    ) => {
+      const projects = await decorate(rows, userId)
       return {
         items: projects.map((project) => ({ project, reason: reasonFor(project, affinity) })),
       }
     }
-  )
+
+    if (scope !== 'all') {
+      const campus = onCampus ?? affinity.campus
+      const scoped: Prisma.ProjectWhereInput | null =
+        scope === 'following'
+          ? affinity.followeeIds.size > 0
+            ? { ownerId: { in: [...affinity.followeeIds] } }
+            : null
+          : scope === 'campus'
+            ? campus
+              ? { owner: { campus } }
+              : {}
+            : affinity.faculty
+              ? { owner: { faculty: { equals: affinity.faculty, mode: 'insensitive' } } }
+              : null
+      if (!scoped) return { items: [] }
+
+      const rows = await db.project.findMany({
+        where: { AND: [...eligible, scoped] },
+        include: CARD_INCLUDE,
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        skip,
+        take,
+      })
+      return decorateItems(rows)
+    }
+
+    // Everything a "connected" project can be connected by. Empty for a
+    // brand new account, in which case the whole feed is the top-up below.
+    const connectedOr: Prisma.ProjectWhereInput[] = []
+    if (affinity.followeeIds.size > 0)
+      connectedOr.push({ ownerId: { in: [...affinity.followeeIds] } })
+    if (affinity.tagQuery.length > 0) connectedOr.push({ tags: { hasSome: affinity.tagQuery } })
+    if (affinity.campus) connectedOr.push({ owner: { campus: affinity.campus } })
+
+    const connectedWhere: Prisma.ProjectWhereInput = { AND: [...eligible, { OR: connectedOr }] }
+    // Excludes the connected set so a project can never appear in both
+    // halves, which would show it twice across a page boundary.
+    const trendingWhere: Prisma.ProjectWhereInput = {
+      AND: [...eligible, ...(connectedOr.length > 0 ? [{ NOT: { OR: connectedOr } }] : [])],
+    }
+
+    const connectedTotal =
+      connectedOr.length > 0 ? await db.project.count({ where: connectedWhere }) : 0
+
+    const connected =
+      skip < connectedTotal
+        ? await db.project.findMany({
+            where: connectedWhere,
+            include: CARD_INCLUDE,
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+            skip,
+            take,
+          })
+        : []
+
+    // The top-up picks up where the connected set ran out, and is ranked by
+    // this week's activity (lib/trending.ts), not all-time views.
+    const trendingSkip = skip < connectedTotal ? 0 : skip - connectedTotal
+    const trendingTake = take - connected.length
+    let trending: typeof connected = []
+    if (trendingTake > 0) {
+      const ids = await trendingIds(trendingWhere, { skip: trendingSkip, take: trendingTake })
+      trending = inOrder(
+        await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE }),
+        ids
+      )
+    }
+
+    return decorateItems([...connected, ...trending])
+  })
 
   // GET /feed/activity — the student's own week: how their work is landing
   app.get('/activity', { preHandler: [app.authenticate] }, async (request) => {
