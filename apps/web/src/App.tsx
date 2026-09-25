@@ -1,40 +1,69 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Layout from './components/Layout'
-import HomePage from './pages/HomePage.tsx'
-import SessionPage from './pages/SessionPage.tsx'
-import DirectoryPage from './pages/DirectoryPage.tsx'
-import DiscoverPage from './pages/DiscoverPage.tsx'
-import ProjectPage from './pages/ProjectPage.tsx'
-import CreateProjectPage from './pages/CreateProjectPage.tsx'
-import ProfilePage from './pages/ProfilePage.tsx'
-import CoursePage from './pages/CoursePage.tsx'
-import OrgsPage from './pages/OrgsPage.tsx'
-import OrgPage from './pages/OrgPage.tsx'
-import AboutPage from './pages/AboutPage.tsx'
-import TermsPage from './pages/TermsPage.tsx'
-import PrivacyPage from './pages/PrivacyPage.tsx'
-import AdminPage from './pages/AdminPage.tsx'
+import { lazy, Suspense } from 'react'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { AppShell } from './components/shell'
+import { Spinner } from './components/ui'
+import HomePage from './pages/home/HomePage'
+import ExplorePage from './pages/explore/ExplorePage'
+import ProjectPage from './pages/project/ProjectPage'
+import PostPage from './pages/post/PostPage'
+import ProfilePage from './pages/profile/ProfilePage'
+import SessionPage from './pages/session/SessionPage'
+import OrgsPage from './pages/orgs/OrgsPage'
+import OrgPage from './pages/orgs/OrgPage'
+import AboutPage from './pages/info/AboutPage'
+import TermsPage from './pages/info/TermsPage'
+import PrivacyPage from './pages/info/PrivacyPage'
+import { HelpWantedPage, SavedPage } from './pages/lists/ListPages'
+
+// Pages most visits never open are loaded when first needed, which keeps them
+// out of the bundle every visitor downloads.
+const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
+const DiscoverPage = lazy(() => import('./pages/info/DiscoverPage'))
+const CollectionsPage = lazy(() => import('./pages/collections/CollectionsPage'))
+const CollectionPage = lazy(() => import('./pages/collections/CollectionPage'))
+const MessagesPage = lazy(() => import('./pages/messages/MessagesPage'))
+
+/** The old directory lived at /projects; its links now land on Explore. */
+function ToExplore() {
+  const { search } = useLocation()
+  return <Navigate to={`/explore${search}`} replace />
+}
+
+/** /courses/CSC309 was the old per-course page. */
+function CourseToExplore() {
+  const { tag = '' } = useParams()
+  return <Navigate to={`/explore?course=${encodeURIComponent(tag)}`} replace />
+}
 
 export default function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/session" element={<SessionPage />} />
-        <Route path="/projects" element={<DirectoryPage />} />
-        <Route path="/discover" element={<DiscoverPage />} />
-        <Route path="/projects/new" element={<CreateProjectPage />} />
-        <Route path="/projects/:id" element={<ProjectPage />} />
-        <Route path="/orgs" element={<OrgsPage />} />
-        <Route path="/orgs/:slug" element={<OrgPage />} />
-        <Route path="/u/:id" element={<ProfilePage />} />
-        <Route path="/courses/:tag" element={<CoursePage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+    <AppShell>
+      <Suspense fallback={<Spinner />}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/projects" element={<ToExplore />} />
+          <Route path="/projects/new" element={<PostPage />} />
+          <Route path="/projects/:id" element={<ProjectPage />} />
+          <Route path="/courses/:tag" element={<CourseToExplore />} />
+          <Route path="/u/:id" element={<ProfilePage />} />
+          <Route path="/session" element={<SessionPage />} />
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/orgs" element={<OrgsPage />} />
+          <Route path="/orgs/:slug" element={<OrgPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/saved" element={<SavedPage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
+          <Route path="/collections/:id" element={<CollectionPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/messages/:userId" element={<MessagesPage />} />
+          <Route path="/help-wanted" element={<HelpWantedPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </AppShell>
   )
 }

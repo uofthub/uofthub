@@ -4,8 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './lib/auth'
-import { UIProvider } from './lib/ui'
-import { CrumbsProvider } from './lib/crumbs'
+import { ThemeProvider } from './lib/theme'
 import { IdentifyViewer, Monitoring, monitoringEnabled } from './lib/monitoring'
 import App from './App.tsx'
 
@@ -19,12 +18,10 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <UIProvider>
-              <CrumbsProvider>
-                {monitoringEnabled && <IdentifyViewer />}
-                <App />
-              </CrumbsProvider>
-            </UIProvider>
+            <ThemeProvider>
+              {monitoringEnabled && <IdentifyViewer />}
+              <App />
+            </ThemeProvider>
           </AuthProvider>
         </QueryClientProvider>
       </BrowserRouter>
