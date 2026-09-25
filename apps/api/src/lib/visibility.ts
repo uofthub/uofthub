@@ -4,9 +4,10 @@ import { db } from '../db/client.js'
 
 /**
  * Project visibility rules, in one place so every read route agrees:
- *   PUBLIC  — anyone, signed in or not
- *   UOFT    — any signed-in user (sign-in already requires a utoronto.ca address)
- *   PRIVATE — the owner and accepted collaborators only
+ *   PUBLIC   — anyone, signed in or not
+ *   UOFT     — any signed-in user (sign-in already requires a utoronto.ca address)
+ *   UNLISTED — anyone who has the link; never in a list, search or feed
+ *   PRIVATE  — the owner and accepted collaborators only
  */
 
 /**
@@ -24,7 +25,9 @@ export async function getOptionalUserId(request: FastifyRequest): Promise<string
 
 /**
  * Prisma `where` fragment matching only the projects this caller may read.
- * Use for any query that returns projects in bulk.
+ * Use for any query that returns projects in bulk. UNLISTED is deliberately
+ * absent: a link-only project is readable by id but never listed, except to
+ * its own makers.
  */
 export function visibleProjectWhere(callerId: string | null): Prisma.ProjectWhereInput {
   if (!callerId) return { visibility: 'PUBLIC' }
@@ -49,7 +52,7 @@ export function canViewProject(
   },
   callerId: string | null,
 ): boolean {
-  if (project.visibility === 'PUBLIC') return true
+  if (project.visibility === 'PUBLIC' || project.visibility === 'UNLISTED') return true
   if (!callerId) return false
   if (project.visibility === 'UOFT') return true
   if (project.ownerId === callerId) return true

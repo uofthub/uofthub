@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { ReactionKind } from '@prisma/client'
+import type { ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
 import { db } from '../db/client.js'
 import {
   canViewProject,
@@ -52,22 +52,81 @@ const REPORT_REASONS = [
 
 const REPORT_DETAILS_MAX = 1000
 
+const PROJECT_TYPES: ProjectType[] = [
+  'APP',
+  'RESEARCH',
+  'FILM',
+  'DESIGN',
+  'AUDIO',
+  'HARDWARE',
+  'WRITING',
+  'OTHER',
+]
+const PROJECT_STATUSES: ProjectStatus[] = ['IN_PROGRESS', 'SHIPPED', 'HELP_WANTED']
+const VISIBILITIES: Visibility[] = ['PRIVATE', 'UOFT', 'PUBLIC', 'UNLISTED']
+
+/** A card's one line. Generous next to the form's 120, for pitches split out of old descriptions. */
+const PITCH_MAX = 280
+
+/** `undefined` leaves a field alone, `null` clears it, anything unknown is an error. */
+function parseEnum<T extends string>(value: unknown, allowed: T[]): T | null | undefined | false {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  return allowed.includes(value as T) ? (value as T) : false
+}
+
+/** The editable fields shared by create and update, validated once. */
+function parseFields(body: {
+  pitch?: string | null
+  type?: string | null
+  status?: string | null
+  visibility?: string
+}):
+  | { error: string }
+  | {
+      pitch?: string | null
+      type?: ProjectType | null
+      status?: ProjectStatus | null
+      visibility?: Visibility
+    } {
+  const type = parseEnum(body.type, PROJECT_TYPES)
+  if (type === false) return { error: 'Unknown project type' }
+  const status = parseEnum(body.status, PROJECT_STATUSES)
+  if (status === false) return { error: 'Unknown project status' }
+  const visibility = parseEnum(body.visibility, VISIBILITIES)
+  if (visibility === false || visibility === null) {
+    if (body.visibility !== undefined) return { error: 'Unknown visibility' }
+  }
+  let pitch: string | null | undefined
+  if (body.pitch !== undefined) {
+    pitch = body.pitch?.trim() || null
+    if (pitch && pitch.length > PITCH_MAX)
+      return { error: `A pitch is at most ${PITCH_MAX} characters` }
+  }
+  return { pitch, type, status, visibility: visibility || undefined }
+}
+
 /** How much of a comment rides along in the notification that announces it. */
 const COMMENT_EXCERPT_MAX = 140
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
-  // GET /projects?search&faculty&campus&sort=new|trending&visibility=PUBLIC|UOFT&take&skip
+  // GET /projects?search&faculty&campus&type&status&sort=new|trending&take&skip
   app.get<{
     Querystring: {
       search?: string
       faculty?: string
       campus?: string
+      type?: string
+      status?: string
       sort?: string
       take?: string
       skip?: string
     }
   }>('/', async (request) => {
     const { search, faculty, campus, sort, take = '20', skip = '0' } = request.query
+    // Unknown values are dropped rather than 400ing, like campus below.
+    const type = parseEnum(request.query.type, PROJECT_TYPES) || undefined
+    const status = parseEnum(request.query.status, PROJECT_STATUSES) || undefined
     // An unrecognised campus is dropped rather than 400ing: it filters a
     // browse page, and a stale bookmark should still show projects.
     const onCampus = parseCampus(campus)
@@ -93,6 +152,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
             : []),
           ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
+          ...(type ? [{ type }] : []),
+          ...(status ? [{ status }] : []),
         ],
       },
       include: CARD_INCLUDE,
@@ -158,11 +219,22 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /projects
   app.post<{
-    Body: { title: string; description?: string; tags?: string[]; visibility?: string; links?: { label: string; url: string }[] }
+    Body: {
+      title: string
+      pitch?: string
+      description?: string
+      type?: string
+      status?: string
+      tags?: string[]
+      visibility?: string
+      links?: { label: string; url: string }[]
+    }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { title, description, tags = [], visibility = 'PRIVATE', links = [] } = request.body
+    const { title, description, tags = [], links = [] } = request.body
 
     if (!title?.trim()) return reply.code(400).send({ error: 'Title is required' })
+    const fields = parseFields(request.body)
+    if ('error' in fields) return reply.code(400).send({ error: fields.error })
 
     // Reject javascript:/data: links up front rather than storing them.
     const safeLinks: { label: string; url: string }[] = []
@@ -178,9 +250,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       data: {
         ownerId: request.user.sub,
         title: title.trim(),
-        description: description?.trim(),
+        pitch: fields.pitch ?? undefined,
+        description: description?.trim() || undefined,
+        type: fields.type ?? undefined,
+        status: fields.status ?? undefined,
         tags,
-        visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC',
+        visibility: fields.visibility ?? 'PRIVATE',
         links: safeLinks.length ? { create: safeLinks } : undefined,
       },
       include: CARD_INCLUDE,
@@ -201,13 +276,26 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /projects/:id
   app.patch<{
     Params: { id: string }
-    Body: { title?: string; description?: string; tags?: string[]; visibility?: string }
+    Body: {
+      title?: string
+      pitch?: string | null
+      description?: string
+      type?: string | null
+      status?: string | null
+      tags?: string[]
+      visibility?: string
+    }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
     if (!project) return reply.code(404).send({ error: 'Not found' })
     if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-    const { title, description, tags, visibility } = request.body
+    const { title, description, tags } = request.body
+    if (title !== undefined && !title.trim())
+      return reply.code(400).send({ error: 'Title is required' })
+    const fields = parseFields(request.body)
+    if ('error' in fields) return reply.code(400).send({ error: fields.error })
+    const { visibility } = fields
 
     // A take-down would be worth nothing if the owner could just set the
     // project public again; only a moderator can clear `takenDownAt`.
@@ -221,9 +309,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       where: { id: project.id },
       data: {
         ...(title !== undefined && { title: title.trim() }),
-        ...(description !== undefined && { description: description.trim() }),
+        ...(description !== undefined && { description: description.trim() || null }),
         ...(tags !== undefined && { tags }),
-        ...(visibility !== undefined && { visibility: visibility as 'PRIVATE' | 'UOFT' | 'PUBLIC' }),
+        ...(fields.pitch !== undefined && { pitch: fields.pitch }),
+        ...(fields.type !== undefined && { type: fields.type }),
+        ...(fields.status !== undefined && { status: fields.status }),
+        ...(visibility !== undefined && { visibility }),
       },
       include: CARD_INCLUDE,
     })
@@ -822,7 +913,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         data: {
           ownerId: request.user.sub,
           title: `${original.title} (fork)`,
+          pitch: original.pitch,
           description: original.description,
+          type: original.type,
+          // A fork starts its own life: it is not "shipped" because the
+          // original was.
+          status: 'IN_PROGRESS',
           tags: original.tags,
           visibility: 'PRIVATE',
           forkedFromId: original.id,

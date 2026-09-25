@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import type { Visibility } from '@prisma/client'
+import type { Visibility, ProjectType, ProjectStatus } from '@prisma/client'
 import { buildApp } from '../app.js'
 import { db } from '../db/client.js'
 
@@ -92,6 +92,9 @@ export async function createProject(
      */
     publishedAt?: Date | null
     viewCount?: number
+    type?: ProjectType
+    status?: ProjectStatus
+    pitch?: string
   } = {}
 ) {
   seq += 1
@@ -103,10 +106,13 @@ export async function createProject(
         ? null
         : new Date()
 
-  return db.project.create({
+  const project = await db.project.create({
     data: {
       ownerId,
       title: overrides.title ?? `Project ${seq}`,
+      pitch: overrides.pitch,
+      type: overrides.type,
+      status: overrides.status,
       description: overrides.description,
       tags: overrides.tags ?? [],
       visibility,
@@ -114,6 +120,7 @@ export async function createProject(
       viewCount: overrides.viewCount ?? 0,
     },
   })
+  return project
 }
 
 /** A verified group with `userId` as its admin, skipping the review flow. */

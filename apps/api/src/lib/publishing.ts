@@ -24,7 +24,10 @@ export async function announcePublish(project: {
   visibility: Visibility
   publishedAt: Date | null
 }): Promise<Date | null> {
-  if (project.visibility === 'PRIVATE' || project.publishedAt) return null
+  // Link-only is not published: it reaches nobody who was not handed the URL,
+  // so it is not stamped and followers are not told.
+  if (project.visibility === 'PRIVATE' || project.visibility === 'UNLISTED' || project.publishedAt)
+    return null
 
   const publishedAt = new Date()
   await db.project.update({ where: { id: project.id }, data: { publishedAt } })

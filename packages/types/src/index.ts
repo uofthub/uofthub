@@ -1,4 +1,10 @@
-export type Visibility = 'PRIVATE' | 'UOFT' | 'PUBLIC'
+/** PRIVATE is shown as "Draft"; UNLISTED opens for anyone with the link but is never listed. */
+export type Visibility = 'PRIVATE' | 'UOFT' | 'PUBLIC' | 'UNLISTED'
+/** What kind of work a project is — decides its badge and main action. */
+export type ProjectType =
+  'APP' | 'RESEARCH' | 'FILM' | 'DESIGN' | 'AUDIO' | 'HARDWARE' | 'WRITING' | 'OTHER'
+/** Where a project stands. HELP_WANTED feeds the "Looking for help" list. */
+export type ProjectStatus = 'IN_PROGRESS' | 'SHIPPED' | 'HELP_WANTED'
 /** The three U of T campuses. Absent means unstated, never "all three". */
 export type Campus = 'UTSG' | 'UTM' | 'UTSC'
 export type CollaboratorRole = 'OWNER' | 'COLLABORATOR' | 'VIEWER'
@@ -20,7 +26,12 @@ export interface Project {
   id: string
   ownerId: string
   title: string
+  /** The one line a card shows. */
+  pitch?: string
+  /** The story, in Markdown. */
   description?: string
+  type?: ProjectType
+  status?: ProjectStatus
   tags: string[]
   visibility: Visibility
   /** Unique views, lifetime. Sent to the project's owner only. */
