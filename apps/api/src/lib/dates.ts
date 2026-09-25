@@ -13,3 +13,15 @@ export function startOfUtcDay(daysAgo = 0): Date {
   date.setUTCHours(0, 0, 0, 0)
   return date
 }
+
+/**
+ * Monday 00:00 UTC of the week containing `at` — the key a weekly spotlight is
+ * filed under, so "this week" means the same thing to every request.
+ */
+export function startOfUtcWeek(at: Date = new Date()): Date {
+  const date = new Date(at)
+  date.setUTCHours(0, 0, 0, 0)
+  // getUTCDay: Sunday 0 … Saturday 6. Monday-based offset.
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
+  return date
+}

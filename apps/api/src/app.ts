@@ -13,6 +13,7 @@ import { orgRoutes } from './routes/orgs.js'
 import { adminRoutes } from './routes/admin.js'
 import { discoverRoutes } from './routes/discover.js'
 import { feedRoutes } from './routes/feed.js'
+import { spotlightRoutes } from './routes/spotlight.js'
 import { reportRequestError } from './lib/monitoring.js'
 
 export async function buildApp() {
@@ -102,6 +103,7 @@ export async function buildApp() {
   await app.register(adminRoutes, { prefix: '/admin' })
   await app.register(discoverRoutes, { prefix: '/discover' })
   await app.register(feedRoutes, { prefix: '/feed' })
+  await app.register(spotlightRoutes, { prefix: '/spotlight' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

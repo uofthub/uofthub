@@ -4,6 +4,7 @@ import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
 import { emailContactOfDecision } from '../lib/orgEmails.js'
+import { startOfUtcWeek } from '../lib/dates.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 
@@ -189,6 +190,76 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       })
       await emailContactOfDecision(updated, 'APPROVE', note)
       return updated
+    }
+  )
+
+  // ── WEEKLY SPOTLIGHT ────────────────────────────────────────────────────────
+
+  // GET /admin/spotlight — recent and upcoming picks
+  app.get('/spotlight', adminOnly, async () => {
+    return db.spotlight.findMany({
+      orderBy: { weekOf: 'desc' },
+      take: 12,
+      include: {
+        project: {
+          select: {
+            id: true,
+            title: true,
+            visibility: true,
+            owner: { select: { id: true, name: true } },
+          },
+        },
+        pickedBy: { select: { id: true, name: true } },
+      },
+    })
+  })
+
+  // POST /admin/spotlight — pick a project for a week (this week by default).
+  // Picking a week that already has one replaces it.
+  app.post<{ Body: { projectId?: string; note?: string; weekOf?: string } }>(
+    '/spotlight',
+    adminOnly,
+    async (request, reply) => {
+      const { projectId, weekOf } = request.body ?? {}
+      const note = request.body?.note?.trim().slice(0, 200) || null
+      if (!projectId) return reply.code(400).send({ error: 'A project is required' })
+
+      const project = await db.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, visibility: true, takenDownAt: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'No project with that id' })
+      // The banner is shown to everyone signed in; a draft or a link-only
+      // project would be published by being picked.
+      if (!['PUBLIC', 'UOFT'].includes(project.visibility) || project.takenDownAt) {
+        return reply
+          .code(400)
+          .send({ error: 'Only public or U of T-visible projects can be spotlighted' })
+      }
+
+      const when = weekOf ? new Date(weekOf) : new Date()
+      if (Number.isNaN(when.getTime()))
+        return reply.code(400).send({ error: 'weekOf must be a date' })
+      const week = startOfUtcWeek(when)
+
+      return db.spotlight.upsert({
+        where: { weekOf: week },
+        update: { projectId, note, pickedById: request.user.sub },
+        create: { projectId, note, weekOf: week, pickedById: request.user.sub },
+      })
+    }
+  )
+
+  // DELETE /admin/spotlight/:weekOf — clear a week, back to the trending fallback
+  app.delete<{ Params: { weekOf: string } }>(
+    '/spotlight/:weekOf',
+    adminOnly,
+    async (request, reply) => {
+      const when = new Date(request.params.weekOf)
+      if (Number.isNaN(when.getTime()))
+        return reply.code(400).send({ error: 'weekOf must be a date' })
+      await db.spotlight.deleteMany({ where: { weekOf: startOfUtcWeek(when) } })
+      return { ok: true }
     }
   )
 }
