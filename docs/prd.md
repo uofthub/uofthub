@@ -81,7 +81,7 @@ Each project can include:
 - Visibility controls default to the most private setting; student explicitly opens it up
 
 ### Student Groups (Clubs & Labs)
-Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual profiles: their own storage quota (larger, term-based, vs. a person's flat indefinite quota), a verification step before the page is public, and the ability to publish lightweight "activities" (events, meetings, recaps) alongside member projects. Full spec: [student-groups.md](student-groups.md).
+Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual profiles: created by moderators and verified from the start (no self-serve verification, no storage quotas — see [redesign.md](redesign.md#student-groups-and-quotas)), a "Built with" link from member projects, and the ability to publish lightweight "activities" (events, meetings, recaps) alongside member projects. Full spec: [student-groups.md](student-groups.md).
 
 ---
 
@@ -118,7 +118,7 @@ Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual p
 Full spec: [student-groups.md](student-groups.md).
 - Group verification workflow (pending → review → verified/denied/info-requested, 7-day auto-delete on timeout)
 - Admin portal for reviewing group verification requests (shares the admin role built in Phase 2)
-- Per-term group storage quota (10GB/term, stacking, same manual-override process as individual accounts)
+- ~~Per-term group storage quota (10GB/term, stacking, same manual-override process as individual accounts)~~ — removed in the redesign along with personal quotas
 - Org activities — lightweight posts (meetings, events, recaps) on org pages
 - Discord integration (link a group's server on its org page)
 

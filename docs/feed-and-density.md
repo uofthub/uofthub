@@ -1,5 +1,7 @@
 # Feed, density and feedback
 
+> **Partly superseded by [redesign.md](redesign.md).** Likes are gone (folded into reactions), there are now three reaction kinds, trending ranks this week's activity rather than all-time views, and a view is counted once per person per day. The feed and density reasoning below still stands.
+
 This document records why `/` shows a student a feed instead of a sales pitch, why the project directory is a list instead of a grid of cards, and why a project page has a row of one-tap reactions under the Like button. It extends [ARCHITECTURE.md](ARCHITECTURE.md).
 
 All of it is implemented. It exists as a document because the decisions are easy to reverse by accident — a card grid looks like the more designed option in a screenshot, and a feed looks like scope creep until you notice what the site feels like without one.
