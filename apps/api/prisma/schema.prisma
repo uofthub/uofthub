@@ -153,6 +153,7 @@ model User {
   saves            ProjectSave[]
   comments         Comment[]
   helpful          CommentHelpful[]
+  spotlightPicks   Spotlight[]           @relation("SpotlightPicks")
   following        Follow[]              @relation("Following")
   followers        Follow[]              @relation("Followers")
   orgMemberships   OrgMember[]
@@ -210,6 +211,7 @@ model Project {
   versions        ProjectVersion[]
   dailyViews      ProjectDailyView[]
   viewers         ProjectViewer[]
+  spotlights      Spotlight[]
   orgProjects     OrgProject[]
   reports         Report[]
   forkedFrom      Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
@@ -293,6 +295,22 @@ model ProjectViewer {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@id([projectId, date, viewerKey])
+}
+
+/// The home feed's weekly spotlight, picked by a moderator. One per week; the
+/// week is the Monday it starts on (UTC).
+model Spotlight {
+  id         String   @id @default(uuid())
+  projectId  String
+  weekOf     DateTime @unique @db.Date
+  /// Optional line shown under the title — why it was picked.
+  note       String?
+  /// The moderator who picked it; kept as history if their account goes.
+  pickedById String?
+  createdAt  DateTime @default(now())
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pickedBy User?   @relation("SpotlightPicks", fields: [pickedById], references: [id], onDelete: SetNull)
 }
 
 model ProjectCollaborator {
