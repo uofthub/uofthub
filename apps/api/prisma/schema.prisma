@@ -152,6 +152,7 @@ model User {
   reactions        ProjectReaction[]
   saves            ProjectSave[]
   comments         Comment[]
+  helpful          CommentHelpful[]
   following        Follow[]              @relation("Following")
   followers        Follow[]              @relation("Followers")
   orgMemberships   OrgMember[]
@@ -380,13 +381,32 @@ model Comment {
   id        String   @id @default(uuid())
   projectId String
   userId    String
+  /// Set on a reply. One level only: a reply to a reply is filed under the
+  /// same top-level comment (see POST /projects/:id/comments).
+  parentId  String?
   body      String
   createdAt DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[]        @relation("CommentReplies")
+  helpful CommentHelpful[]
 
   @@index([projectId, createdAt])
+  @@index([parentId])
+}
+
+/// "Helpful" on a comment. Helpful comments are listed first.
+model CommentHelpful {
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
 }
 
 model Follow {
