@@ -22,8 +22,8 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Projects** — title, description, tags, files, external links (GitHub, demo, website), collaborators
 - **Profiles** — name, faculty, program, year, auto-generated portfolio
 - **Visibility controls** — Private / U of T only / Public, defaulting to private
-- **Discovery** — search by faculty, course, or topic; trending/new feed
-- **Social** — likes, follows, comments
+- **Discovery** — search by faculty, course, type or topic; a feed with Following, Campus and Your program tabs; this week's trending; a weekly spotlight
+- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows, threaded comments
 
 See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond.
 
@@ -43,7 +43,7 @@ A pnpm workspace with two apps and one shared package.
 
 | | |
 |---|---|
-| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. A small Vuetify-flavoured component kit in `src/components/ui`, no UI framework dependency |
+| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` — with no UI framework dependency |
 | **API** (`apps/api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
