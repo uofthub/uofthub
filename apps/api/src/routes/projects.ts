@@ -41,31 +41,16 @@ import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
 import { announcePublish } from '../lib/publishing.js'
 import { bySession } from '../lib/rateLimit.js'
+import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 import { ImportError, importFromLink } from '../lib/linkImport.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
 const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
 
-// Every report costs a moderator's attention, so the budget is tighter still —
-// a genuine reporter never needs more than a handful in an hour. Keyed by
-// session rather than by IP; see lib/rateLimit.ts for why.
-const reportRateLimit = { rateLimit: { max: 5, timeWindow: '1 hour', keyGenerator: bySession } }
-
 // Each import is the server fetching somebody else's site on a student's
 // behalf, so it is budgeted per student.
 const importRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession } }
-
-const REPORT_REASONS = [
-  'SPAM',
-  'HARASSMENT',
-  'ACADEMIC_INTEGRITY',
-  'INTELLECTUAL_PROPERTY',
-  'PRIVACY',
-  'OTHER',
-] as const
-
-const REPORT_DETAILS_MAX = 1000
 
 const PROJECT_TYPES: ProjectType[] = [
   'APP',
@@ -1307,7 +1292,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.authenticate], config: reportRateLimit },
     async (request, reply) => {
       const reason = request.body?.reason
-      if (!reason || !REPORT_REASONS.includes(reason as (typeof REPORT_REASONS)[number])) {
+      if (!isReportReason(reason)) {
         return reply.code(400).send({ error: 'A valid reason is required' })
       }
 
@@ -1341,8 +1326,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         data: {
           projectId: project.id,
           reporterId: request.user.sub,
-          reason: reason as (typeof REPORT_REASONS)[number],
-          details: (request.body.details ?? '').trim().slice(0, REPORT_DETAILS_MAX) || null,
+          reason,
+          details: reportDetails(request.body.details),
         },
         select: { id: true, reason: true, status: true, createdAt: true },
       })
