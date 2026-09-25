@@ -3,7 +3,7 @@ import type { OrgStatus, ReportStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
-import { grantMissingTermAllowances, verificationDeadlineFromNow } from '../lib/orgs.js'
+import { verificationDeadlineFromNow } from '../lib/orgs.js'
 import { emailContactOfDecision } from '../lib/orgEmails.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
@@ -200,10 +200,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         where: { id: org.id },
         data: { status: 'VERIFIED', verifiedAt, reviewNote: note, verificationDeadline: null },
       })
-
-      // The current term's allowance lands immediately rather than at the next
-      // term boundary, so a group approved in week 3 can actually upload.
-      await grantMissingTermAllowances(org.id, verifiedAt, verifiedAt)
       await emailContactOfDecision(updated, 'APPROVE', note)
       return updated
     }

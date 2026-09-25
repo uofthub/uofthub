@@ -60,7 +60,7 @@ export async function emailContactOfDecision(
   const messages: Record<Decision, { subject: string; body: string }> = {
     APPROVE: {
       subject: `${org.name} is verified on uofthub`,
-      body: `<p><strong>${escape(org.name)}</strong> has been verified. The page is now listed publicly, and the group's per-term storage allowance is active.</p>
+      body: `<p><strong>${escape(org.name)}</strong> has been verified. The page is now listed publicly.</p>
 ${noteHtml}
 <p><a href="${link}">View the group page →</a></p>`,
     },

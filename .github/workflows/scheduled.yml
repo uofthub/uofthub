@@ -1,13 +1,12 @@
 name: Scheduled jobs
 
-# The two maintenance scripts documented in docs/ARCHITECTURE.md § Scheduled
-# jobs. They existed and were never scheduled anywhere, which meant expired
-# unverified groups were never deleted and verified groups stopped receiving
-# their per-term storage allowance.
+# The maintenance script documented in docs/ARCHITECTURE.md § Scheduled jobs.
+# It existed and was never scheduled anywhere, which meant expired unverified
+# groups were never deleted.
 #
-# Running them here rather than as Railway cron jobs is a trade: this needs a
+# Running it here rather than as Railway cron jobs is a trade: this needs a
 # database URL in a GitHub secret, where Railway cron would run inside the
-# private network with the credentials it already has. If you move them to
+# private network with the credentials it already has. If you move it to
 # Railway, delete this file — two schedulers running the same sweep is not
 # harmful (both are idempotent) but it is confusing.
 #
@@ -60,11 +59,3 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter @uofthub/api sweep-orgs
-
-      # Grants each verified group the current term's storage allowance if it
-      # has not had one yet. Idempotent, so a double run costs nothing.
-      - name: Grant term storage allowances
-        if: steps.guard.outputs.configured == 'true'
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: pnpm --filter @uofthub/api grant-term-storage

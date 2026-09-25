@@ -2,13 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 import { safeDiscordUrl, safeExternalUrl, safeGroupMeUrl } from '../lib/url.js'
-import {
-  canViewOrg,
-  orgQuotaBytes,
-  orgUsageBytes,
-  verificationDeadlineFromNow,
-  visibleOrgWhere,
-} from '../lib/orgs.js'
+import { canViewOrg, verificationDeadlineFromNow, visibleOrgWhere } from '../lib/orgs.js'
 import { emailAdminsOfSubmission } from '../lib/orgEmails.js'
 import { parseCampus } from '../lib/campus.js'
 
@@ -159,9 +153,6 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       contactRole: isMember ? org.contactRole : undefined,
       verificationNote: isMember ? org.verificationNote : undefined,
       reviewNote: isMember ? org.reviewNote : undefined,
-      storage: isMember
-        ? { quotaBytes: await orgQuotaBytes(org.id), usedBytes: await orgUsageBytes(org.id) }
-        : undefined,
     }
   })
 

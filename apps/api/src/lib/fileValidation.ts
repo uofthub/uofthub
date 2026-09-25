@@ -23,7 +23,6 @@ export const FILE_CATEGORIES: FileCategory[] = [
   { name: 'archives', extensions: ['zip'], maxSizeBytes: 100 * MB },
 ]
 
-export const ACCOUNT_QUOTA_BYTES = 2 * 1024 * MB
 export const PROJECT_FILE_COUNT_CAP = 20
 
 /**

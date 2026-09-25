@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/client.js'
 import { cookieFor, createUser, getApp, resetDb } from '../test/helpers.js'
-import { ORG_TERM_ALLOWANCE_BYTES } from '../lib/terms.js'
 
 beforeEach(resetDb)
 
@@ -161,7 +160,7 @@ describe('POST /admin/orgs/:slug/decision', () => {
     expect((await decide(creator, 'robotics', 'APPROVE')).statusCode).toBe(403)
   })
 
-  it('approving publishes the group and grants the current term immediately', async () => {
+  it('approving publishes the group', async () => {
     const creator = await createUser()
     const admin = await createUser({ isAdmin: true })
     await createOrg(creator)
@@ -169,17 +168,10 @@ describe('POST /admin/orgs/:slug/decision', () => {
     const res = await decide(admin, 'robotics', 'APPROVE')
     expect(res.statusCode).toBe(200)
 
-    const org = await db.organization.findUnique({
-      where: { slug: 'robotics' },
-      include: { storageGrants: true },
-    })
+    const org = await db.organization.findUnique({ where: { slug: 'robotics' } })
     expect(org?.status).toBe('VERIFIED')
     expect(org?.verifiedAt).not.toBeNull()
     expect(org?.verificationDeadline).toBeNull()
-    // A group approved mid-term should be able to upload today, not in four
-    // months when the next boundary comes round.
-    expect(org?.storageGrants).toHaveLength(1)
-    expect(Number(org!.storageGrants[0].bytes)).toBe(ORG_TERM_ALLOWANCE_BYTES)
 
     const app = await getApp()
     expect((await app.inject({ method: 'GET', url: '/orgs' })).json()).toHaveLength(1)
@@ -236,7 +228,6 @@ describe('GET /orgs/:slug', () => {
     })
     expect(asStranger.statusCode).toBe(200)
     expect(asStranger.json().contactEmail).toBeUndefined()
-    expect(asStranger.json().storage).toBeUndefined()
 
     const asMember = await app.inject({
       method: 'GET',
@@ -244,6 +235,5 @@ describe('GET /orgs/:slug', () => {
       cookies: await cookieFor(creator),
     })
     expect(asMember.json().contactEmail).toBe('exec@mail.utoronto.ca')
-    expect(asMember.json().storage).toEqual({ quotaBytes: ORG_TERM_ALLOWANCE_BYTES, usedBytes: 0 })
   })
 })
