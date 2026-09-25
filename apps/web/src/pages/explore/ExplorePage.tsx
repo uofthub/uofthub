@@ -239,7 +239,8 @@ export default function ExplorePage() {
   const searching = !!(q || course || faculty || campus || type || helpOnly)
   const results = useProjectPages(
     {
-      search: [q, course].filter(Boolean).join(' ') || undefined,
+      search: q || undefined,
+      course: course || undefined,
       faculty: faculty || undefined,
       campus: campus || undefined,
       type: type || undefined,

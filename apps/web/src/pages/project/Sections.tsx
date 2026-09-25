@@ -289,12 +289,12 @@ export function Comments({ project }: { project: ProjectDetail }) {
 
 /** "More built for CSC309" and "You might also like". */
 export function Related({ project }: { project: ProjectDetail }) {
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const topic = topicTags(project.tags)[0]
 
   const { data: sameCourse = [] } = useQuery({
-    queryKey: ['projects', { search: course, take: 6 }],
-    queryFn: () => api.projects.list({ search: course, take: 6 }),
+    queryKey: ['projects', { course, take: 6 }],
+    queryFn: () => api.projects.list({ course, take: 6 }),
     enabled: !!course,
   })
   const courseRows = sameCourse.filter((p) => p.id !== project.id).slice(0, 3)

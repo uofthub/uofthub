@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
+import { courseWhere, facultyWhere } from '../lib/faculties.js'
 import { EMPTY_FILTERS, parseQuery, windowStart, type DiscoverFilters } from '../lib/discovery.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds } from '../lib/trending.js'
@@ -51,16 +52,11 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
         AND: [
           visibleProjectWhere(request.user.sub),
           ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
-          ...(interpreted.tag ? [{ tags: { has: interpreted.tag } }] : []),
-          ...(interpreted.faculty
-            ? [
-                {
-                  owner: {
-                    faculty: { contains: interpreted.faculty, mode: 'insensitive' as const },
-                  },
-                },
-              ]
+          // A course code is a course now, not a tag.
+          ...(interpreted.tag
+            ? [courseWhere(interpreted.tag) ?? { tags: { has: interpreted.tag } }]
             : []),
+          ...(interpreted.faculty ? [facultyWhere(interpreted.faculty, 'contains')] : []),
           ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
           ...(since ? [{ createdAt: { gte: since } }] : []),
         ],

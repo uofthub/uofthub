@@ -46,6 +46,7 @@ export function EditProjectDialog({
     type: (project.type ?? '') as ProjectType | '',
     status: (project.status ?? '') as ProjectStatus | '',
     tags: project.tags.join(', '),
+    courseCode: project.courseCode ?? '',
     visibility: project.visibility,
   })
   // Short labelled facts. Rows left half-filled are dropped by the API.
@@ -61,6 +62,7 @@ export function EditProjectDialog({
         type: form.type || null,
         status: form.status || null,
         details,
+        courseCode: form.courseCode.trim() || null,
         tags: form.tags
           .split(',')
           .map((t) => t.trim())
@@ -170,12 +172,19 @@ export function EditProjectDialog({
           Short facts like a supervisor, a runtime or who performed.
         </span>
       </div>
-      <Field
-        label="Tags"
-        hint="Comma-separated. A course code like CSC309 files it under that course."
-      >
-        <Input value={form.tags} onChange={set('tags')} />
-      </Field>
+      <div className="row wrap" style={{ gap: 16 }}>
+        <Field label="Made for a course?" hint="Files it under that course" className="grow">
+          <Input
+            value={form.courseCode}
+            onChange={set('courseCode')}
+            placeholder="e.g. CSC211H5"
+            maxLength={8}
+          />
+        </Field>
+        <Field label="Tags" hint="Comma-separated topics" className="grow">
+          <Input value={form.tags} onChange={set('tags')} />
+        </Field>
+      </div>
       <Field label="Who can see this?">
         <Select
           value={form.visibility}

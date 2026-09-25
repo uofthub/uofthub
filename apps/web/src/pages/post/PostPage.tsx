@@ -162,10 +162,6 @@ export default function PostPage() {
 
   const publish = useMutation({
     mutationFn: async (as: Visibility) => {
-      const allTags = [
-        ...(courseCode ? [courseCode] : []),
-        ...tags.filter((t) => t.toUpperCase() !== courseCode),
-      ]
       const project = await api.projects.create({
         title: title.trim(),
         pitch: pitch.trim() || null,
@@ -175,7 +171,8 @@ export default function PostPage() {
         details: composeDetails(type, answers),
         type,
         status,
-        tags: allTags,
+        tags: tags.filter((t) => t.toUpperCase() !== courseCode),
+        courseCode: courseCode || null,
         visibility: as,
         links: [
           ...composeLinks(type, answers),

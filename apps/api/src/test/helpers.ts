@@ -85,6 +85,8 @@ export async function createProject(
     visibility?: Visibility
     description?: string
     tags?: string[]
+    /** The course it was made for, as stored: upper-cased. */
+    courseCode?: string
     /**
      * Left to mirror the routes by default — anything not PRIVATE is stamped
      * as published, exactly as POST/PATCH /projects do. Pass it explicitly to
@@ -133,6 +135,7 @@ export async function createProject(
       status: overrides.status,
       description: overrides.description,
       tags: overrides.tags ?? [],
+      courseCode: overrides.courseCode,
       visibility,
       publishedAt: published,
       showFrom,

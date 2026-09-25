@@ -42,7 +42,7 @@ export function ProjectCard({
 }) {
   const href = `/projects/${project.id}`
   const makers = makersOf(project, maker)
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const group = project.orgProjects?.[0]?.org
 
   return (
@@ -91,7 +91,7 @@ export function ProjectListRow({
 }) {
   const href = `/projects/${project.id}`
   const makers = makersOf(project, maker)
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
 
   return (
     <article className="card prow">

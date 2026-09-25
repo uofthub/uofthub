@@ -158,7 +158,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
     : primaryAction(safeLinks(project.links))
   // "View code" beside it, unless the main button already is that.
   const code = primary?.kind === 'CODE' ? undefined : codeLink(safeLinks(project.links))
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const pitch = project.pitch
   const tags = topicTags(project.tags)
   const documents = project.files.filter((f) => {

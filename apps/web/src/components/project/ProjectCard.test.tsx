@@ -63,9 +63,14 @@ describe('ProjectCard', () => {
     expect(screen.queryByText(/floor-by-floor/)).not.toBeInTheDocument()
   })
 
-  it('files a project under the course its tags name', () => {
-    show(project({ tags: ['React', 'csc309'] }))
+  it('files a project under its course', () => {
+    show(project({ courseCode: 'CSC309', tags: ['React'] }))
     expect(screen.getByText('Built for CSC309')).toBeInTheDocument()
+  })
+
+  it('does not take a course from the tags', () => {
+    show(project({ tags: ['React', 'csc309'] }))
+    expect(screen.queryByText(/Built for/)).not.toBeInTheDocument()
   })
 
   it('hides zero counts instead of printing a row of noughts', () => {
@@ -104,7 +109,7 @@ describe('ProjectCard', () => {
   it('prefers the course when it has both', () => {
     show(
       project({
-        tags: ['CSC309'],
+        courseCode: 'CSC309',
         orgProjects: [{ org: { slug: 'r', name: 'UofT Robotics', type: 'CLUB' } }],
       })
     )

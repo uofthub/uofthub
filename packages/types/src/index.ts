@@ -126,6 +126,8 @@ export interface Project {
   type?: ProjectType
   status?: ProjectStatus
   tags: string[]
+  /** The course it was made for, upper-cased: CSC211H5. */
+  courseCode?: string | null
   visibility: Visibility
   /** Unique views, lifetime. Sent to the project's owner only. */
   viewCount?: number

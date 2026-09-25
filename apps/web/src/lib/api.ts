@@ -134,6 +134,10 @@ export type ProjectFields = {
   outputs: OutputInput[] | null
   /** A calendar day (`2026-12-20`), read as midnight in Toronto. */
   showFrom: string | null
+  courseCode: string | null
+  /** The course template the project was started from, and its version. */
+  templateCode: string | null
+  templateVersion: number | null
 }
 
 export type ProfileUser = {
@@ -452,6 +456,8 @@ export const api = {
   projects: {
     list: (params?: {
       search?: string
+      /** A full code (CSC211H5) or a stem (CSC211, every campus of it). */
+      course?: string
       faculty?: string
       campus?: string
       type?: ProjectType

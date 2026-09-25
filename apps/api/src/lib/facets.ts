@@ -9,6 +9,10 @@ import { listedProjectWhere } from './visibility.js'
  * per faculty, the most-used course codes, this week's tags, and how many
  * projects are asking for help.
  *
+ * A project counts once towards each faculty among the people who made it —
+ * its owner and accepted collaborators — so a joint Engineering and Music
+ * project shows up under both, as the faculty filter finds it under both.
+ *
  * Computed over every visible project's tags and owner faculty in one read —
  * the kind of aggregate Postgres could do in SQL, but not through Prisma's
  * relation filters, and small enough at one university's scale to do here.
@@ -42,9 +46,15 @@ export async function facetsFor(signedIn: boolean): Promise<Facets> {
       tags: true,
       type: true,
       status: true,
+      courseCode: true,
       publishedAt: true,
       createdAt: true,
       owner: { select: { faculty: true } },
+      // Accepted makers only; a VIEWER is a TA's access grant, not credit.
+      collaborators: {
+        where: { accepted: true, role: { not: 'VIEWER' } },
+        select: { user: { select: { faculty: true } } },
+      },
     },
   })
 
@@ -56,15 +66,21 @@ export async function facetsFor(signedIn: boolean): Promise<Facets> {
   let helpWanted = 0
 
   for (const p of rows) {
-    if (p.owner.faculty) faculties[p.owner.faculty] = (faculties[p.owner.faculty] ?? 0) + 1
+    const makers = new Set(
+      [p.owner.faculty, ...p.collaborators.map((c) => c.user.faculty)].filter(
+        (f): f is string => !!f
+      )
+    )
+    for (const faculty of makers) faculties[faculty] = (faculties[faculty] ?? 0) + 1
     if (p.type) types[p.type] = (types[p.type] ?? 0) + 1
     if (p.status === 'HELP_WANTED') helpWanted += 1
     const thisWeek = (p.publishedAt ?? p.createdAt) >= since
-    for (const raw of p.tags) {
+    if (p.courseCode) courses.set(p.courseCode, (courses.get(p.courseCode) ?? 0) + 1)
+    // The course rides along with the tags in this week's list, marked as one.
+    for (const raw of [...(p.courseCode ? [p.courseCode] : []), ...p.tags]) {
       const tag = raw.trim()
       if (!tag) continue
       const course = isCourseCode(tag)
-      if (course) courses.set(tag.toUpperCase(), (courses.get(tag.toUpperCase()) ?? 0) + 1)
       if (thisWeek) {
         // Case folded for counting; the first spelling seen is the one shown.
         const k = tag.toLowerCase()

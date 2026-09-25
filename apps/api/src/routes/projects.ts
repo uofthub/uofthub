@@ -53,6 +53,8 @@ import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 import { ImportError, importFromLink } from '../lib/linkImport.js'
 import { parseDetails, parseSections } from '../lib/projectContent.js'
+import { courseWhere, facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
+import { isKnownTemplate } from '../lib/courseTemplates.js'
 import { parseReferences, type ReferenceRow } from '../lib/references.js'
 import {
   OutputError,
@@ -129,6 +131,9 @@ function parseFields(body: {
   sections?: unknown
   details?: unknown
   references?: unknown
+  courseCode?: string | null
+  templateCode?: string | null
+  templateVersion?: number | null
 }):
   | { error: string }
   | {
@@ -140,6 +145,8 @@ function parseFields(body: {
       sections?: Prisma.InputJsonValue | typeof Prisma.DbNull
       details?: Prisma.InputJsonValue | typeof Prisma.DbNull
       references?: ReferenceRow[]
+      courseCode?: string | null
+      template?: { templateCode: string | null; templateVersion: number | null }
     } {
   const type = parseEnum(body.type, PROJECT_TYPES)
   if (type === false) return { error: 'Unknown project type' }
@@ -157,6 +164,20 @@ function parseFields(body: {
   if (details && 'error' in details) return { error: details.error }
   const references = body.references === undefined ? undefined : parseReferences(body.references)
   if (references && 'error' in references) return { error: references.error }
+  let courseCode: string | null | undefined
+  if (body.courseCode !== undefined) {
+    courseCode = body.courseCode?.trim() ? normalizeCourseCode(body.courseCode) : null
+    if (body.courseCode?.trim() && !courseCode)
+      return { error: 'That doesn’t look like a course code — try CSC309 or CSC211H5' }
+  }
+  // Recorded, not acted on: which template the editor started from.
+  let template: { templateCode: string | null; templateVersion: number | null } | undefined
+  if (body.templateCode !== undefined) {
+    if (body.templateCode === null) template = { templateCode: null, templateVersion: null }
+    else if (!isKnownTemplate(body.templateCode, Number(body.templateVersion)))
+      return { error: 'Unknown course template' }
+    else template = { templateCode: body.templateCode, templateVersion: Number(body.templateVersion) }
+  }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
     pitch = body.pitch?.trim() || null
@@ -172,6 +193,8 @@ function parseFields(body: {
     sections: sections && asJson(sections.value),
     details: details && asJson(details.value),
     references: references?.value,
+    courseCode,
+    template,
   }
 }
 
@@ -201,10 +224,11 @@ const SHARED_PER_REFERENCE = 3
 const COMMENT_EXCERPT_MAX = 140
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
-  // GET /projects?search&faculty&campus&type&status&sort=new|trending&take&skip
+  // GET /projects?search&course&faculty&campus&type&status&sort=new|trending&take&skip
   app.get<{
     Querystring: {
       search?: string
+      course?: string
       faculty?: string
       campus?: string
       type?: string
@@ -215,6 +239,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   }>('/', async (request) => {
     const { search, faculty, campus, sort, take = '20', skip = '0' } = request.query
+    // A full code matches exactly, a stem every campus of it; anything else
+    // is dropped like an unknown campus.
+    const course = request.query.course ? courseWhere(request.query.course) : null
     // Unknown values are dropped rather than 400ing, like campus below.
     const type = parseEnum(request.query.type, PROJECT_TYPES) || undefined
     const status = parseEnum(request.query.status, PROJECT_STATUSES) || undefined
@@ -233,9 +260,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       AND: [
         visibleProjectWhere(callerId),
         ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
-        ...(faculty
-          ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
-          : []),
+        ...(course ? [course] : []),
+        // The owner's faculty or any accepted collaborator's.
+        ...(faculty ? [facultyWhere(faculty)] : []),
         ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
         ...(type ? [{ type }] : []),
         ...(status ? [{ status }] : []),
@@ -357,6 +384,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       sections?: unknown
       details?: unknown
       references?: unknown
+      courseCode?: string | null
+      templateCode?: string | null
+      templateVersion?: number | null
       links?: { label: string; url: string }[]
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -389,6 +419,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         showFrom: fields.showFrom ?? undefined,
         sections: fields.sections,
         details: fields.details,
+        courseCode: fields.courseCode ?? undefined,
+        ...fields.template,
         links: safeLinks.length ? { create: safeLinks } : undefined,
         references: fields.references?.length ? { create: fields.references } : undefined,
       },
@@ -420,6 +452,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       details?: unknown
       references?: unknown
       outputs?: unknown
+      courseCode?: string | null
+      templateCode?: string | null
+      templateVersion?: number | null
     }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
@@ -471,6 +506,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
             ...(fields.sections !== undefined && { sections: fields.sections }),
             ...(fields.details !== undefined && { details: fields.details }),
+            ...(fields.courseCode !== undefined && { courseCode: fields.courseCode }),
+            ...fields.template,
           },
           include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
         })

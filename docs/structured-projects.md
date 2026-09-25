@@ -246,7 +246,7 @@ Link outputs (a YouTube video, a demo site) can get a thumbnail from the existin
 - A full code (`CSC211H5`) matches exactly.
 - A stem (`CSC211`) matches every campus and weight suffix.
 
-Explore stops searching the full text for a course, so a description that mentions CSC211 no longer files the project under CSC211. Facets, the Related panel, the breadcrumb and the feed's course affinity read the column. `courseCode` joins the search vector at weight A.
+Explore stops searching the full text for a course, so a description that mentions CSC211 no longer files the project under CSC211. Facets, the Related panel, the breadcrumb, discover and the feed's course affinity read the column. The feed connects a student to work filed under a course they published in or said they take, and gives that as the reason. `courseCode` joins the search vector at weight A.
 
 **Templates.** A template pre-fills the editor and nothing else: no fields become required, and nothing is locked. Its content:
 
@@ -255,7 +255,7 @@ Explore stops searching the full text for a course, so a description that mentio
 - a list of section stubs `{ kind, title, prompt, items? }`, where `prompt` is placeholder text, never saved
 - reference-kind hints
 
-Served by `GET /courses/:code/template`, looked up by exact code and then by stem, 404 when none.
+Served by `GET /courses/:code/template`, looked up by exact code, then by stem only when the request *is* a bare stem and exactly one template shares it: CSC211H1 and CSC211H5 are different courses on different campuses, so asking for CSC211H1 doesn't return CSC211H5's template. 404 when none. A project saved with `templateCode` and `templateVersion` must name a template that exists, at a version it has reached.
 
 **CSC211H5**
 

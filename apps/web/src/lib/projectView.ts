@@ -5,10 +5,9 @@ import { safeUrl } from './api'
 /**
  * How a project as the API stores it becomes a project as the design shows it.
  *
- * The API stores a project's type, status and pitch as fields. Two things the
- * boards show are still read out of other data: the course ("Built for
- * CSC309") from its tags, and the main action ("Try it live", "Watch",
- * "Listen") from what its links point at.
+ * The API stores a project's type, status, pitch and course as fields. The
+ * main action ("Try it live", "Watch", "Listen") is still read out of what its
+ * links point at when it has no primary output to say.
  */
 
 /* ---------------------------------- course --------------------------------- */
@@ -21,10 +20,9 @@ const COURSE_CODE = /^[a-z]{3}\d{3}(?:[hy]\d)?$/i
 
 export const isCourseCode = (tag: string) => COURSE_CODE.test(tag.trim())
 
-/** The course a project was built for: its first tag that is a course code. */
-export function courseOf(tags: string[]): string | undefined {
-  return tags.find(isCourseCode)?.trim().toUpperCase()
-}
+/** The course a project was made for. */
+export const courseOf = (project: { courseCode?: string | null }): string | undefined =>
+  project.courseCode ?? undefined
 
 /** Everything else — the `#React #Maps` row. */
 export function topicTags(tags: string[]): string[] {

@@ -59,7 +59,7 @@ export default function ProjectPage() {
   }
 
   const isOwner = user?.id === project.ownerId
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const faculty = project.owner?.faculty
 
   return (
