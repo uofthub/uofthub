@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CreateOrgDialog } from '../orgs/CreateOrgDialog'
+import { MessageReportRow } from './MessageReportRow'
 import { STATUS_LABELS, reasonShort } from '../../lib/moderation'
 import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import {
@@ -357,7 +358,7 @@ function SpotlightAdmin() {
 
 export default function AdminPage() {
   const { user, loading } = useAuth()
-  const [section, setSection] = useState<'reports' | 'groups' | 'spotlight'>('reports')
+  const [section, setSection] = useState<'reports' | 'messages' | 'groups' | 'spotlight'>('reports')
   const [reportTab, setReportTab] = useState<ReportStatus | 'all'>('OPEN')
   const [orgTab, setOrgTab] = useState<OrgStatus | 'all'>('IN_REVIEW')
   const [creatingOrg, setCreatingOrg] = useState(false)
@@ -367,6 +368,11 @@ export default function AdminPage() {
     queryKey: ['admin-reports', reportTab],
     queryFn: () => api.admin.reports(reportTab),
     enabled: !!user?.isAdmin && section === 'reports',
+  })
+  const messageReports = useQuery({
+    queryKey: ['admin-message-reports', reportTab],
+    queryFn: () => api.admin.messageReports(reportTab),
+    enabled: !!user?.isAdmin && section === 'messages',
   })
   const orgs = useQuery({
     queryKey: ['admin-orgs', orgTab],
@@ -384,7 +390,7 @@ export default function AdminPage() {
     )
   }
 
-  const list = section === 'reports' ? reports : orgs
+  const list = section === 'reports' ? reports : section === 'messages' ? messageReports : orgs
 
   return (
     <div className="page page--narrow stack" style={{ gap: 24 }}>
@@ -393,9 +399,11 @@ export default function AdminPage() {
         <p className="page-lede">
           {section === 'reports'
             ? 'Reports on U of T-visible and public projects, oldest first.'
-            : section === 'groups'
-              ? 'Create group pages, and approve or deny groups left from the old self-serve flow.'
-              : 'The project at the top of everyone’s home feed this week.'}
+            : section === 'messages'
+              ? 'Conversations students reported, with the messages as they were when reported.'
+              : section === 'groups'
+                ? 'Create group pages, and approve or deny groups left from the old self-serve flow.'
+                : 'The project at the top of everyone’s home feed this week.'}
         </p>
       </div>
       <div className="row wrap" style={{ justifyContent: 'space-between', gap: 12 }}>
@@ -405,11 +413,12 @@ export default function AdminPage() {
           onChange={setSection}
           options={[
             { value: 'reports', label: 'Project reports' },
+            { value: 'messages', label: 'Message reports' },
             { value: 'groups', label: 'Groups' },
             { value: 'spotlight', label: 'Spotlight' },
           ]}
         />
-        {section === 'spotlight' ? null : section === 'reports' ? (
+        {section === 'spotlight' ? null : section === 'reports' || section === 'messages' ? (
           <SegmentedTabs<ReportStatus | 'all'>
             label="Report status"
             value={reportTab}
@@ -452,6 +461,15 @@ export default function AdminPage() {
       ) : section === 'reports' ? (
         reports.data?.length ? (
           reports.data.map((r) => <ReportRow key={r.id} report={r} />)
+        ) : (
+          <EmptyState
+            icon="flag"
+            title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
+          />
+        )
+      ) : section === 'messages' ? (
+        messageReports.data?.length ? (
+          messageReports.data.map((r) => <MessageReportRow key={r.id} report={r} />)
         ) : (
           <EmptyState
             icon="flag"
