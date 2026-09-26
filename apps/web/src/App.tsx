@@ -5,7 +5,6 @@ import { Spinner } from './components/ui'
 import HomePage from './pages/home/HomePage'
 import ExplorePage from './pages/explore/ExplorePage'
 import ProjectPage from './pages/project/ProjectPage'
-import PostPage from './pages/post/PostPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SessionPage from './pages/session/SessionPage'
 import OrgsPage from './pages/orgs/OrgsPage'
@@ -22,6 +21,9 @@ const DiscoverPage = lazy(() => import('./pages/info/DiscoverPage'))
 const CollectionsPage = lazy(() => import('./pages/collections/CollectionsPage'))
 const CollectionPage = lazy(() => import('./pages/collections/CollectionPage'))
 const MessagesPage = lazy(() => import('./pages/messages/MessagesPage'))
+// The editor carries its own weight (and loads pdf.js on top when a PDF is
+// picked), and only people posting ever open it.
+const EditorPage = lazy(() => import('./pages/editor/EditorPage'))
 
 /** The old directory lived at /projects; its links now land on Explore. */
 function ToExplore() {
@@ -53,7 +55,8 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/projects" element={<ToExplore />} />
-            <Route path="/projects/new" element={<PostPage />} />
+            <Route path="/projects/new" element={<EditorPage />} />
+            <Route path="/projects/:id/edit" element={<EditorPage />} />
             <Route path="/projects/:id" element={<ProjectPage />} />
             <Route path="/courses/:tag" element={<CourseToExplore />} />
             <Route path="/u/:id" element={<ProfilePage />} />

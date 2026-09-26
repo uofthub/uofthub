@@ -1,13 +1,11 @@
 import type { ProjectType } from '@uofthub/types'
 
 /**
- * The type-specific questions on the post form, and where each answer goes.
- *
- * The type, status and pitch are fields of their own. The type-specific
- * answers land in what else the API stores — a URL becomes a labelled link
- * (which the project page turns into "Try it live" or "View code"), a short
- * answer becomes a labelled detail ("Runtime: 6:12"), and a research abstract
- * becomes the overview — so nothing a student types is dropped.
+ * What each type of project suggests in the editor: the details worth
+ * recording (a film's runtime, a study's supervisor), the links worth adding
+ * as outputs (a live demo, a listening link), and what its files usually are.
+ * Suggestions only — nothing here is required, and a suggestion left empty is
+ * not saved.
  */
 
 export type ExtraField = {
@@ -174,42 +172,6 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
   },
 }
 
-/**
- * The overview the API stores from the form: the answers that are paragraphs
- * (a research abstract). The one-line pitch is its own field and is not
- * repeated here.
- */
-export function composeDescription(type: ProjectType, answers: Record<string, string>): string {
-  return TYPE_FORMS[type].fields
-    .flatMap((f) => {
-      const value = answers[f.key]?.trim()
-      return f.paragraph && value ? [value] : []
-    })
-    .join('\n\n')
-}
-
-/** The details the API stores, from the short free-text answers. */
-export function composeDetails(
-  type: ProjectType,
-  answers: Record<string, string>
-): { label: string; value: string }[] {
-  return TYPE_FORMS[type].fields.flatMap((f) => {
-    const value = answers[f.key]?.trim()
-    return f.detail && value ? [{ label: f.detail, value }] : []
-  })
-}
-
-/** The links the API stores, from the answers that are URLs. */
-export function composeLinks(
-  type: ProjectType,
-  answers: Record<string, string>
-): { label: string; url: string }[] {
-  return TYPE_FORMS[type].fields.flatMap((f) => {
-    const url = answers[f.key]?.trim()
-    return f.link && url ? [{ label: f.link, url }] : []
-  })
-}
-
 /** What a link is most likely to be, from where it lives. Null when it could be anything. */
 export function typeForUrl(url: string): ProjectType | null {
   let host: string
@@ -226,33 +188,4 @@ export function typeForUrl(url: string): ProjectType | null {
   if (on('arxiv.org', 'doi.org', 'researchgate.net')) return 'RESEARCH'
   if (on('medium.com', 'substack.com')) return 'WRITING'
   return null
-}
-
-/** Imported link labels, and the form field label each one belongs in. */
-const LINK_HOMES: Record<string, string[]> = {
-  'Live demo': ['Live demo'],
-  'Source code': ['Code', 'Build guide', 'Link'],
-}
-
-/**
- * Put imported links into the type's link fields: a labelled link where its
- * label fits, anything else into the first field still empty. What does not
- * fit is returned, to be stored as a plain link.
- */
-export function placeLinks(
-  type: ProjectType,
-  links: { label: string; url: string }[]
-): { answers: Record<string, string>; rest: { label: string; url: string }[] } {
-  const slots = TYPE_FORMS[type].fields.filter((f) => f.link)
-  const answers: Record<string, string> = {}
-  const rest: { label: string; url: string }[] = []
-  for (const link of links) {
-    const homes = LINK_HOMES[link.label] ?? []
-    const slot =
-      slots.find((f) => !answers[f.key] && homes.includes(f.link!)) ??
-      (homes.length === 0 ? slots.find((f) => !answers[f.key]) : undefined)
-    if (slot) answers[slot.key] = link.url
-    else rest.push(link)
-  }
-  return { answers, rest }
 }

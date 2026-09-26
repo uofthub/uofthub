@@ -317,7 +317,11 @@ For a new project, in this order:
 5. Send invites.
 6. A final `PATCH` sets visibility (and `showFrom`).
 
-If anything before step 6 fails, the project exists as a private draft. The editor stays on it, as `/projects/:id/edit`, lists what failed, and retries only that. Nothing half-finished is ever visible.
+If anything before step 6 fails, the project exists as a private draft. The editor stays open on it, lists what failed, and links to the draft; saving again retries only what failed. `saveDraft` (`pages/editor/save.ts`) reports exactly what went through (uploaded files, saved output ids, thumbnails, invitations), and `settle` folds that into the draft, so a retry never uploads a file or sends an invitation twice. Nothing half-finished is ever visible.
+
+A taken-down project's save leaves visibility out entirely, since the API refuses any visibility write on one, the same value included.
+
+Two details of the template pre-fill: it only fills what is still empty and never overwrites what the student wrote; and items a template seeded ("Human baseline") are dropped on save while their text is empty, because the API would otherwise keep the name alone and the page would render a heading over nothing.
 
 Editing a project that is already visible saves straight to it. Steps 2–4 are idempotent and the content is one transaction, but there's no staged copy of a live project; see *Not in scope*.
 

@@ -37,7 +37,6 @@ import {
   type IconName,
 } from '../../components/ui'
 import {
-  EditProjectDialog,
   FilesDialog,
   InsightsDialog,
   InviteDialog,
@@ -56,7 +55,6 @@ import {
 } from '../../lib/outputs'
 
 type Open =
-  | 'edit'
   | 'update'
   | 'links'
   | 'files'
@@ -200,7 +198,6 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           onClose={() => setViewing(null)}
         />
       )}
-      {open === 'edit' && <EditProjectDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'update' && <UpdateDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'groups' && <GroupsDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'links' && <LinksDialog project={project} onClose={() => setOpen(null)} />}
@@ -297,8 +294,12 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
               {isOwner && (
                 <>
                   <MenuDivider />
-                  <MenuItem icon="pen" onSelect={() => setOpen('edit')} close={close}>
-                    Edit details
+                  <MenuItem
+                    icon="pen"
+                    onSelect={() => navigate(`/projects/${project.id}/edit`)}
+                    close={close}
+                  >
+                    Edit project
                   </MenuItem>
                   <MenuItem icon="link" onSelect={() => setOpen('links')} close={close}>
                     Manage links
