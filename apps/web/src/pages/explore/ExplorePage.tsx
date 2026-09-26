@@ -121,7 +121,7 @@ function CourseBrowser() {
         )}
       </div>
       <p className="muted" style={{ fontSize: 14 }}>
-        See what past students built for a course before you start yours.
+        See what past students made for a course before you start yours.
       </p>
     </section>
   )
@@ -239,7 +239,8 @@ export default function ExplorePage() {
   const searching = !!(q || course || faculty || campus || type || helpOnly)
   const results = useProjectPages(
     {
-      search: [q, course].filter(Boolean).join(' ') || undefined,
+      search: q || undefined,
+      course: course || undefined,
       faculty: faculty || undefined,
       campus: campus || undefined,
       type: type || undefined,

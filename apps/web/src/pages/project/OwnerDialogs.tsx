@@ -4,14 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ProjectDetail } from '../../lib/api'
 import { formatBytes, lookFor, previewKindFor } from '../../lib/files'
 import { safeLinks, LINK_ICONS, timeAgo } from '../../lib/projectView'
-import {
-  PROJECT_STATUSES,
-  PROJECT_STATUS_KEYS,
-  PROJECT_TYPES,
-  PROJECT_TYPE_KEYS,
-  type ProjectStatus,
-  type ProjectType,
-} from '../../lib/projectMeta'
 import { REACTIONS, reactionLabel } from '../../lib/reactions'
 import {
   Avatar,
@@ -21,130 +13,11 @@ import {
   Field,
   Icon,
   Input,
-  Select,
   Spinner,
-  TextArea,
 } from '../../components/ui'
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, id: string) =>
   qc.invalidateQueries({ queryKey: ['project', id] })
-
-/* ---------------------------------- edit ----------------------------------- */
-
-export function EditProjectDialog({
-  project,
-  onClose,
-}: {
-  project: ProjectDetail
-  onClose: () => void
-}) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState({
-    title: project.title,
-    pitch: project.pitch ?? '',
-    description: project.description ?? '',
-    type: (project.type ?? '') as ProjectType | '',
-    status: (project.status ?? '') as ProjectStatus | '',
-    tags: project.tags.join(', '),
-    visibility: project.visibility,
-  })
-  const save = useMutation({
-    mutationFn: () =>
-      api.projects.update(project.id, {
-        title: form.title,
-        pitch: form.pitch.trim() || null,
-        description: form.description,
-        type: form.type || null,
-        status: form.status || null,
-        tags: form.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        // A taken-down project cannot change visibility, so it is not sent.
-        ...(project.takenDownAt ? {} : { visibility: form.visibility }),
-      }),
-    onSuccess: () => {
-      invalidate(qc, project.id)
-      onClose()
-    },
-  })
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }))
-
-  return (
-    <Dialog
-      title="Edit project"
-      onClose={onClose}
-      width={640}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={() => save.mutate()}
-            disabled={!form.title.trim() || save.isPending}
-          >
-            {save.isPending ? 'Saving…' : 'Save'}
-          </Button>
-        </>
-      }
-    >
-      <Field label="Title">
-        <Input value={form.title} onChange={set('title')} />
-      </Field>
-      <Field label="One-line pitch" hint="What shows on cards. One sentence.">
-        <Input value={form.pitch} onChange={set('pitch')} maxLength={280} />
-      </Field>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="Type" className="grow">
-          <Select value={form.type} onChange={set('type')}>
-            <option value="">Not set</option>
-            {PROJECT_TYPE_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {PROJECT_TYPES[k].label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Status" className="grow">
-          <Select value={form.status} onChange={set('status')}>
-            <option value="">Not set</option>
-            {PROJECT_STATUS_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {PROJECT_STATUSES[k].label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-      <Field
-        label="The story"
-        hint="Markdown. Headings like ## What we built become its sections on the project page."
-      >
-        <TextArea rows={10} value={form.description} onChange={set('description')} />
-      </Field>
-      <Field
-        label="Tags"
-        hint="Comma-separated. A course code like CSC309 files it under that course."
-      >
-        <Input value={form.tags} onChange={set('tags')} />
-      </Field>
-      <Field label="Who can see this?">
-        <Select
-          value={form.visibility}
-          onChange={set('visibility')}
-          disabled={!!project.takenDownAt}
-        >
-          <option value="PUBLIC">Public — anyone on the web</option>
-          <option value="UOFT">U of T only — signed-in students and staff</option>
-          <option value="UNLISTED">Unlisted — only people with the link</option>
-          <option value="PRIVATE">Draft — only you and your collaborators</option>
-        </Select>
-      </Field>
-      {save.isError && <ErrorText>{(save.error as Error).message}</ErrorText>}
-    </Dialog>
-  )
-}
 
 /* --------------------------------- update ---------------------------------- */
 

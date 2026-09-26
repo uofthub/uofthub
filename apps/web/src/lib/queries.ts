@@ -55,11 +55,7 @@ export function countTags(
 export function coursesOf(projects: ProjectSummary[]): string[] {
   const counts = new Map<string, number>()
   for (const p of projects) {
-    for (const tag of p.tags) {
-      if (!isCourseCode(tag)) continue
-      const code = tag.trim().toUpperCase()
-      counts.set(code, (counts.get(code) ?? 0) + 1)
-    }
+    if (p.courseCode) counts.set(p.courseCode, (counts.get(p.courseCode) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([code]) => code)
 }

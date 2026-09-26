@@ -5,49 +5,8 @@ import type { CommentThread } from '@uofthub/types'
 import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { courseOf, postedAt, timeAgo, timeShort, topicTags } from '../../lib/projectView'
-import Markdown from '../../components/Markdown'
 import { MiniRow } from '../../components/project'
 import { Avatar, Badge, Button, ErrorText, Icon, Input, Panel } from '../../components/ui'
-
-/* ---------------------------------- story ---------------------------------- */
-
-/**
- * The description, rendered as Markdown. The board's four sections — The
- * problem, What we built, How, What we learned — are headings a student
- * writes; the pitch above the title is a field of its own.
- */
-export function Story({
-  project,
-  isOwner,
-  onEdit,
-}: {
-  project: ProjectDetail
-  isOwner: boolean
-  onEdit: () => void
-}) {
-  const story = project.description?.trim()
-  if (!story && !isOwner) return null
-
-  return (
-    <Panel title="The story" size="main" gap={22} style={{ padding: '30px 34px' }}>
-      {story ? (
-        <Markdown source={story} />
-      ) : (
-        <div className="stack" style={{ gap: 10 }}>
-          <p className="muted" style={{ fontSize: 15, lineHeight: 1.6 }}>
-            Say what problem it solves, what you built, how, and what you learned. Headings like{' '}
-            <code className="md-code">## What we built</code> become sections here.
-          </p>
-          <div>
-            <Button size="sm" icon="pen" onClick={onEdit}>
-              Write the story
-            </Button>
-          </div>
-        </div>
-      )}
-    </Panel>
-  )
-}
 
 /* --------------------------------- updates --------------------------------- */
 
@@ -330,12 +289,12 @@ export function Comments({ project }: { project: ProjectDetail }) {
 
 /** "More built for CSC309" and "You might also like". */
 export function Related({ project }: { project: ProjectDetail }) {
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const topic = topicTags(project.tags)[0]
 
   const { data: sameCourse = [] } = useQuery({
-    queryKey: ['projects', { search: course, take: 6 }],
-    queryFn: () => api.projects.list({ search: course, take: 6 }),
+    queryKey: ['projects', { course, take: 6 }],
+    queryFn: () => api.projects.list({ course, take: 6 }),
     enabled: !!course,
   })
   const courseRows = sameCourse.filter((p) => p.id !== project.id).slice(0, 3)
@@ -351,7 +310,7 @@ export function Related({ project }: { project: ProjectDetail }) {
   const similarRows = similar.filter((p) => !shown.has(p.id)).slice(0, 3)
 
   return (
-    <aside className="stack" style={{ gap: 20 }}>
+    <>
       {courseRows.length > 0 && (
         <Panel title={`More built for ${course}`} style={{ padding: '20px 22px' }}>
           {courseRows.map((p) => (
@@ -372,6 +331,6 @@ export function Related({ project }: { project: ProjectDetail }) {
           ))}
         </Panel>
       )}
-    </aside>
+    </>
   )
 }

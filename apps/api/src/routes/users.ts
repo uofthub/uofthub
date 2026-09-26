@@ -85,9 +85,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
       const projects = await db.project.findMany({
         where: {
-          ownerId: request.params.id,
           // Signed-in viewers also see this user's UOFT projects, not just PUBLIC.
-          ...visibleProjectWhere(callerId),
+          AND: [{ ownerId: request.params.id }, visibleProjectWhere(callerId)],
         },
         include: CARD_INCLUDE,
         orderBy: { createdAt: 'desc' },
@@ -108,11 +107,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
     const projects = await db.project.findMany({
       where: {
-        ownerId: request.params.id,
-        pinnedAt: { not: null },
         // A pinned project that is still PRIVATE is pinned for the owner's own
         // benefit; the same visibility rules apply to it as to anything else.
-        ...visibleProjectWhere(callerId),
+        AND: [
+          { ownerId: request.params.id, pinnedAt: { not: null } },
+          visibleProjectWhere(callerId),
+        ],
       },
       include: CARD_INCLUDE,
       orderBy: { pinnedAt: 'desc' },

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Campus, Prisma, ProjectType } from '@prisma/client'
 import { db } from '../db/client.js'
 import { visibleProjectWhere } from '../lib/visibility.js'
+import { facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds } from '../lib/trending.js'
 import { parseCampus } from '../lib/campus.js'
@@ -50,6 +51,8 @@ type Affinity = {
    * practice, and cheaper than dropping to raw SQL for it.
    */
   tagQuery: string[]
+  /** Course codes, upper-cased: ones they published in, and ones they take. */
+  courses: string[]
   campus: Campus | null
   faculty: string | null
 }
@@ -81,7 +84,7 @@ async function affinityFor(userId: string): Promise<Affinity> {
     // only evidence that matters, and it is evidence they already gave us.
     db.project.findMany({
       where: { ownerId: userId },
-      select: { tags: true },
+      select: { tags: true, courseCode: true },
       orderBy: { createdAt: 'desc' },
       take: TAG_SOURCE_LIMIT,
     }),
@@ -95,8 +98,18 @@ async function affinityFor(userId: string): Promise<Affinity> {
   // nothing published yet still gets a course-shaped feed.
   const tags = [...mine.flatMap((p) => p.tags), ...(me?.courses ?? [])]
 
+  const courses = [
+    ...new Set(
+      [...mine.map((p) => p.courseCode), ...(me?.courses ?? [])].flatMap((c) => {
+        const code = c && normalizeCourseCode(c)
+        return code ? [code] : []
+      })
+    ),
+  ]
+
   return {
     followeeIds: new Set(follows.map((f) => f.followingId)),
+    courses,
     tags: new Set(tags.map((t) => t.toLowerCase())),
     tagQuery: [...new Set(tags.flatMap((t) => [t, t.toUpperCase(), t.toLowerCase()]))],
     campus: me?.campus ?? null,
@@ -113,6 +126,7 @@ function reasonFor(
   project: {
     ownerId: string
     tags: string[]
+    courseCode: string | null
     owner: { id: string; name: string; campus: Campus | null } | null
   },
   affinity: Affinity
@@ -121,6 +135,8 @@ function reasonFor(
     return { kind: 'FOLLOWING', userId: project.owner.id, userName: project.owner.name }
   }
 
+  if (project.courseCode && affinity.courses.includes(project.courseCode))
+    return { kind: 'COURSE', tag: project.courseCode }
   const tag = project.tags.find((t) => affinity.tags.has(t.toLowerCase()))
   if (tag) return { kind: 'COURSE', tag }
 
@@ -185,7 +201,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
               ? { owner: { campus } }
               : {}
             : affinity.faculty
-              ? { owner: { faculty: { equals: affinity.faculty, mode: 'insensitive' } } }
+              ? facultyWhere(affinity.faculty)
               : null
       if (!scoped) return { items: [] }
 
@@ -205,6 +221,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     if (affinity.followeeIds.size > 0)
       connectedOr.push({ ownerId: { in: [...affinity.followeeIds] } })
     if (affinity.tagQuery.length > 0) connectedOr.push({ tags: { hasSome: affinity.tagQuery } })
+    if (affinity.courses.length > 0) connectedOr.push({ courseCode: { in: affinity.courses } })
     if (affinity.campus) connectedOr.push({ owner: { campus: affinity.campus } })
 
     const connectedWhere: Prisma.ProjectWhereInput = { AND: [...eligible, { OR: connectedOr }] }

@@ -111,6 +111,31 @@ enum ReactionKind {
   COLLAB
 }
 
+/// What a project drew on. Decides the icon and the "also used in…" wording.
+enum ReferenceKind {
+  DATASET
+  PAPER
+  SOFTWARE
+  MODEL
+  BOOK
+  ARCHIVE
+  WEBSITE
+  OTHER
+}
+
+/// What an output is. Decides its label ("View poster") and icon.
+enum OutputKind {
+  POSTER
+  SLIDES
+  PAPER
+  VIDEO
+  AUDIO
+  DEMO
+  CODE
+  DATASET
+  OTHER
+}
+
 enum ReportReason {
   SPAM
   HARASSMENT
@@ -197,39 +222,65 @@ model User {
 }
 
 model Project {
-  id           String         @id @default(uuid())
-  ownerId      String
-  title        String
+  id              String         @id @default(uuid())
+  ownerId         String
+  title           String
   /// The one line a card shows. Separate from the description (the story) so
   /// a card never has to guess where one ends — see the project_fields
   /// migration for how existing descriptions were split.
-  pitch        String?
-  description  String?
-  type         ProjectType?
-  status       ProjectStatus?
-  tags         String[]       @default([])
-  visibility   Visibility     @default(PRIVATE)
-  viewCount    Int            @default(0)
-  forkedFromId String?
+  pitch           String?
+  description     String?
+  /// Optional sections beyond the overview (motivation, method, results…) —
+  /// an ordered JSON list validated and stripped of empties by
+  /// lib/projectContent.ts. Null when there are none.
+  sections        Json?
+  /// Short labelled facts (Supervisor, Runtime, Performers) as an ordered
+  /// `[{ label, value }]` list. Null when there are none.
+  details         Json?
+  type            ProjectType?
+  status          ProjectStatus?
+  tags            String[]       @default([])
+  /// The course it was made for, upper-cased: CSC211H5. The one source of
+  /// truth for "Built for" and Explore's course filter — see the
+  /// `course_code` migration, which moved it out of the tags.
+  courseCode      String?
+  /// The course template the project was started from (lib/courseTemplates.ts)
+  /// and that template's version at the time.
+  templateCode    String?
+  templateVersion Int?
+  visibility      Visibility     @default(PRIVATE)
+  viewCount       Int            @default(0)
+  forkedFromId    String?
   /// When the project first stopped being PRIVATE. Distinct from createdAt: a
   /// capstone drafted in January and published in March belongs in March's
   /// feed, not January's. Null while it has never been visible to anyone but
   /// the owner, which is also what stops the follower fan-out firing twice on
   /// a project that is toggled UOFT → PRIVATE → UOFT.
-  publishedAt  DateTime?
+  publishedAt     DateTime?
+  /// Until this moment only the owner and accepted collaborators can see the
+  /// project, whatever its visibility — course work stays hidden until after
+  /// grading. Enforced in lib/visibility.ts and nowhere else. Null for most
+  /// projects, which show as soon as their visibility allows.
+  showFrom        DateTime?
+  /// When the owner's followers were told about it. Separate from publishedAt
+  /// because a project with a future show-from date is published (publishedAt
+  /// is set to that date, so it enters feeds when it appears) long before it
+  /// can be announced — see lib/announcements.ts.
+  announcedAt     DateTime?
   /// Set while the owner has pinned this to the top of their profile. Pinned
   /// projects are the only ones a profile renders as cards — see
   /// docs/feed-and-density.md for why everything else is a list.
-  pinnedAt     DateTime?
+  pinnedAt        DateTime?
   /// Set when a moderator takes the project down: visibility is forced back to
   /// PRIVATE and the owner cannot re-open it while this is set. Null for every
   /// project that has never been actioned.
-  takenDownAt  DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  takenDownAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  /// Postgres-generated tsvector over title, tags and description — see the
-  /// `add_search_and_indexes` migration for the expression. Declared
+  /// Postgres-generated tsvector over title, course, pitch, tags,
+  /// description, sections and details — see the `course_code` migration for
+  /// the current expression. Declared
   /// `Unsupported` because Prisma has no tsvector type: nothing reads it
   /// through the client, only `lib/search.ts` via raw SQL.
   searchVector Unsupported("tsvector")?
@@ -238,6 +289,8 @@ model Project {
   collaborators   ProjectCollaborator[]
   files           ProjectFile[]
   links           ProjectLink[]
+  references      ProjectReference[]
+  outputs         ProjectOutput[]
   reactions       ProjectReaction[]
   saves           ProjectSave[]
   comments        Comment[]
@@ -265,6 +318,10 @@ model Project {
   @@index([publishedAt])
   /// A profile's pinned strip: six rows out of however many the student owns.
   @@index([ownerId, pinnedAt])
+  /// The announcement sweep: hidden projects whose show-from date has passed.
+  @@index([showFrom])
+  /// Explore's course filter and a course's facet count.
+  @@index([courseCode])
   @@index([searchVector], type: Gin)
 }
 
@@ -298,6 +355,8 @@ model ProjectVersion {
   note        String?
   title       String
   description String?
+  sections    Json?
+  details     Json?
   tags        String[] @default([])
   createdAt   DateTime @default(now())
 
@@ -380,13 +439,46 @@ model ProjectFile {
   mimeType   String?
   uploadedAt DateTime @default(now())
 
-  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  org     Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  org     Organization?  @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  output  ProjectOutput?
 
   /// Cover lookups, per-project file lists and the file-count cap.
   @@index([projectId])
   /// Per-group storage usage aggregates.
   @@index([orgId])
+}
+
+/// A dataset, paper, piece of software, model, book or archive the project
+/// used. Replaced as a whole list whenever the project is saved with one.
+model ProjectReference {
+  id        String        @id @default(uuid())
+  projectId String
+  kind      ReferenceKind
+  title     String
+  /// http(s) only, checked by safeExternalUrl.
+  url       String?
+  /// Bare and lower-cased: 10.1000/xyz.
+  doi       String?
+  authors   String?
+  year      Int?
+  /// "Used the 2019 split", "baseline only".
+  note      String?
+  /// Normalized identity — doi:…, arxiv:…, github:owner/repo, hf:…, kaggle:…
+  /// or a canonical URL — so two projects citing the same thing match however
+  /// they pasted it. Null with neither a URL nor a DOI. See lib/references.ts.
+  key       String?
+  position  Int
+
+  /// Generated over title and authors; see the `references` migration.
+  searchVector Unsupported("tsvector")?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
+  /// "Also used in…": other projects with the same key.
+  @@index([key])
+  @@index([searchVector], type: Gin)
 }
 
 model ProjectLink {
@@ -395,7 +487,37 @@ model ProjectLink {
   label     String
   url       String
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  output  ProjectOutput?
+}
+
+/// What a project produced, in the author's order: an ordered layer over its
+/// files and links. Exactly one of `fileId` and `linkId` is set (a CHECK in
+/// the `outputs` migration), and deleting the target deletes the output.
+model ProjectOutput {
+  id                 String     @id @default(uuid())
+  projectId          String
+  kind               OutputKind
+  /// Overrides the kind's label: "Final poster".
+  label              String?
+  fileId             String?    @unique
+  linkId             String?    @unique
+  position           Int
+  /// The project's id on its primary output, null on every other one. Unique,
+  /// so a project has at most one primary; a CHECK in the migration keeps it
+  /// equal to `projectId`. The primary output's thumbnail is the project's
+  /// image everywhere — see lib/covers.ts.
+  primaryOfProjectId String?    @unique
+  /// R2 key of a thumbnail made in the author's browser (a poster's first
+  /// page, a video frame, a large image scaled down) or chosen by hand. Null
+  /// when there is none; a small image is its own thumbnail.
+  thumbnailKey       String?
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  file    ProjectFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  link    ProjectLink? @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, position])
 }
 
 /// A private bookmark. Unlike a reaction it is never shown to anyone but the

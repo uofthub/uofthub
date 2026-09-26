@@ -22,8 +22,12 @@ describe('courses', () => {
   it.each(['React', 'CS309', 'CSC30', 'hackathon'])('does not read %s as one', (tag) => {
     expect(isCourseCode(tag)).toBe(false)
   })
-  it('takes the first course tag, normalised, and leaves the rest as topics', () => {
-    expect(courseOf(['React', 'csc309', 'MAT102'])).toBe('CSC309')
+  it('reads the course from its own field, never from the tags', () => {
+    expect(courseOf({ courseCode: 'CSC211H5' })).toBe('CSC211H5')
+    expect(courseOf({ courseCode: null })).toBeUndefined()
+    expect(courseOf({})).toBeUndefined()
+  })
+  it('leaves stray course-looking tags out of the topics', () => {
     expect(topicTags(['React', 'csc309'])).toEqual(['React'])
   })
 })

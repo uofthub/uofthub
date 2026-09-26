@@ -3,7 +3,11 @@ import type {
   CommentThread,
   User,
   Project,
+  ProjectDetailItem,
   ProjectLink,
+  ProjectOutput,
+  ProjectReference,
+  ProjectSection,
   ProjectStatus,
   ProjectType,
   Notification,
@@ -91,11 +95,50 @@ export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
     accepted: boolean
   }[]
   files: ProjectFile[]
+  references: ProjectReference[]
+  outputs: ProjectOutput[]
   /** Whether the caller follows this project's updates. */
   following?: boolean
   /** Owner only: how many people follow it. */
   followerCount?: number
 }
+
+/**
+ * What a course suggests its projects show — pre-fills the editor, and
+ * nothing more. See apps/api/src/lib/courseTemplates.ts.
+ */
+export type CourseTemplate = {
+  code: string
+  version: number
+  type: ProjectType
+  intro: string
+  primaryOutput: { kind: ProjectOutput['kind']; prompt: string; accept?: string }
+  sections: {
+    kind: ProjectSection['kind']
+    title?: string
+    prompt: string
+    items?: { label: string; prompt?: string }[]
+  }[]
+  references?: { kinds: ProjectReference['kind'][]; prompt: string }
+}
+
+/** One of a project's references, and other projects that cited the same thing. */
+export type SharedReference = {
+  reference: Pick<ProjectReference, 'id' | 'key' | 'title' | 'kind'>
+  projects: ProjectSummary[]
+}
+
+/** One output as the editor saves it: a file, an existing link, or a new link. */
+export type OutputInput = {
+  id?: string
+  kind: ProjectOutput['kind']
+  label?: string | null
+  primary?: boolean
+} & ({ fileId: string } | { linkId: string } | { link: { label: string; url: string } })
+
+/** What creating or saving a project returns: the card, plus its content. */
+export type ProjectSaved = ProjectSummary &
+  Pick<ProjectDetail, 'sections' | 'details' | 'references' | 'outputs'>
 
 /** The fields a project form writes. `null` clears a field. */
 export type ProjectFields = {
@@ -106,6 +149,18 @@ export type ProjectFields = {
   status: ProjectStatus | null
   tags: string[]
   visibility: Visibility
+  sections: ProjectSection[] | null
+  details: ProjectDetailItem[] | null
+  /** Replaced as a whole list. */
+  references: Omit<ProjectReference, 'id' | 'key'>[] | null
+  /** Replaced as a whole list; `id` keeps an existing output and its thumbnail. */
+  outputs: OutputInput[] | null
+  /** A calendar day (`2026-12-20`), read as midnight in Toronto. */
+  showFrom: string | null
+  courseCode: string | null
+  /** The course template the project was started from, and its version. */
+  templateCode: string | null
+  templateVersion: number | null
 }
 
 export type ProfileUser = {
@@ -424,6 +479,8 @@ export const api = {
   projects: {
     list: (params?: {
       search?: string
+      /** A full code (CSC211H5) or a stem (CSC211, every campus of it). */
+      course?: string
       faculty?: string
       campus?: string
       type?: ProjectType
@@ -441,11 +498,13 @@ export const api = {
     },
     facets: () => request<Facets>('/projects/facets'),
     get: (id: string) => request<ProjectDetail>(`/projects/${id}`),
+    sharedReferences: (id: string) =>
+      request<SharedReference[]>(`/projects/${id}/shared-references`),
     create: (
       body: Partial<ProjectFields> & { title: string; links?: { label: string; url: string }[] }
-    ) => request<ProjectSummary>('/projects', post(body)),
+    ) => request<ProjectSaved>('/projects', post(body)),
     update: (id: string, body: Partial<ProjectFields>) =>
-      request<ProjectSummary>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      request<ProjectSaved>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     delete: (id: string) => request<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
     save: (id: string) => request<{ saved: boolean }>(`/projects/${id}/save`, post()),
     followUpdates: (id: string) =>
@@ -499,6 +558,19 @@ export const api = {
       form.append('file', file)
       return request<ProjectFile>(`/projects/${id}/files`, { method: 'POST', body: form })
     },
+    uploadThumbnail: (id: string, outputId: string, image: Blob) => {
+      const form = new FormData()
+      const ext = image.type === 'image/webp' ? 'webp' : image.type === 'image/png' ? 'png' : 'jpg'
+      form.append('file', image, `thumbnail.${ext}`)
+      return request<{ thumbnailUrl: string }>(`/projects/${id}/outputs/${outputId}/thumbnail`, {
+        method: 'PUT',
+        body: form,
+      })
+    },
+    deleteThumbnail: (id: string, outputId: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/outputs/${outputId}/thumbnail`, {
+        method: 'DELETE',
+      }),
     deleteFile: (id: string, fileId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/files/${fileId}`, { method: 'DELETE' }),
     downloadUrl: (id: string, fileId: string) =>
@@ -635,6 +707,11 @@ export const api = {
       return request<MeUser>('/users/me/avatar', { method: 'POST', body: form })
     },
     deleteAvatar: () => request<{ ok: boolean }>('/users/me/avatar', { method: 'DELETE' }),
+  },
+  courses: {
+    /** 404s (as an error) for a course without one, which is most of them. */
+    template: (code: string) =>
+      request<CourseTemplate>(`/courses/${encodeURIComponent(code)}/template`),
   },
   collections: {
     list: (params?: { owner?: string; take?: number; skip?: number }) => {

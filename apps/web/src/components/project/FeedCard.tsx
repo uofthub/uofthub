@@ -34,7 +34,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
   const href = `/projects/${project.id}`
   const owner = project.owner
   const partners = project.collaborators.map((c) => c.user)
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const tags = topicTags(project.tags).slice(0, 4)
   const action = primaryAction(safeLinks(project.links))
   // The phone card drops the campus to keep the line to one row.
@@ -140,7 +140,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
             <TypeBadge type={project.type} />
             {course && (
               <Chip size={phone ? 'xs' : 'sm'} tone="subtle">
-                Built for {course}
+                Made for {course}
               </Chip>
             )}
             {project.orgProjects.map(({ org }) => (

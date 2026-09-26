@@ -1,13 +1,11 @@
 import type { ProjectType } from '@uofthub/types'
 
 /**
- * The type-specific questions on the post form, and where each answer goes.
- *
- * The type, status and pitch are fields of their own. The type-specific
- * answers land in what else the API stores — a URL becomes a labelled link
- * (which the project page turns into "Try it live" or "View code"), and a
- * free-text answer becomes a line of the story — so nothing a student types
- * is dropped for want of a column.
+ * What each type of project suggests in the editor: the details worth
+ * recording (a film's runtime, a study's supervisor), the links worth adding
+ * as outputs (a live demo, a listening link), and what its files usually are.
+ * Suggestions only — nothing here is required, and a suggestion left empty is
+ * not saved.
  */
 
 export type ExtraField = {
@@ -17,9 +15,9 @@ export type ExtraField = {
   hint?: string
   /** Becomes a project link with this label. */
   link?: string
-  /** Becomes a paragraph of the description under this lead-in. */
-  line?: string
-  /** A paragraph of its own, no lead-in (research abstracts). */
+  /** Becomes a detail with this label. */
+  detail?: string
+  /** A paragraph of the overview (research abstracts). */
   paragraph?: boolean
   multiline?: boolean
   half?: boolean
@@ -67,7 +65,7 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
         label: 'Supervisor or lab',
         placeholder: 'e.g. Aquatic Ecology Lab',
         hint: 'Optional, shown with their permission',
-        line: 'Supervisor or lab',
+        detail: 'Supervisor or lab',
       },
     ],
     drop: {
@@ -85,13 +83,13 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
         link: 'Watch',
         half: true,
       },
-      { key: 'runtime', label: 'Runtime', placeholder: 'e.g. 6:12', line: 'Runtime', half: true },
+      { key: 'runtime', label: 'Runtime', placeholder: 'e.g. 6:12', detail: 'Runtime', half: true },
       {
         key: 'credits',
         label: 'Credits',
         placeholder: 'Director, camera, sound…',
         hint: 'Invite classmates below to credit them on the project',
-        line: 'Credits',
+        detail: 'Credits',
       },
     ],
     drop: {
@@ -129,7 +127,7 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
         key: 'performers',
         label: 'Performers',
         placeholder: 'Who played on it?',
-        line: 'Performers',
+        detail: 'Performers',
       },
     ],
     drop: { title: 'Tracks', hint: 'MP3 or WAV', accept: 'audio/mpeg,audio/wav,.mp3,.wav' },
@@ -157,7 +155,7 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
         label: 'Published in',
         placeholder: 'e.g. The Varsity, a course anthology',
         hint: 'Optional',
-        line: 'Published in',
+        detail: 'Published in',
       },
     ],
     drop: {
@@ -172,32 +170,6 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
     ],
     drop: { title: 'Files', hint: 'Anything that shows the work' },
   },
-}
-
-/**
- * The description (the project's story) the API stores: each free-text
- * answer, a research abstract as its own paragraph and the rest as labelled
- * lines. The one-line pitch is its own field and is not repeated here.
- */
-export function composeDescription(type: ProjectType, answers: Record<string, string>): string {
-  const parts: string[] = []
-  for (const field of TYPE_FORMS[type].fields) {
-    const value = answers[field.key]?.trim()
-    if (!value || field.link) continue
-    parts.push(field.paragraph ? value : `**${field.line}:** ${value}`)
-  }
-  return parts.join('\n\n')
-}
-
-/** The links the API stores, from the answers that are URLs. */
-export function composeLinks(
-  type: ProjectType,
-  answers: Record<string, string>
-): { label: string; url: string }[] {
-  return TYPE_FORMS[type].fields.flatMap((f) => {
-    const url = answers[f.key]?.trim()
-    return f.link && url ? [{ label: f.link, url }] : []
-  })
 }
 
 /** What a link is most likely to be, from where it lives. Null when it could be anything. */
@@ -216,33 +188,4 @@ export function typeForUrl(url: string): ProjectType | null {
   if (on('arxiv.org', 'doi.org', 'researchgate.net')) return 'RESEARCH'
   if (on('medium.com', 'substack.com')) return 'WRITING'
   return null
-}
-
-/** Imported link labels, and the form field label each one belongs in. */
-const LINK_HOMES: Record<string, string[]> = {
-  'Live demo': ['Live demo'],
-  'Source code': ['Code', 'Build guide', 'Link'],
-}
-
-/**
- * Put imported links into the type's link fields: a labelled link where its
- * label fits, anything else into the first field still empty. What does not
- * fit is returned, to be stored as a plain link.
- */
-export function placeLinks(
-  type: ProjectType,
-  links: { label: string; url: string }[]
-): { answers: Record<string, string>; rest: { label: string; url: string }[] } {
-  const slots = TYPE_FORMS[type].fields.filter((f) => f.link)
-  const answers: Record<string, string> = {}
-  const rest: { label: string; url: string }[] = []
-  for (const link of links) {
-    const homes = LINK_HOMES[link.label] ?? []
-    const slot =
-      slots.find((f) => !answers[f.key] && homes.includes(f.link!)) ??
-      (homes.length === 0 ? slots.find((f) => !answers[f.key]) : undefined)
-    if (slot) answers[slot.key] = link.url
-    else rest.push(link)
-  }
-  return { answers, rest }
 }

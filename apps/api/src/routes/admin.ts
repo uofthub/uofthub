@@ -5,6 +5,7 @@ import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
 import { emailContactOfDecision } from '../lib/orgEmails.js'
 import { startOfUtcWeek } from '../lib/dates.js'
+import { isListed } from '../lib/visibility.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 
@@ -343,15 +344,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
       const project = await db.project.findUnique({
         where: { id: projectId },
-        select: { id: true, visibility: true, takenDownAt: true },
+        select: { id: true, visibility: true, takenDownAt: true, showFrom: true },
       })
       if (!project) return reply.code(404).send({ error: 'No project with that id' })
-      // The banner is shown to everyone signed in; a draft or a link-only
-      // project would be published by being picked.
-      if (!['PUBLIC', 'UOFT'].includes(project.visibility) || project.takenDownAt) {
+      // The banner is shown to everyone signed in; a draft, a link-only or a
+      // still-hidden project would be published by being picked.
+      if (!isListed(project)) {
         return reply
           .code(400)
-          .send({ error: 'Only public or U of T-visible projects can be spotlighted' })
+          .send({ error: 'Only public or U of T-visible projects that are showing can be spotlighted' })
       }
 
       const when = weekOf ? new Date(weekOf) : new Date()

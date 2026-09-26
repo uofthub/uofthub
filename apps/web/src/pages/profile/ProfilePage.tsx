@@ -368,7 +368,7 @@ export default function ProfilePage() {
             </Panel>
           )}
           {courseCounts.length > 0 && (
-            <Panel title="Built for courses" gap={10} style={{ padding: '20px 22px' }}>
+            <Panel title="Courses" gap={10} style={{ padding: '20px 22px' }}>
               {courseCounts.map((c) => (
                 <Link
                   key={c.code}

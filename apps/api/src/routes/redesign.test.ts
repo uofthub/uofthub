@@ -533,11 +533,12 @@ describe('facets', () => {
     await db.user.update({ where: { id: a.id }, data: { faculty: 'Music' } })
     await createProject(a.id, {
       visibility: 'PUBLIC',
-      tags: ['CSC309', 'React'],
+      courseCode: 'CSC309',
+      tags: ['React'],
       status: 'HELP_WANTED',
     })
-    await createProject(a.id, { visibility: 'PUBLIC', tags: ['csc309'] })
-    await createProject(a.id, { visibility: 'PRIVATE', tags: ['CSC309'] })
+    await createProject(a.id, { visibility: 'PUBLIC', courseCode: 'CSC309' })
+    await createProject(a.id, { visibility: 'PRIVATE', courseCode: 'CSC309' })
 
     const body = (await call('GET', '/projects/facets')).json()
     expect(body.faculties).toEqual({ Music: 2 })
@@ -548,7 +549,7 @@ describe('facets', () => {
 
   it('does not count U of T-only work for a signed-out visitor', async () => {
     const a = await createUser()
-    await createProject(a.id, { visibility: 'UOFT', tags: ['CSC309'] })
+    await createProject(a.id, { visibility: 'UOFT', courseCode: 'CSC309' })
     expect((await call('GET', '/projects/facets')).json().courses).toEqual([])
   })
 })

@@ -102,7 +102,8 @@ export const PROJECT_TYPE_KEYS = Object.keys(PROJECT_TYPES) as ProjectType[]
 
 export const PROJECT_STATUSES: Record<ProjectStatus, { label: string; dot: string }> = {
   IN_PROGRESS: { label: 'In progress', dot: '#C07A00' },
-  SHIPPED: { label: 'Shipped', dot: '#2E8B57' },
+  // Finished rather than "Shipped": a thesis or a film is finished, not shipped.
+  SHIPPED: { label: 'Finished', dot: '#2E8B57' },
   HELP_WANTED: { label: 'Looking for help', dot: '#1E3765' },
 }
 

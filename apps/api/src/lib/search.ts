@@ -58,11 +58,22 @@ export async function searchProjectIds(raw: string): Promise<string[]> {
   const query = toPrefixTsQuery(raw)
   if (!query) return []
 
+  // A project matches on its own text or on a reference's title or authors —
+  // searching "census" finds the projects that used the census. A reference
+  // match ranks at half weight, below the project saying so itself.
   const rows = await db.$queryRaw<{ id: string }[]>`
     SELECT "id"
-    FROM "Project"
-    WHERE "searchVector" @@ to_tsquery('english', ${query})
-    ORDER BY ts_rank("searchVector", to_tsquery('english', ${query})) DESC
+    FROM (
+      SELECT "id", ts_rank("searchVector", to_tsquery('english', ${query})) AS rank
+      FROM "Project"
+      WHERE "searchVector" @@ to_tsquery('english', ${query})
+      UNION ALL
+      SELECT "projectId", ts_rank("searchVector", to_tsquery('english', ${query})) * 0.5
+      FROM "ProjectReference"
+      WHERE "searchVector" @@ to_tsquery('english', ${query})
+    ) matches
+    GROUP BY "id"
+    ORDER BY max(rank) DESC
     LIMIT ${SEARCH_ID_CAP}
   `
   return rows.map((r) => r.id)

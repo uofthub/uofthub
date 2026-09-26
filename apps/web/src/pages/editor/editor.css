@@ -35,66 +35,6 @@
   }
 }
 
-/* ---------- Stepper ---------- */
-
-.stepper {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  list-style: none;
-  padding: 0;
-}
-.stepper__step {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-grow: 1;
-}
-.stepper__step:last-child {
-  flex-grow: 0;
-}
-.stepper__dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  flex-shrink: 0;
-  background: var(--surface);
-  color: var(--muted);
-  border: 1px solid var(--line-strong);
-}
-.stepper__step--now .stepper__dot,
-.stepper__step--done .stepper__dot {
-  background: var(--navy);
-  border-color: var(--navy-ink);
-  color: #fff;
-}
-.stepper__label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.stepper__step--now .stepper__label,
-.stepper__step--done .stepper__label {
-  color: var(--ink);
-}
-.stepper__rule {
-  flex-grow: 1;
-  height: 1px;
-  background: var(--line-strong);
-  margin: 0 6px;
-}
-@media (max-width: 720px) {
-  .stepper__label {
-    display: none;
-  }
-}
-
 /* ---------- Type picker ---------- */
 
 .type-grid {
@@ -269,4 +209,67 @@
   border-color: var(--navy-ink);
   box-shadow: inset 0 0 0 1px var(--navy-ink);
   color: var(--ink);
+}
+
+/* ---------- Editor ---------- */
+
+.post-card__optional {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+/* One section, reference or output in a list the author is editing. */
+.editor-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.editor-block__title {
+  font-size: 15px;
+}
+.editor-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.editor-output {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.editor-output__thumb {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.editor-output__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (max-width: 560px) {
+  .editor-output {
+    flex-wrap: wrap;
+  }
 }

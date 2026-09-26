@@ -1,6 +1,7 @@
 import type { Prisma, ReactionKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import { withCovers } from './covers.js'
+import { signedDownloadUrl } from './storage.js'
 
 /**
  * The one shape every project list returns — directory, feed, profile,
@@ -86,7 +87,8 @@ export async function decorate<T extends CardRow>(projects: T[], callerId: strin
   for (const r of mine)
     myReactions.set(r.projectId, [...(myReactions.get(r.projectId) ?? []), r.kind])
 
-  return withCover.map(({ viewCount, ...project }) => {
+  return withCover.map((row) => {
+    const { viewCount, ...project } = withoutContent(row)
     const counts = reactions.get(project.id) ?? emptyReactions()
     return {
       ...project,
@@ -98,6 +100,90 @@ export async function decorate<T extends CardRow>(projects: T[], callerId: strin
       saved: savedIds.has(project.id),
     }
   })
+}
+
+/**
+ * A row without its long-form content. Sections can run to 100KB, and a card
+ * draws none of it, so lists never carry it; the routes that return a single
+ * project put it back with `withContent`.
+ */
+function withoutContent<T extends object>(row: T): Omit<T, 'sections' | 'details'> {
+  const {
+    sections: _sections,
+    details: _details,
+    ...rest
+  } = row as T & {
+    sections?: unknown
+    details?: unknown
+  }
+  return rest
+}
+
+/** What a single project carries that a card does not. */
+export const CONTENT_INCLUDE = {
+  references: {
+    orderBy: { position: 'asc' },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      url: true,
+      doi: true,
+      authors: true,
+      year: true,
+      note: true,
+      key: true,
+    },
+  },
+  outputs: {
+    orderBy: { position: 'asc' },
+    select: {
+      id: true,
+      kind: true,
+      label: true,
+      fileId: true,
+      linkId: true,
+      primaryOfProjectId: true,
+      thumbnailKey: true,
+    },
+  },
+} satisfies Prisma.ProjectInclude
+
+type ContentRow = Prisma.ProjectGetPayload<{ include: typeof CONTENT_INCLUDE }>
+
+/** A signed thumbnail URL, or undefined where storage is not configured. */
+async function signThumbnail(key: string | null): Promise<string | undefined> {
+  if (!key) return undefined
+  try {
+    return await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' })
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * A decorated single project with its long-form content back on. Outputs are
+ * sent with a signed thumbnail URL and a `primary` flag in place of the
+ * storage key and the uniqueness marker, neither of which a client needs.
+ */
+export async function withContent<T extends object>(
+  shaped: T,
+  row: Pick<ContentRow, 'sections' | 'details' | 'references' | 'outputs'>
+) {
+  const outputs = await Promise.all(
+    row.outputs.map(async ({ thumbnailKey, primaryOfProjectId, ...o }) => ({
+      ...o,
+      primary: primaryOfProjectId !== null,
+      thumbnailUrl: await signThumbnail(thumbnailKey),
+    }))
+  )
+  return {
+    ...shaped,
+    sections: row.sections,
+    details: row.details,
+    references: row.references,
+    outputs,
+  }
 }
 
 /** Rows come back from `where: { id: { in } }` in no useful order; restore it. */

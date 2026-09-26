@@ -8,8 +8,8 @@ import { Cover } from './Cover'
  * and "You might also like" rails.
  */
 export function MiniRow({ project }: { project: ProjectSummary }) {
-  const course = courseOf(project.tags)
-  const sub = [project.owner?.name, course && `Built for ${course}`].filter(Boolean).join(' · ')
+  const course = courseOf(project)
+  const sub = [project.owner?.name, course && `Made for ${course}`].filter(Boolean).join(' · ')
   return (
     <Link to={`/projects/${project.id}`} className="mini-row">
       <span className="mini-row__thumb">

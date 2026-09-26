@@ -31,17 +31,103 @@ export interface User {
   createdAt: string
 }
 
+/**
+ * The optional sections a project can hold beyond its overview. Each is shown
+ * only when it has something in it. `custom` may repeat and carries its own
+ * title; every other kind appears at most once. Mirrored as a value list in
+ * apps/api/src/lib/projectContent.ts, which is compile-checked against this.
+ */
+export type SectionKind =
+  | 'motivation'
+  | 'method'
+  | 'approaches'
+  | 'data'
+  | 'results'
+  | 'examples'
+  | 'considerations'
+  | 'reflection'
+  | 'conclusion'
+  | 'custom'
+
+/** One approach of an "approaches compared" section, or one example. */
+export interface ProjectSectionItem {
+  label: string
+  body?: string
+}
+
+export interface ProjectSection {
+  /** Stable per project; the section's anchor on the page. */
+  id: string
+  kind: SectionKind
+  /** Overrides the label the project's type gives this kind. Required for `custom`. */
+  title?: string
+  /** Markdown. */
+  body?: string
+  /** `approaches` and `examples` only. */
+  items?: ProjectSectionItem[]
+}
+
+/** What a project drew on. */
+export type ReferenceKind =
+  'DATASET' | 'PAPER' | 'SOFTWARE' | 'MODEL' | 'BOOK' | 'ARCHIVE' | 'WEBSITE' | 'OTHER'
+
+export interface ProjectReference {
+  id: string
+  kind: ReferenceKind
+  title: string
+  url?: string | null
+  /** Bare: 10.1000/xyz. */
+  doi?: string | null
+  authors?: string | null
+  year?: number | null
+  note?: string | null
+  /** Normalized identity shared by every project citing the same thing. */
+  key?: string | null
+}
+
+/** What an output is. */
+export type OutputKind =
+  'POSTER' | 'SLIDES' | 'PAPER' | 'VIDEO' | 'AUDIO' | 'DEMO' | 'CODE' | 'DATASET' | 'OTHER'
+
+/** Something the project produced: one of its files or links, in the author's order. */
+export interface ProjectOutput {
+  id: string
+  kind: OutputKind
+  /** Overrides the kind's label. */
+  label?: string | null
+  fileId?: string | null
+  linkId?: string | null
+  /** The one the project leads with; its thumbnail is the project's image. */
+  primary: boolean
+  /** Signed and short-lived. Absent when there is no thumbnail. */
+  thumbnailUrl?: string
+}
+
+/** A short labelled fact: Supervisor, Runtime, Performers. */
+export interface ProjectDetailItem {
+  label: string
+  value: string
+}
+
 export interface Project {
   id: string
   ownerId: string
   title: string
   /** The one line a card shows. */
   pitch?: string
-  /** The story, in Markdown. */
+  /** The overview, in Markdown. */
   description?: string
+  /** Only on a single project, never on list rows. Absent or null when there are none. */
+  sections?: ProjectSection[] | null
+  /** Only on a single project, never on list rows. Absent or null when there are none. */
+  details?: ProjectDetailItem[] | null
+  /** Set while the project is hidden until a date (only its makers see it then). */
+  showFrom?: string | null
   type?: ProjectType
   status?: ProjectStatus
   tags: string[]
+  /** The course it was made for, upper-cased: CSC211H5. */
+  courseCode?: string | null
   visibility: Visibility
   /** Unique views, lifetime. Sent to the project's owner only. */
   viewCount?: number

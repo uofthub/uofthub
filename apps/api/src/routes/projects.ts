@@ -1,7 +1,14 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { Prisma, ProjectStatus, ProjectType, ReactionKind, Visibility } from '@prisma/client'
+import {
+  Prisma,
+  type ProjectStatus,
+  type ProjectType,
+  type ReactionKind,
+  type Visibility,
+} from '@prisma/client'
 import { db } from '../db/client.js'
 import {
+  VIEW_CHECK_SELECT,
   canViewProject,
   canViewProjectId,
   getOptionalUserId,
@@ -25,17 +32,19 @@ import {
 } from '../lib/storage.js'
 import {
   CARD_INCLUDE,
+  CONTENT_INCLUDE,
   OWNER_SELECT,
   REACTION_KINDS,
   decorate,
   emptyReactions,
   inOrder,
+  withContent,
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
 import { trendingIds } from '../lib/trending.js'
 import { facetsFor } from '../lib/facets.js'
 import { parseCampus } from '../lib/campus.js'
-import { startOfUtcDay } from '../lib/dates.js'
+import { startOfTorontoDay, startOfUtcDay } from '../lib/dates.js'
 import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
@@ -43,6 +52,18 @@ import { announcePublish } from '../lib/publishing.js'
 import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 import { ImportError, importFromLink } from '../lib/linkImport.js'
+import { parseDetails, parseSections } from '../lib/projectContent.js'
+import { courseWhere, facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
+import { isKnownTemplate } from '../lib/courseTemplates.js'
+import { parseReferences, type ReferenceRow } from '../lib/references.js'
+import {
+  OutputError,
+  THUMBNAIL_MAX_BYTES,
+  applyOutputs,
+  parseOutputs,
+  thumbnailKeyFor,
+  thumbnailType,
+} from '../lib/outputs.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
 // than the global ceiling — same pattern as auth.ts's credentialRateLimit.
@@ -50,7 +71,9 @@ const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
 
 // Each import is the server fetching somebody else's site on a student's
 // behalf, so it is budgeted per student.
-const importRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession } }
+const importRateLimit = {
+  rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession },
+}
 
 const PROJECT_TYPES: ProjectType[] = [
   'APP',
@@ -78,12 +101,39 @@ function parseEnum<T extends string>(value: unknown, allowed: T[]): T | null | u
   return allowed.includes(value as T) ? (value as T) : false
 }
 
+/**
+ * A show-from date as the editor sends it: a calendar day (`2026-12-20`), read
+ * as the start of that day in Toronto, or a full ISO instant. `undefined`
+ * leaves it alone, `null` or `''` clears it, and anything else is `false`.
+ */
+function parseShowFrom(value: unknown): Date | null | undefined | false {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  if (typeof value !== 'string') return false
+  const day = startOfTorontoDay(value)
+  if (day) return day
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return false
+  const at = new Date(value)
+  return Number.isNaN(at.getTime()) ? false : at
+}
+
+/** A parsed JSON column for Prisma, where "none" has to be spelled `DbNull`. */
+const asJson = (value: object | null) =>
+  value === null ? Prisma.DbNull : (value as Prisma.InputJsonValue)
+
 /** The editable fields shared by create and update, validated once. */
 function parseFields(body: {
   pitch?: string | null
   type?: string | null
   status?: string | null
   visibility?: string
+  showFrom?: string | null
+  sections?: unknown
+  details?: unknown
+  references?: unknown
+  courseCode?: string | null
+  templateCode?: string | null
+  templateVersion?: number | null
 }):
   | { error: string }
   | {
@@ -91,6 +141,12 @@ function parseFields(body: {
       type?: ProjectType | null
       status?: ProjectStatus | null
       visibility?: Visibility
+      showFrom?: Date | null
+      sections?: Prisma.InputJsonValue | typeof Prisma.DbNull
+      details?: Prisma.InputJsonValue | typeof Prisma.DbNull
+      references?: ReferenceRow[]
+      courseCode?: string | null
+      template?: { templateCode: string | null; templateVersion: number | null }
     } {
   const type = parseEnum(body.type, PROJECT_TYPES)
   if (type === false) return { error: 'Unknown project type' }
@@ -100,23 +156,79 @@ function parseFields(body: {
   if (visibility === false || visibility === null) {
     if (body.visibility !== undefined) return { error: 'Unknown visibility' }
   }
+  const showFrom = parseShowFrom(body.showFrom)
+  if (showFrom === false) return { error: 'Show from must be a date like 2026-12-20' }
+  const sections = body.sections === undefined ? undefined : parseSections(body.sections)
+  if (sections && 'error' in sections) return { error: sections.error }
+  const details = body.details === undefined ? undefined : parseDetails(body.details)
+  if (details && 'error' in details) return { error: details.error }
+  const references = body.references === undefined ? undefined : parseReferences(body.references)
+  if (references && 'error' in references) return { error: references.error }
+  let courseCode: string | null | undefined
+  if (body.courseCode !== undefined) {
+    courseCode = body.courseCode?.trim() ? normalizeCourseCode(body.courseCode) : null
+    if (body.courseCode?.trim() && !courseCode)
+      return { error: 'That doesn’t look like a course code — try CSC309 or CSC211H5' }
+  }
+  // Recorded, not acted on: which template the editor started from.
+  let template: { templateCode: string | null; templateVersion: number | null } | undefined
+  if (body.templateCode !== undefined) {
+    if (body.templateCode === null) template = { templateCode: null, templateVersion: null }
+    else if (!isKnownTemplate(body.templateCode, Number(body.templateVersion)))
+      return { error: 'Unknown course template' }
+    else template = { templateCode: body.templateCode, templateVersion: Number(body.templateVersion) }
+  }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
     pitch = body.pitch?.trim() || null
     if (pitch && pitch.length > PITCH_MAX)
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
   }
-  return { pitch, type, status, visibility: visibility || undefined }
+  return {
+    pitch,
+    type,
+    status,
+    visibility: visibility || undefined,
+    showFrom,
+    sections: sections && asJson(sections.value),
+    details: details && asJson(details.value),
+    references: references?.value,
+    courseCode,
+    template,
+  }
 }
+
+/** An output of a project the caller owns, or the status to refuse with. */
+async function ownOutput(projectId: string, outputId: string, userId: string) {
+  const output = await db.projectOutput.findFirst({
+    where: { id: outputId, projectId },
+    select: { id: true, thumbnailKey: true, project: { select: { ownerId: true } } },
+  })
+  if (!output) return { status: 404 as const }
+  if (output.project.ownerId !== userId) return { status: 403 as const }
+  return output
+}
+
+/**
+ * Delete storage objects nothing points at any more. Best effort: a failure
+ * leaves an unreferenced object behind, which costs bytes, not correctness.
+ */
+async function deleteObjects(keys: (string | null | undefined)[]) {
+  await Promise.all(keys.flatMap((k) => (k ? [deleteObject(k).catch(() => undefined)] : [])))
+}
+
+/** How many other projects "also used in…" names per reference. */
+const SHARED_PER_REFERENCE = 3
 
 /** How much of a comment rides along in the notification that announces it. */
 const COMMENT_EXCERPT_MAX = 140
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
-  // GET /projects?search&faculty&campus&type&status&sort=new|trending&take&skip
+  // GET /projects?search&course&faculty&campus&type&status&sort=new|trending&take&skip
   app.get<{
     Querystring: {
       search?: string
+      course?: string
       faculty?: string
       campus?: string
       type?: string
@@ -127,6 +239,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   }>('/', async (request) => {
     const { search, faculty, campus, sort, take = '20', skip = '0' } = request.query
+    // A full code matches exactly, a stem every campus of it; anything else
+    // is dropped like an unknown campus.
+    const course = request.query.course ? courseWhere(request.query.course) : null
     // Unknown values are dropped rather than 400ing, like campus below.
     const type = parseEnum(request.query.type, PROJECT_TYPES) || undefined
     const status = parseEnum(request.query.status, PROJECT_STATUSES) || undefined
@@ -145,9 +260,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       AND: [
         visibleProjectWhere(callerId),
         ...(matchedIds ? [{ id: { in: matchedIds } }] : []),
-        ...(faculty
-          ? [{ owner: { faculty: { equals: faculty, mode: 'insensitive' as const } } }]
-          : []),
+        ...(course ? [course] : []),
+        // The owner's faculty or any accepted collaborator's.
+        ...(faculty ? [facultyWhere(faculty)] : []),
         ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
         ...(type ? [{ type }] : []),
         ...(status ? [{ status }] : []),
@@ -218,6 +333,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         files: {
           select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
         },
+        ...CONTENT_INCLUDE,
       },
     })
     if (!project) return reply.code(404).send({ error: 'Not found' })
@@ -237,7 +353,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       ).then(([p]) => p),
       callerId
         ? db.projectFollow
-            .findUnique({ where: { userId_projectId: { userId: callerId, projectId: project.id } } })
+            .findUnique({
+              where: { userId_projectId: { userId: callerId, projectId: project.id } },
+            })
             .then(Boolean)
         : false,
       // Like saves, who follows is private; the owner sees only how many.
@@ -245,7 +363,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ? db.projectFollow.count({ where: { projectId: project.id } })
         : undefined,
     ])
-    return { ...shaped, following, ...(followerCount !== undefined && { followerCount }) }
+    return {
+      ...(await withContent(shaped, project)),
+      following,
+      ...(followerCount !== undefined && { followerCount }),
+    }
   })
 
   // POST /projects
@@ -258,6 +380,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       status?: string
       tags?: string[]
       visibility?: string
+      showFrom?: string | null
+      sections?: unknown
+      details?: unknown
+      references?: unknown
+      courseCode?: string | null
+      templateCode?: string | null
+      templateVersion?: number | null
       links?: { label: string; url: string }[]
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -287,9 +416,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         status: fields.status ?? undefined,
         tags,
         visibility: fields.visibility ?? 'PRIVATE',
+        showFrom: fields.showFrom ?? undefined,
+        sections: fields.sections,
+        details: fields.details,
+        courseCode: fields.courseCode ?? undefined,
+        ...fields.template,
         links: safeLinks.length ? { create: safeLinks } : undefined,
+        references: fields.references?.length ? { create: fields.references } : undefined,
       },
-      include: CARD_INCLUDE,
+      include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
     })
 
     // A project created straight to UOFT/PUBLIC is published the moment it
@@ -297,11 +432,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // on the PATCH that flips a draft open later.
     const publishedAt = await announcePublish(project)
 
-    const [shaped] = await decorate(
-      [{ ...project, publishedAt: publishedAt ?? project.publishedAt }],
-      request.user.sub
-    )
-    return reply.code(201).send(shaped)
+    const [shaped] = await decorate([{ ...project, publishedAt }], request.user.sub)
+    return reply.code(201).send(await withContent(shaped, project))
   })
 
   // PATCH /projects/:id
@@ -315,6 +447,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       status?: string | null
       tags?: string[]
       visibility?: string
+      showFrom?: string | null
+      sections?: unknown
+      details?: unknown
+      references?: unknown
+      outputs?: unknown
+      courseCode?: string | null
+      templateCode?: string | null
+      templateVersion?: number | null
     }
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
@@ -327,6 +467,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const fields = parseFields(request.body)
     if ('error' in fields) return reply.code(400).send({ error: fields.error })
     const { visibility } = fields
+    const outputs =
+      request.body.outputs === undefined ? undefined : parseOutputs(request.body.outputs)
+    if (outputs && 'error' in outputs) return reply.code(400).send({ error: outputs.error })
 
     // A take-down would be worth nothing if the owner could just set the
     // project public again; only a moderator can clear `takenDownAt`.
@@ -336,28 +479,54 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'This project was taken down by a moderator. Contact the team to appeal.' })
     }
 
-    const updated = await db.project.update({
-      where: { id: project.id },
-      data: {
-        ...(title !== undefined && { title: title.trim() }),
-        ...(description !== undefined && { description: description.trim() || null }),
-        ...(tags !== undefined && { tags }),
-        ...(fields.pitch !== undefined && { pitch: fields.pitch }),
-        ...(fields.type !== undefined && { type: fields.type }),
-        ...(fields.status !== undefined && { status: fields.status }),
-        ...(visibility !== undefined && { visibility }),
-      },
-      include: CARD_INCLUDE,
-    })
+    // One transaction: an edit that replaces the references or the outputs
+    // either lands whole or not at all.
+    let orphanedThumbnails: string[] = []
+    let updated
+    try {
+      updated = await db.$transaction(async (tx) => {
+        if (outputs) orphanedThumbnails = await applyOutputs(tx, project.id, outputs.value)
+        if (fields.references) {
+          await tx.projectReference.deleteMany({ where: { projectId: project.id } })
+          if (fields.references.length)
+            await tx.projectReference.createMany({
+              data: fields.references.map((r) => ({ ...r, projectId: project.id })),
+            })
+        }
+        return tx.project.update({
+          where: { id: project.id },
+          data: {
+            ...(title !== undefined && { title: title.trim() }),
+            ...(description !== undefined && { description: description.trim() || null }),
+            ...(tags !== undefined && { tags }),
+            ...(fields.pitch !== undefined && { pitch: fields.pitch }),
+            ...(fields.type !== undefined && { type: fields.type }),
+            ...(fields.status !== undefined && { status: fields.status }),
+            ...(visibility !== undefined && { visibility }),
+            ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
+            ...(fields.sections !== undefined && { sections: fields.sections }),
+            ...(fields.details !== undefined && { details: fields.details }),
+            ...(fields.courseCode !== undefined && { courseCode: fields.courseCode }),
+            ...fields.template,
+          },
+          include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
+        })
+      })
+    } catch (err) {
+      if (err instanceof OutputError) return reply.code(400).send({ error: err.message })
+      throw err
+    }
+    // After the commit: a failed delete leaves an unreferenced object, never a
+    // referenced one missing.
+    await deleteObjects(orphanedThumbnails)
 
-    // The edit that opens a draft up is the one that counts as publishing it.
+    // The edit that opens a draft up is the one that counts as publishing it,
+    // and an edit to a still-unannounced project's show-from date moves when
+    // it will appear.
     const publishedAt = await announcePublish(updated)
 
-    const [shaped] = await decorate(
-      [{ ...updated, publishedAt: publishedAt ?? updated.publishedAt }],
-      request.user.sub
-    )
-    return shaped
+    const [shaped] = await decorate([{ ...updated, publishedAt }], request.user.sub)
+    return await withContent(shaped, updated)
   })
 
   // DELETE /projects/:id
@@ -405,14 +574,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { id } = request.params
       const userId = request.user.sub
-      const project = await db.project.findUnique({
-        where: { id },
-        select: {
-          ownerId: true,
-          visibility: true,
-          collaborators: { select: { userId: true, accepted: true } },
-        },
-      })
+      const project = await db.project.findUnique({ where: { id }, select: VIEW_CHECK_SELECT })
       if (!project || !canViewProject(project, userId))
         return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId === userId)
@@ -843,12 +1005,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
+      const output = await db.projectOutput.findFirst({
+        where: { linkId: request.params.linkId, projectId: project.id },
+        select: { thumbnailKey: true },
+      })
       // Scope the delete to this project: owning one project must not grant
       // the ability to delete another project's link by id.
       const { count } = await db.projectLink.deleteMany({
         where: { id: request.params.linkId, projectId: project.id },
       })
       if (count === 0) return reply.code(404).send({ error: 'Link not found' })
+      await deleteObjects([output?.thumbnailKey])
 
       return { ok: true }
     }
@@ -934,8 +1101,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!file) return reply.code(404).send({ error: 'File not found' })
 
+      const output = await db.projectOutput.findUnique({
+        where: { fileId: file.id },
+        select: { thumbnailKey: true },
+      })
       await deleteObject(file.storageKey)
+      // Its output, if it was one, goes with it (a cascade), and so does the
+      // thumbnail made from it.
       await db.projectFile.delete({ where: { id: file.id } })
+      await deleteObjects([output?.thumbnailKey])
       return { ok: true }
     }
   )
@@ -1004,6 +1178,115 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
+  // GET /projects/:id/shared-references — "also used in…"
+  //
+  // For each of this project's references that has an identity (a DOI, an
+  // arXiv id, a repo, a canonical URL), up to three other projects that cite
+  // the same thing — only ones the caller can see, newest first. References
+  // nobody else used are left out, so an empty list means there is nothing
+  // to show.
+  app.get<{ Params: { id: string } }>('/:id/shared-references', async (request, reply) => {
+    const callerId = await getOptionalUserId(request)
+    const { id } = request.params
+    if (!(await canViewProjectId(id, callerId))) return reply.code(404).send({ error: 'Not found' })
+
+    const mine = await db.projectReference.findMany({
+      where: { projectId: id, key: { not: null } },
+      orderBy: { position: 'asc' },
+      select: { id: true, key: true, title: true, kind: true },
+    })
+    if (mine.length === 0) return []
+
+    const keys = [...new Set(mine.map((r) => r.key!))]
+    const others = await db.projectReference.findMany({
+      where: {
+        key: { in: keys },
+        projectId: { not: id },
+        project: { AND: [visibleProjectWhere(callerId), { takenDownAt: null }] },
+      },
+      select: { key: true, projectId: true, project: { select: { createdAt: true } } },
+      orderBy: { project: { createdAt: 'desc' } },
+    })
+
+    const byKey = new Map<string, string[]>()
+    for (const r of others) {
+      const ids = byKey.get(r.key!) ?? []
+      if (ids.length < SHARED_PER_REFERENCE && !ids.includes(r.projectId)) ids.push(r.projectId)
+      byKey.set(r.key!, ids)
+    }
+    const projectIds = [...new Set([...byKey.values()].flat())]
+    if (projectIds.length === 0) return []
+
+    const rows = await db.project.findMany({
+      where: { id: { in: projectIds } },
+      include: CARD_INCLUDE,
+    })
+    const shaped = new Map((await decorate(rows, callerId)).map((p) => [p.id, p]))
+
+    const seen = new Set<string>()
+    return mine.flatMap((reference) => {
+      // Two of this project's rows with one key (a paper cited twice) are one entry.
+      if (seen.has(reference.key!)) return []
+      seen.add(reference.key!)
+      const projects = (byKey.get(reference.key!) ?? []).flatMap((pid) => {
+        const p = shaped.get(pid)
+        return p ? [p] : []
+      })
+      return projects.length ? [{ reference, projects }] : []
+    })
+  })
+
+  // ── OUTPUT THUMBNAILS ──────────────────────────────────────────────────────
+
+  // PUT /projects/:id/outputs/:outputId/thumbnail — multipart, owner only
+  //
+  // The picture a poster, a video or a large image is shown by: made in the
+  // author's browser (a first page, a frame, a scaled-down copy) or chosen by
+  // hand. Untrusted, so checked by its bytes and capped small. See
+  // docs/structured-projects.md for why it is not made on the server.
+  app.put<{ Params: { id: string; outputId: string } }>(
+    '/:id/outputs/:outputId/thumbnail',
+    { preHandler: [app.authenticate], config: uploadRateLimit },
+    async (request, reply) => {
+      const output = await ownOutput(request.params.id, request.params.outputId, request.user.sub)
+      if ('status' in output)
+        return reply
+          .code(output.status)
+          .send({ error: output.status === 404 ? 'Not found' : 'Forbidden' })
+
+      const data = await request.file()
+      if (!data) return reply.code(400).send({ error: 'No image uploaded' })
+      const buffer = await data.toBuffer()
+      if (data.file.truncated || buffer.length > THUMBNAIL_MAX_BYTES)
+        return reply.code(413).send({ error: 'A thumbnail is at most 512KB' })
+      const contentType = await thumbnailType(buffer)
+      if (!contentType)
+        return reply.code(400).send({ error: 'A thumbnail must be a PNG, JPEG or WebP image' })
+
+      const key = thumbnailKeyFor(request.params.id, output.id, contentType)
+      await putObject(key, buffer, contentType)
+      await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: key } })
+      await deleteObjects([output.thumbnailKey])
+      return { thumbnailUrl: await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' }) }
+    }
+  )
+
+  // DELETE /projects/:id/outputs/:outputId/thumbnail — back to no thumbnail
+  app.delete<{ Params: { id: string; outputId: string } }>(
+    '/:id/outputs/:outputId/thumbnail',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const output = await ownOutput(request.params.id, request.params.outputId, request.user.sub)
+      if ('status' in output)
+        return reply
+          .code(output.status)
+          .send({ error: output.status === 404 ? 'Not found' : 'Forbidden' })
+      await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: null } })
+      await deleteObjects([output.thumbnailKey])
+      return { ok: true }
+    }
+  )
+
   // ── VERSIONING ─────────────────────────────────────────────────────────────
 
   // GET /projects/:id/versions
@@ -1049,6 +1332,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           note,
           title: project.title,
           description: project.description,
+          sections: project.sections ?? Prisma.DbNull,
+          details: project.details ?? Prisma.DbNull,
           tags: project.tags,
         },
       })
@@ -1089,6 +1374,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         where: { id: request.params.id },
         include: {
           links: true,
+          references: { orderBy: { position: 'asc' } },
           collaborators: { select: { userId: true, accepted: true } },
         },
       })
@@ -1113,6 +1399,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           title: `${original.title} (fork)`,
           pitch: original.pitch,
           description: original.description,
+          sections: original.sections ?? Prisma.DbNull,
+          details: original.details ?? Prisma.DbNull,
           type: original.type,
           // A fork starts its own life: it is not "shipped" because the
           // original was.
@@ -1123,8 +1411,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           links: original.links.length
             ? { create: original.links.map((l) => ({ label: l.label, url: l.url })) }
             : undefined,
+          references: original.references.length
+            ? {
+                create: original.references.map(({ id: _id, projectId: _p, ...r }) => r),
+              }
+            : undefined,
         },
-        include: CARD_INCLUDE,
+        include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
       })
 
       // Against the original, not the fork — the fork has no audience yet, and
@@ -1135,7 +1428,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
 
       const [shaped] = await decorate([fork], request.user.sub)
-      return reply.code(201).send(shaped)
+      return reply.code(201).send(await withContent(shaped, fork))
     }
   )
 
@@ -1230,8 +1523,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: 'Only faculty/TAs can request access' })
       }
 
-      const project = await db.project.findUnique({ where: { id: request.params.id } })
-      if (!project) return reply.code(404).send({ error: 'Not found' })
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: { collaborators: { select: { userId: true, accepted: true } } },
+      })
+      // 404, like every read: a 403 here would confirm that a private or
+      // still-hidden project exists to anyone who guessed its id.
+      if (!project || !canViewProject(project, request.user.sub))
+        return reply.code(404).send({ error: 'Not found' })
       if (project.visibility === 'PRIVATE') {
         return reply.code(403).send({ error: 'Cannot request access to a private project' })
       }
@@ -1298,9 +1597,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const project = await db.project.findUnique({
         where: { id: request.params.id },
-        select: { id: true, ownerId: true, visibility: true },
+        select: { id: true, ...VIEW_CHECK_SELECT },
       })
-      if (!project) return reply.code(404).send({ error: 'Not found' })
+      // 404 for anything the reporter cannot see, as every read does — a 403
+      // would confirm a private or still-hidden project exists.
+      if (!project || !canViewProject(project, request.user.sub))
+        return reply.code(404).send({ error: 'Not found' })
 
       // Reporting exists for work that has an audience. A PRIVATE project is
       // only visible to its owner and accepted collaborators, so there is

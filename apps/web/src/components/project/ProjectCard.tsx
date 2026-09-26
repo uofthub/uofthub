@@ -42,7 +42,7 @@ export function ProjectCard({
 }) {
   const href = `/projects/${project.id}`
   const makers = makersOf(project, maker)
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
   const group = project.orgProjects?.[0]?.org
 
   return (
@@ -63,7 +63,7 @@ export function ProjectCard({
           <span className="pcard__who">{makersLabel(makers.map((m) => m.name ?? ''))}</span>
           {course ? (
             <Chip size="xs" tone="subtle">
-              Built for {course}
+              Made for {course}
             </Chip>
           ) : (
             group && (
@@ -91,7 +91,7 @@ export function ProjectListRow({
 }) {
   const href = `/projects/${project.id}`
   const makers = makersOf(project, maker)
-  const course = courseOf(project.tags)
+  const course = courseOf(project)
 
   return (
     <article className="card prow">
@@ -104,7 +104,7 @@ export function ProjectListRow({
             <TypeBadge type={project.type} />
             {course && (
               <span className="muted" style={{ fontSize: 13 }}>
-                Built for {course}
+                Made for {course}
               </span>
             )}
             {project.orgProjects?.[0] && (

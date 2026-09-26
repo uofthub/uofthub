@@ -16,6 +16,7 @@ import { feedRoutes } from './routes/feed.js'
 import { spotlightRoutes } from './routes/spotlight.js'
 import { collectionRoutes } from './routes/collections.js'
 import { messageRoutes } from './routes/messages.js'
+import { courseRoutes } from './routes/courses.js'
 import { reportRequestError } from './lib/monitoring.js'
 
 export async function buildApp() {
@@ -108,6 +109,7 @@ export async function buildApp() {
   await app.register(spotlightRoutes, { prefix: '/spotlight' })
   await app.register(collectionRoutes, { prefix: '/collections' })
   await app.register(messageRoutes, { prefix: '/messages' })
+  await app.register(courseRoutes, { prefix: '/courses' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

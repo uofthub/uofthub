@@ -42,8 +42,9 @@ describe('POST /projects/:id/report', () => {
     const publicProject = await createProject(owner.id, { visibility: 'PUBLIC' })
     const privateProject = await createProject(owner.id, { visibility: 'PRIVATE' })
 
-    // Nobody outside a private project can see it, so there is nothing to act on.
-    expect((await report(reporter, privateProject.id)).statusCode).toBe(403)
+    // Nobody outside a private project can see it, so there is nothing to act
+    // on — and a 404, like any read, so the id is not confirmed to exist.
+    expect((await report(reporter, privateProject.id)).statusCode).toBe(404)
     expect((await report(owner, publicProject.id)).statusCode).toBe(400)
     expect((await report(reporter, publicProject.id, { reason: 'VIBES' })).statusCode).toBe(400)
 
