@@ -180,6 +180,7 @@ describe('the editor, changing a project', () => {
     references: [],
     outputs: [],
     sections: [{ id: 's1', kind: 'results', body: 'Fewer mussels.' }],
+    canEdit: true,
   } as unknown as ProjectDetail
 
   it('loads what the project already says', async () => {
@@ -207,9 +208,22 @@ describe('the editor, changing a project', () => {
     expect(deleteFile).toHaveBeenCalledWith('p1', 'f1')
   })
 
-  it('is the owner’s alone', async () => {
+  it('is closed to anyone who is not one of its makers', async () => {
+    vi.spyOn(api.projects, 'get').mockResolvedValue({
+      ...project,
+      ownerId: 'someone-else',
+      canEdit: false,
+    })
+    open('/projects/p1/edit')
+    expect(
+      await screen.findByText('Only the project’s owner and collaborators can edit it')
+    ).toBeTruthy()
+  })
+
+  it('lets a collaborator edit, without the choice of who sees it', async () => {
     vi.spyOn(api.projects, 'get').mockResolvedValue({ ...project, ownerId: 'someone-else' })
     open('/projects/p1/edit')
-    expect(await screen.findByText('Only the project’s owner can edit it')).toBeTruthy()
+    expect(await screen.findByDisplayValue('Mussels downstream')).toBeTruthy()
+    expect(screen.queryByText('Who can see this?')).toBeNull()
   })
 })

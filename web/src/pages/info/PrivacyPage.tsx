@@ -116,8 +116,10 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             email, display name and profile photo. We never receive your password.
           </li>
           <li>
-            <strong>Resend</strong> — sends the emails we send you (group verification decisions).
-            It sees the address and the message.
+            <strong>Resend</strong> — sends the emails we send you: confirming your address,
+            resetting your password, and — unless you turn them off in Settings — invitations,
+            access requests, new conversations and moderation decisions. It sees the address and the
+            message.
           </li>
           <li>
             <strong>OpenAI</strong> — receives the text of a search you type into{' '}
@@ -139,8 +141,9 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
       <>
         <p>
           Your account and your work stay until you delete them. Deleting a project removes it and
-          its files; deleting your account removes your profile, projects, files, comments, likes
-          and follows.
+          its files; deleting your account removes your profile, projects, files, comments,
+          reactions, saves, follows, collections and messages. Read notifications are deleted after
+          six months.
         </p>
         <p>
           A project taken down by a moderator is <em>not</em> deleted — it is forced private, and
@@ -164,10 +167,9 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           remove your profile details and avatar, and decline any collaborator invitation.
         </p>
         <p>
-          To get a copy of your data or delete your account entirely, email{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> from your U of T address. There is
-          no self-service account deletion yet — it is a real gap, and asking gets it done by a
-          person in the meantime.
+          From <Link to="/settings">Settings</Link> you can download a copy of your data, sign out
+          everywhere, turn off email, or delete your account entirely. Anything else, email{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> from your U of T address.
         </p>
       </>
     ),

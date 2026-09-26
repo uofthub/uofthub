@@ -40,7 +40,7 @@ export const MESSAGE_REPORT_REASONS: { value: ReportReason; label: string }[] = 
 ]
 
 export const reasonShort = (reason: ReportReason) =>
-  REPORT_REASONS.find(r => r.value === reason)?.short ?? reason
+  REPORT_REASONS.find((r) => r.value === reason)?.short ?? reason
 
 export const STATUS_LABELS: Record<ReportStatus, string> = {
   OPEN: 'Open',

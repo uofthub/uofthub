@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { publish } from '../lib/live.js'
+import { block } from '../lib/blocks.js'
+import { emailNewMessage } from '../lib/notificationEmails.js'
 import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 
@@ -72,21 +74,6 @@ const CLOSED_ERRORS: Record<Closed, string> = {
   suspended: 'A moderator has suspended your messaging',
   blocked: 'Unblock them to send a message',
   unavailable: 'They are not taking new messages',
-}
-
-/** Block `blocked` for `blocker`, and clear their unread so the badge stops asking. */
-async function block(blocker: string, blocked: string) {
-  await db.$transaction([
-    db.userBlock.upsert({
-      where: { blockerId_blockedId: { blockerId: blocker, blockedId: blocked } },
-      create: { blockerId: blocker, blockedId: blocked },
-      update: {},
-    }),
-    db.message.updateMany({
-      where: { senderId: blocked, recipientId: blocker, readAt: null },
-      data: { readAt: new Date() },
-    }),
-  ])
 }
 
 /** Whether `from` has ever sent `to` a message. */
@@ -240,35 +227,52 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       const closed = await whyClosed(me, other)
       if (closed) return reply.code(403).send({ error: CLOSED_ERRORS[closed] })
 
+      // Whether this starts something new for them: nothing of ours unread.
+      const waiting = await db.message.count({
+        where: { senderId: me, recipientId: other.id, readAt: null },
+      })
       const message = await db.message.create({
         data: { senderId: me, recipientId: other.id, body },
         select: { id: true, senderId: true, body: true, createdAt: true, readAt: true },
       })
+      if (waiting === 0) {
+        const sender = await db.user.findUnique({ where: { id: me }, select: { name: true } })
+        emailNewMessage(other.id, sender?.name ?? 'Someone')
+      }
       // The sender too: their other tabs list this conversation as well.
       await publish([other.id, me], 'message')
       return reply.code(201).send({ ...message, fromMe: true })
     }
   )
 
-  // POST /messages/:userId/block — stop the conversation both ways
-  app.post<{ Params: { userId: string } }>('/:userId/block', auth, async (request, reply) => {
-    const me = request.user.sub
-    const other = await db.user.findUnique({
-      where: { id: request.params.userId },
-      select: { id: true },
-    })
-    if (!other || other.id === me) return reply.code(404).send({ error: 'Not found' })
-    await block(me, other.id)
-    return { blocked: true }
-  })
+  // POST /messages/:userId/block — stop the conversation both ways, and the
+  // rest of what two students can do to each other (see lib/blocks.ts)
+  app.post<{ Params: { userId: string } }>(
+    '/:userId/block',
+    { ...auth, config: { allowSuspended: true } },
+    async (request, reply) => {
+      const me = request.user.sub
+      const other = await db.user.findUnique({
+        where: { id: request.params.userId },
+        select: { id: true },
+      })
+      if (!other || other.id === me) return reply.code(404).send({ error: 'Not found' })
+      await block(me, other.id)
+      return { blocked: true }
+    }
+  )
 
   // DELETE /messages/:userId/block — lift it. Their own opt-out still applies.
-  app.delete<{ Params: { userId: string } }>('/:userId/block', auth, async (request) => {
-    await db.userBlock.deleteMany({
-      where: { blockerId: request.user.sub, blockedId: request.params.userId },
-    })
-    return { blocked: false }
-  })
+  app.delete<{ Params: { userId: string } }>(
+    '/:userId/block',
+    { ...auth, config: { allowSuspended: true } },
+    async (request) => {
+      await db.userBlock.deleteMany({
+        where: { blockerId: request.user.sub, blockedId: request.params.userId },
+      })
+      return { blocked: false }
+    }
+  )
 
   // POST /messages/:userId/report — { reason, details?, block? }. Files the
   // recent thread with moderators; `block` (the dialog's default) also blocks.

@@ -136,9 +136,10 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
         faculty: form.faculty,
         // Sent even when empty, so clearing it actually clears it.
         campus: form.campus,
-        program: form.program || undefined,
-        classYear: form.classYear ? Number(form.classYear) : undefined,
-        bio: form.bio || undefined,
+        // Empty clears each of these.
+        program: form.program,
+        classYear: form.classYear ? Number(form.classYear) : null,
+        bio: form.bio,
         openTo,
         allowMessages,
         // Empty clears a link.
@@ -173,7 +174,7 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <Field label="Name">
-        <Input value={form.name} onChange={set('name')} />
+        <Input value={form.name} onChange={set('name')} maxLength={80} />
       </Field>
       <Field label="Faculty" hint="Explore’s faculty tiles and “Your program” match on this.">
         <Select value={form.faculty} onChange={set('faculty')}>
@@ -189,7 +190,12 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
       </Field>
       <FieldRow>
         <Field label="Program">
-          <Input value={form.program} onChange={set('program')} placeholder="Engineering Science" />
+          <Input
+            value={form.program}
+            onChange={set('program')}
+            placeholder="Engineering Science"
+            maxLength={100}
+          />
         </Field>
         <Field label="Graduating">
           <Input
@@ -213,6 +219,7 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
       <Field label="Bio">
         <TextArea
           rows={3}
+          maxLength={500}
           value={form.bio}
           onChange={set('bio')}
           placeholder="What you build, and what you’re up for."

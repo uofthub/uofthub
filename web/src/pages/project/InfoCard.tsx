@@ -43,8 +43,8 @@ import {
 import {
   FilesDialog,
   InsightsDialog,
-  InviteDialog,
   LinksDialog,
+  PeopleDialog,
   UpdateDialog,
   GroupsDialog,
 } from './OwnerDialogs'
@@ -59,7 +59,7 @@ import {
 } from '../../lib/outputs'
 
 type Open =
-  'update' | 'links' | 'files' | 'invite' | 'groups' | 'insights' | 'report' | 'collect' | null
+  'update' | 'links' | 'files' | 'people' | 'groups' | 'insights' | 'report' | 'collect' | null
 
 function Maker({
   person,
@@ -143,7 +143,12 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const { user } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [open, setOpen] = useState<Open>(null)
+  // ?people=1 — an access-request notification opens the People dialog.
+  const [open, setOpen] = useState<Open>(() =>
+    new URLSearchParams(window.location.search).get('people') && user?.id === project.ownerId
+      ? 'people'
+      : null
+  )
   // The only way pinning fails is the six-project cap, and that has to be
   // said out loud — a button that quietly does nothing reads as a bug.
   const [pinError, setPinError] = useState<string | null>(null)
@@ -210,7 +215,13 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
     mutationFn: () => api.projects.fork(project.id),
     onSuccess: (f) => navigate(`/projects/${f.id}`),
   })
-  const requestAccess = useMutation({ mutationFn: () => api.projects.requestAccess(project.id) })
+  // A credited collaborator can step off the project themself.
+  const isCollaborator = !!user && project.collaborators.some((c) => c.user.id === user.id)
+  const leave = useMutation({
+    mutationFn: () => api.projects.removeCollaborator(project.id, user!.id),
+    onSuccess: () => refresh(),
+  })
+  const actionError = [remove, fork, leave].find((m) => m.isError)?.error
 
   return (
     <Card as="section" className="flex flex-col gap-4.5 px-4.5 py-5 md:p-6.5">
@@ -227,11 +238,16 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
       {open === 'groups' && <GroupsDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'links' && <LinksDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'files' && <FilesDialog project={project} onClose={() => setOpen(null)} />}
-      {open === 'invite' && <InviteDialog project={project} onClose={() => setOpen(null)} />}
+      {open === 'people' && <PeopleDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'insights' && (
         <InsightsDialog projectId={project.id} onClose={() => setOpen(null)} />
       )}
-      {open === 'report' && <ReportDialog projectId={project.id} onClose={() => setOpen(null)} />}
+      {open === 'report' && (
+        <ReportDialog
+          target={{ kind: 'project', projectId: project.id }}
+          onClose={() => setOpen(null)}
+        />
+      )}
       {open === 'collect' && (
         <AddToCollectionDialog projectId={project.id} onClose={() => setOpen(null)} />
       )}
@@ -276,7 +292,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           <Button variant="primary" icon="code" href={code.href} className="grow">
             View code
           </Button>
-        ) : isOwner ? (
+        ) : project.canEdit ? (
           // Not "add a live link": most projects have nothing to run. What
           // every project can lead with is what it produced.
           <Button
@@ -321,7 +337,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
                   Add to collection
                 </MenuItem>
               )}
-              {isOwner && (
+              {project.canEdit && (
                 <>
                   <MenuDivider />
                   <MenuItem
@@ -337,17 +353,21 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
                   <MenuItem icon="upload" onSelect={() => setOpen('files')} close={close}>
                     Manage files
                   </MenuItem>
-                  <MenuItem icon="userPlus" onSelect={() => setOpen('invite')} close={close}>
-                    Invite a collaborator
+                  <MenuItem icon="send" onSelect={() => setOpen('update')} close={close}>
+                    Post an update
+                  </MenuItem>
+                </>
+              )}
+              {isOwner && (
+                <>
+                  <MenuItem icon="users" onSelect={() => setOpen('people')} close={close}>
+                    People
                   </MenuItem>
                   <MenuItem icon="users" onSelect={() => setOpen('groups')} close={close}>
                     Link to a group
                   </MenuItem>
                   <MenuItem icon="pin" onSelect={() => pin.mutate()} close={close}>
                     {project.pinnedAt ? 'Unpin from profile' : 'Pin to profile'}
-                  </MenuItem>
-                  <MenuItem icon="send" onSelect={() => setOpen('update')} close={close}>
-                    Post an update
                   </MenuItem>
                   <MenuItem icon="chart" onSelect={() => setOpen('insights')} close={close}>
                     Insights
@@ -365,21 +385,23 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
                   </MenuItem>
                 </>
               )}
+              {isCollaborator && (
+                <MenuItem
+                  icon="logout"
+                  onSelect={() =>
+                    confirm('Leave this project? You’ll no longer be credited on it.') &&
+                    leave.mutate()
+                  }
+                  close={close}
+                >
+                  Leave project
+                </MenuItem>
+              )}
               {user && !isOwner && (
                 <>
                   <MenuItem icon="fork" onSelect={() => fork.mutate()} close={close}>
                     Fork a copy
                   </MenuItem>
-                  {user.role === 'FACULTY' && (
-                    <MenuItem
-                      icon="lock"
-                      onSelect={() => requestAccess.mutate()}
-                      disabled={requestAccess.isSuccess}
-                      close={close}
-                    >
-                      {requestAccess.isSuccess ? 'Access requested' : 'Request access'}
-                    </MenuItem>
-                  )}
                   {/* A private project has no audience beyond its makers. */}
                   {project.visibility !== 'PRIVATE' && (
                     <MenuItem icon="flag" onSelect={() => setOpen('report')} close={close}>
@@ -393,6 +415,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         </Menu>
       </div>
       {pinError && <ErrorText>{pinError}</ErrorText>}
+      {actionError && <ErrorText>{actionError.message}</ErrorText>}
 
       <ReactionBar project={project} />
 
@@ -410,10 +433,10 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           />
         )}
         {project.collaborators.map((c) => (
-          <Maker key={c.user.id} person={c.user} line="Collaborator" />
+          <Maker key={c.user.id} person={c.user} line={c.title || 'Collaborator'} />
         ))}
         {isOwner && (
-          <LinkButton onClick={() => setOpen('invite')}>+ Invite a collaborator</LinkButton>
+          <LinkButton onClick={() => setOpen('people')}>+ Invite a collaborator</LinkButton>
         )}
       </div>
 

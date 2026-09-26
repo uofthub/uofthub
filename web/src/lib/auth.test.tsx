@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { AuthProvider, useAuth } from './auth'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AuthProvider } from './AuthProvider'
+import { useAuth } from './auth'
 
 const me = vi.fn()
 const logout = vi.fn()
@@ -34,13 +36,16 @@ function Probe() {
 
 const show = () =>
   render(
-    <AuthProvider>
-      <Probe />
-    </AuthProvider>
+    <QueryClientProvider client={new QueryClient()}>
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    </QueryClientProvider>
   )
 
 const maybe = () => screen.getByTestId('maybe').textContent
-const settled = () => waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+const settled = () =>
+  waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
 
 beforeEach(() => {
   me.mockReset()

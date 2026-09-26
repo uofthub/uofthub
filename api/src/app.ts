@@ -18,6 +18,7 @@ import { collectionRoutes } from './routes/collections.js'
 import { messageRoutes } from './routes/messages.js'
 import { courseRoutes } from './routes/courses.js'
 import { eventRoutes } from './routes/events.js'
+import { sessionAccount } from './lib/session.js'
 
 export async function buildApp() {
   // A default secret is fine for local work but would silently ship forgeable
@@ -28,7 +29,20 @@ export async function buildApp() {
 
   // Request logs are the first thing you want in dev and production, and the
   // last thing you want interleaved with test output.
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
+  //
+  // Behind Railway's proxy every connection comes from the proxy, so without
+  // trusting it `request.ip` is one address for the whole site — and every
+  // IP-keyed rate limit (sign-in above all) becomes one budget shared by
+  // everybody. Only the nearest hop is trusted: X-Forwarded-For entries
+  // further left are whatever the client chose to send.
+  const hops = Number(
+    process.env.TRUST_PROXY_HOPS ?? (process.env.NODE_ENV === 'production' ? 1 : 0)
+  )
+  const app = Fastify({
+    logger: process.env.NODE_ENV !== 'test',
+    // What `trustProxy: <n>` means, spelled as the function the types accept.
+    trustProxy: hops > 0 ? (_address: string, hop: number) => hop < hops : false,
+  })
 
   // `methods` defaults to GET,HEAD,POST, which fails the preflight for every
   // PATCH and DELETE route the web app calls (project edit, profile edit,
@@ -38,6 +52,20 @@ export async function buildApp() {
     credentials: true,
     // Every method a route uses: PUT is how an output's thumbnail is set.
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  })
+
+  // Security headers on every response. The API only ever answers with JSON,
+  // redirects and event streams, so the strict defaults cost nothing: never
+  // sniffed as something else, never framed, and resources only for pages on
+  // the same site (the web app is on the same registrable domain — see
+  // ARCHITECTURE.md § Deployment).
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+    reply.header('Cross-Origin-Resource-Policy', 'same-site')
+    if (process.env.NODE_ENV === 'production')
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   })
 
   await app.register(cookie)
@@ -86,10 +114,16 @@ export async function buildApp() {
   })
 
   app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      await request.jwtVerify()
-    } catch {
-      reply.code(401).send({ error: 'Unauthorized' })
+    const account = await sessionAccount(request)
+    if (!account) return reply.code(401).send({ error: 'Unauthorized' })
+    // A suspended account can still read, and still sign out, delete or
+    // export its own things (routes opt in with `allowSuspended`); every other
+    // write is refused here rather than route by route.
+    const allowed = request.method === 'GET' || request.routeOptions.config?.allowSuspended
+    if (account.suspendedAt && !allowed) {
+      return reply
+        .code(403)
+        .send({ error: 'A moderator has suspended this account', code: 'SUSPENDED' })
     }
   })
 

@@ -1,24 +1,27 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ProfileUser } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { useDocumentTitle, useFollow } from '../../lib/hooks'
 import { countTags, coursesOf } from '../../lib/queries'
 import { WeekActivity } from '../../components/activity/WeekActivity'
-import { ProjectCard, ProjectListRow } from '../../components/project'
+import { ProjectCard, ProjectListRow, ReportDialog } from '../../components/project'
 import {
   Avatar,
   Button,
   CardGrid,
   Chip,
+  Dialog,
   EmptyState,
   Eyebrow,
   Heading,
   Icon,
   LinkButton,
   LoadMore,
+  Menu,
+  MenuItem,
   Page,
   Panel,
   Spinner,
@@ -75,12 +78,111 @@ function ProfileLinks({ profile }: { profile: ProfileUser }) {
   )
 }
 
+/** Report and block, for somebody else's profile. */
+function ProfileMenu({ profile, onReport }: { profile: ProfileUser; onReport: () => void }) {
+  const qc = useQueryClient()
+  const toggle = useMutation({
+    mutationFn: () =>
+      profile.blockedByMe ? api.messages.unblock(profile.id) : api.messages.block(profile.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['profile', profile.id] })
+      qc.invalidateQueries({ queryKey: ['following'] })
+    },
+  })
+  return (
+    <Menu
+      width={230}
+      trigger={({ toggle: open, open: isOpen }) => (
+        <Button iconOnly icon="more" aria-label="More" aria-expanded={isOpen} onClick={open} />
+      )}
+    >
+      {(close) => (
+        <>
+          <MenuItem
+            icon="lock"
+            onSelect={() =>
+              (profile.blockedByMe ||
+                confirm(
+                  `Block ${profile.name}? Neither of you will be able to message, comment on, react to or follow the other. They won’t be told.`
+                )) &&
+              toggle.mutate()
+            }
+            close={close}
+          >
+            {profile.blockedByMe ? 'Unblock' : 'Block'}
+          </MenuItem>
+          <MenuItem icon="flag" onSelect={onReport} close={close}>
+            Report profile
+          </MenuItem>
+        </>
+      )}
+    </Menu>
+  )
+}
+
+/** Who follows someone, or who they follow. */
+function FollowListDialog({
+  userId,
+  direction,
+  onClose,
+}: {
+  userId: string
+  direction: 'followers' | 'following'
+  onClose: () => void
+}) {
+  const list = useInfiniteQuery({
+    queryKey: [direction, userId],
+    queryFn: ({ pageParam }) =>
+      direction === 'followers'
+        ? api.users.followers(userId, pageParam)
+        : api.users.following(userId, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last, all) => (last.length < 30 ? undefined : all.length * 30),
+  })
+  const people = list.data?.pages.flat() ?? []
+  return (
+    <Dialog
+      title={direction === 'followers' ? 'Followers' : 'Following'}
+      onClose={onClose}
+      width={440}
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {list.isLoading ? (
+        <Spinner />
+      ) : people.length === 0 ? (
+        <p className="text-15 text-muted">Nobody yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {people.map((p) => (
+            <li key={p.id}>
+              <Link
+                to={`/u/${p.id}`}
+                onClick={onClose}
+                className="flex items-center gap-3 text-ink"
+              >
+                <Avatar person={p} size={36} />
+                <span className="flex min-w-0 flex-col">
+                  <b className="text-15 font-semibold">{p.name}</b>
+                  {p.faculty && <span className="text-13 text-muted">{p.faculty}</span>}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {list.hasNextPage && <LoadMore query={list} />}
+    </Dialog>
+  )
+}
+
 /** The Profile board. */
 export default function ProfilePage() {
   const { id } = useParams<{ id: string }>()
   const { user: me } = useAuth()
   const [editing, setEditing] = useState(false)
   const [section, setSection] = useState<Section>('projects')
+  const [people, setPeople] = useState<'followers' | 'following' | null>(null)
+  const [reporting, setReporting] = useState(false)
   const follow = useFollow(id)
 
   const { data: profile, isLoading } = useQuery({
@@ -139,10 +241,13 @@ export default function ProfilePage() {
   // Counted from what the page has loaded — every project on a first page of
   // 24, which is all of them for nearly everyone.
   const skills = countTags(projects, { limit: 10 }).filter((t) => !t.course)
+  // Courses they have published in, counted by what each project was filed
+  // under; then the ones they say they take and have nothing in yet.
   const courseCounts = coursesOf(projects).map((code) => ({
     code,
-    n: projects.filter((p) => p.tags.some((t) => t.trim().toUpperCase() === code)).length,
+    n: projects.filter((p) => p.courseCode === code).length,
   }))
+  const taking = (profile.courses ?? []).filter((c) => !courseCounts.some((x) => x.code === c))
 
   const line = [
     profile.program ?? profile.faculty,
@@ -155,6 +260,15 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto w-full max-w-[1440px]">
       {editing && <EditProfileDialog onClose={() => setEditing(false)} />}
+      {people && (
+        <FollowListDialog userId={profile.id} direction={people} onClose={() => setPeople(null)} />
+      )}
+      {reporting && (
+        <ReportDialog
+          target={{ kind: 'user', userId: profile.id }}
+          onClose={() => setReporting(false)}
+        />
+      )}
       <Banner />
 
       <div className="-mt-12 flex flex-col items-start gap-3 px-4 md:-mt-16 md:flex-row md:items-end md:gap-7 md:px-6 xl:px-16">
@@ -193,9 +307,13 @@ export default function ProfilePage() {
             </Button>
           ) : (
             <>
-              <Button icon="comment" to={me ? `/messages/${profile.id}` : '/session'}>
-                Message
-              </Button>
+              {/* Hidden when they aren't taking new messages, or you blocked
+                  them. A conversation you already have stays in Messages. */}
+              {(profile.allowMessages !== false || !me) && !profile.blockedByMe && (
+                <Button icon="comment" to={me ? `/messages/${profile.id}` : '/session'}>
+                  Message
+                </Button>
+              )}
               {follow.canFollow && (
                 <Button
                   variant={follow.following ? 'default' : 'primary'}
@@ -211,6 +329,7 @@ export default function ProfilePage() {
                   Follow
                 </Button>
               )}
+              {me && <ProfileMenu profile={profile} onReport={() => setReporting(true)} />}
             </>
           )}
         </div>
@@ -246,8 +365,16 @@ export default function ProfilePage() {
             <div className="flex gap-7 border-y border-line py-4 md:gap-10">
               <Stat value={profile._count.ownedProjects} label="Projects" />
               <Stat value={profile._count.collaborations} label="Collaborations" />
-              <Stat value={profile._count.followers} label="Followers" />
-              <Stat value={profile._count.following} label="Following" />
+              <Stat
+                value={profile._count.followers}
+                label="Followers"
+                onClick={() => setPeople('followers')}
+              />
+              <Stat
+                value={profile._count.following}
+                label="Following"
+                onClick={() => setPeople('following')}
+              />
             </div>
           </div>
 
@@ -354,7 +481,7 @@ export default function ProfilePage() {
               </div>
             </Panel>
           )}
-          {courseCounts.length > 0 && (
+          {(courseCounts.length > 0 || taking.length > 0) && (
             <Panel title="Courses" className="gap-2.5 px-5.5 py-5">
               {courseCounts.map((c) => (
                 <Link
@@ -366,6 +493,16 @@ export default function ProfilePage() {
                   <span className="text-muted">
                     {c.n} project{c.n === 1 ? '' : 's'}
                   </span>
+                </Link>
+              ))}
+              {taking.map((code) => (
+                <Link
+                  key={code}
+                  to={`/explore?course=${encodeURIComponent(code)}`}
+                  className="flex items-center justify-between text-15"
+                >
+                  <b className="font-semibold">{code}</b>
+                  <span className="text-muted">Taking</span>
                 </Link>
               ))}
             </Panel>

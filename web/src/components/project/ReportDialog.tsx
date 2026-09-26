@@ -5,17 +5,48 @@ import { api } from '../../lib/api'
 import { REPORT_REASONS } from '../../lib/moderation'
 import { Button, Dialog, ErrorText, Field, Select, SuccessText, TextArea } from '../ui'
 
-export function ReportDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+/** What can be reported, and where each kind goes. */
+export type ReportTarget =
+  | { kind: 'project'; projectId: string }
+  | { kind: 'comment'; projectId: string; commentId: string }
+  | { kind: 'collection'; collectionId: string }
+  | { kind: 'user'; userId: string }
+  | { kind: 'activity'; slug: string; activityId: string }
+
+const NOUN: Record<ReportTarget['kind'], string> = {
+  project: 'project',
+  comment: 'comment',
+  collection: 'collection',
+  user: 'profile',
+  activity: 'event',
+}
+
+function sendReport(target: ReportTarget, body: { reason: ReportReason; details?: string }) {
+  switch (target.kind) {
+    case 'project':
+      return api.projects.report(target.projectId, body)
+    case 'comment':
+      return api.projects.reportComment(target.projectId, target.commentId, body)
+    case 'collection':
+      return api.collections.report(target.collectionId, body)
+    case 'user':
+      return api.users.report(target.userId, body)
+    case 'activity':
+      return api.orgs.reportActivity(target.slug, target.activityId, body)
+  }
+}
+
+export function ReportDialog({ target, onClose }: { target: ReportTarget; onClose: () => void }) {
   const [reason, setReason] = useState<ReportReason>(REPORT_REASONS[0].value)
   const [details, setDetails] = useState('')
   const send = useMutation({
-    mutationFn: () =>
-      api.projects.report(projectId, { reason, details: details.trim() || undefined }),
+    mutationFn: () => sendReport(target, { reason, details: details.trim() || undefined }),
   })
+  const noun = NOUN[target.kind]
 
   return (
     <Dialog
-      title="Report this project"
+      title={`Report this ${noun}`}
       onClose={onClose}
       footer={
         send.isSuccess ? (
@@ -52,7 +83,7 @@ export function ReportDialog({ projectId, onClose }: { projectId: string; onClos
               maxLength={1000}
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              placeholder="Which part of the project, and why…"
+              placeholder={`Which part of the ${noun}, and why…`}
             />
           </Field>
         </>

@@ -74,7 +74,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Frontend — accept/decline lives *in the notification row*, not on the project page: a pending collaborator can't open a `PRIVATE` project yet, so a link there would 404 until they accept
 - [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
 - [x] Phase 3's org-verification emails — `lib/orgEmails.ts`; `emailAdminsOfSubmission` on `POST /orgs/:slug/verify`, `emailContactOfDecision` on all three admin decisions. Best-effort: `sendEmail` no-ops without `RESEND_API_KEY`, so a missing key degrades rather than failing the request
-- [ ] No notification is emailed yet — the in-app feed is the only delivery channel. Worth revisiting once there's real usage, since an invite is exactly the kind of thing a student won't see until their next visit
+- [x] Email the notifications that need an answer — invitations, access requests, a new conversation, moderation decisions — with an opt-out in Settings (`lib/notificationEmails.ts`)
 
 **Trust & Safety**
 "Moderation policy for public projects" was an open question from prd.md's first draft ([prd.md § 12](prd.md#12-open-questions)) until the report → review → decision mechanism below shipped. What counts as a violation, and what happens on repeat offenses, is still a policy question rather than a code one.
@@ -232,3 +232,28 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Filed under a real course (`courseCode`), with course templates, and every maker's faculty credited
 - [x] One page to make and edit a project, publishing last
 
+
+## Pre-launch hardening
+
+- [x] Email ownership: password sign-ups confirm their address before they can sign in; registering never touches an existing account
+- [x] Password reset and change; sessions carry a version so a reset or "sign out everywhere" ends every other session
+- [x] Account deletion, data export and email preferences at `/settings`
+- [x] `trustProxy` behind Railway, so IP rate limits are per client
+- [x] Uploads streamed to storage and served with a type decided from the checked extension; SVG is download-only
+- [x] Input limits on every free-text field, and rate limits on comments, invites and joins
+- [x] Collaborators edit content; invitations can be seen, withdrawn, declined (deleted) and sent to addresses without an account; collaborators can leave
+- [x] TA access requests work for drafts and hidden projects, and a TA's access is never shown as a credit
+- [x] Comments: edit, delete (author, owner, moderator), report
+- [x] Reports on comments, collections, profiles and group events; account suspension; restoring a take-down
+- [x] Blocking covers comments, reactions and follows, not only messages
+- [x] Groups: invitations and join requests, roles, leaving, removing, renaming, deleting; editing events. The old verification columns are dropped
+- [x] Versions can be viewed and restored
+- [x] Profile counts respect visibility; follower and following lists
+- [x] UTSC course codes (CSCA08H3)
+- [x] Link previews and a sitemap through Cloudflare Pages Functions; a 404 page
+- [x] Security headers on the API and a Content-Security-Policy on the web app
+- [x] Graceful shutdown; hourly maintenance sweep
+- [ ] Error monitoring — pick a provider (see [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring))
+- [x] Licence: proprietary, all rights reserved (`LICENSE`)
+- [x] Course templates beyond CSC211H5: CSC301H1, CSC309H1, ECE496Y1, APS112H1, STA302H1, ECO375H1, ENV461H1
+- [ ] Database backups on Railway

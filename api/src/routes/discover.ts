@@ -56,7 +56,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
           ...(interpreted.tag
             ? [courseWhere(interpreted.tag) ?? { tags: { has: interpreted.tag } }]
             : []),
-          ...(interpreted.faculty ? [facultyWhere(interpreted.faculty, 'contains')] : []),
+          ...(interpreted.faculty ? [facultyWhere(interpreted.faculty)] : []),
           ...(onCampus ? [{ owner: { campus: onCampus } }] : []),
           ...(since ? [{ createdAt: { gte: since } }] : []),
         ],

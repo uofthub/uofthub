@@ -7,23 +7,10 @@
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
-    <script>
-      // Resolve the theme before first paint so nobody sees the wrong one flash.
-      // Must match lib/theme.tsx: the saved choice, else the OS preference.
-      ;(function () {
-        try {
-          var saved = localStorage.getItem('dark-mode')
-          var dark =
-            saved === null
-              ? window.matchMedia('(prefers-color-scheme: dark)').matches
-              : saved === 'true'
-          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-          document.querySelector('meta[name="theme-color"]').content = dark ? '#0f0f0f' : '#ffffff'
-        } catch (e) {
-          document.documentElement.dataset.theme = 'light'
-        }
-      })()
-    </script>
+    <!-- Blocking on purpose: it sets the theme before first paint. A file of
+         its own rather than inline, so the Content-Security-Policy in
+         public/_headers can refuse every inline script. -->
+    <script src="/theme.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

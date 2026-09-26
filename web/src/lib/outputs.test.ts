@@ -78,11 +78,18 @@ describe('cardAction', () => {
 
   it('sends a lead link where it points', () => {
     expect(
-      cardAction({ id: 'p', links, lead: { kind: 'VIDEO', label: 'Talk', fileId: null, linkId: 'l2' } })
+      cardAction({
+        id: 'p',
+        links,
+        lead: { kind: 'VIDEO', label: 'Talk', fileId: null, linkId: 'l2' },
+      })
     ).toMatchObject({ label: 'Watch', href: 'https://youtu.be/x' })
   })
 
   it('falls back to the links without a lead', () => {
-    expect(cardAction({ id: 'p', links })).toMatchObject({ label: 'Try it live', href: 'https://x.app/' })
+    expect(cardAction({ id: 'p', links })).toMatchObject({
+      label: 'Try it live',
+      href: 'https://x.app/',
+    })
   })
 })

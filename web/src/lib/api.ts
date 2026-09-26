@@ -12,7 +12,6 @@ import type {
   ProjectType,
   Notification,
   OrgActivity,
-  OrgStatus,
   ReactionKind,
   ReportReason,
   ReportStatus,
@@ -36,14 +35,44 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(error.error ?? 'Request failed')
+    throw new ApiError(error.error ?? 'Request failed', res.status, error.code)
   }
   return res.json()
 }
 
+/**
+ * A refused request: the API's message, plus the status and the machine code
+ * (`UNVERIFIED`, `SUSPENDED`) for the few places that answer them differently.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+/** Whether a failed query was a 404, as opposed to the network or the server failing. */
+export const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404
+
 const post = (body: unknown = {}): RequestInit => ({ method: 'POST', body: JSON.stringify(body) })
 
-export type MeUser = User & { role: 'STUDENT' | 'FACULTY'; isAdmin: boolean }
+type ReportBody = { reason: ReportReason; details?: string }
+
+export type MeUser = User & {
+  role: 'STUDENT' | 'FACULTY'
+  isAdmin: boolean
+  /** False for an account that only signs in with Microsoft. */
+  hasPassword: boolean
+  emailNotifications: boolean
+  /** Set while a moderator has suspended the account. */
+  suspendedAt: string | null
+}
+
+type CheckEmail = { checkEmail: true }
+type SignedIn = { id: string; email: string; name: string }
 
 export type ProjectFile = {
   id: string
@@ -69,7 +98,7 @@ export type FilePreview =
 export type ProjectSummary = Project & {
   links: ProjectLink[]
   /** Accepted collaborators only. */
-  collaborators: { user: Pick<User, 'id' | 'name' | 'avatarUrl'> }[]
+  collaborators: { title?: string | null; user: Pick<User, 'id' | 'name' | 'avatarUrl'> }[]
   _count: { comments: number }
   /**
    * Signed, short-lived URL for the project's first uploaded image, used as
@@ -98,6 +127,7 @@ export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
   collaborators: {
     user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
     accepted: boolean
+    title?: string | null
   }[]
   files: ProjectFile[]
   references: ProjectReference[]
@@ -106,6 +136,8 @@ export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
   following?: boolean
   /** Owner only: how many people follow it. */
   followerCount?: number
+  /** Whether the caller may edit its content: its owner, or a collaborator. */
+  canEdit: boolean
 }
 
 /**
@@ -184,8 +216,13 @@ export type ProfileUser = {
   courses?: string[]
   allowMessages?: boolean
   createdAt: string
+  /** Of what the caller can see. */
   _count: { ownedProjects: number; followers: number; following: number; collaborations: number }
+  /** Whether the signed-in caller has blocked this person. */
+  blockedByMe: boolean
 }
+
+export type PersonSummary = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
 
 /** A collection as a list shows it: a few covers and how many projects this reader can see. */
 export type CollectionSummary = {
@@ -268,6 +305,8 @@ export type ProjectVersion = {
   note?: string | null
   title: string
   description?: string
+  sections?: ProjectSection[] | null
+  details?: ProjectDetailItem[] | null
   tags: string[]
   /** Absent on versions saved before these were recorded. */
   courseCode?: string | null
@@ -359,13 +398,33 @@ export type Spotlight = {
 
 export type UpcomingEvent = OrgActivity & { org: { slug: string; name: string; campus?: Campus } }
 
-export type AccessRequest = {
-  projectId: string
+/** One person on a project, as its owner's People dialog lists them. */
+export type ProjectPerson = {
   userId: string
-  role: 'VIEWER'
-  accepted: boolean
+  user: Pick<User, 'id' | 'name' | 'email' | 'avatarUrl' | 'faculty' | 'campus'>
+  /** What they did, as the owner put it: "Designer". */
+  title: string | null
   invitedAt: string
-  user: Pick<User, 'id' | 'name' | 'email' | 'faculty'>
+}
+
+export type ProjectPeople = {
+  collaborators: ProjectPerson[]
+  /** Invited, not yet answered. */
+  pending: ProjectPerson[]
+  /** Invited by an address that has no account yet. */
+  emailInvites: { email: string; title: string | null; invitedAt: string }[]
+  /** TAs and instructors granted access to read it. */
+  viewers: ProjectPerson[]
+  accessRequests: ProjectPerson[]
+}
+
+/** An invitation waiting for the signed-in student's answer. */
+export type PendingInvite = {
+  projectId: string
+  projectTitle: string
+  owner: Pick<User, 'id' | 'name' | 'avatarUrl'>
+  title: string | null
+  invitedAt: string
 }
 
 export type Org = {
@@ -379,26 +438,38 @@ export type Org = {
   websiteUrl?: string
   discordUrl?: string
   groupMeUrl?: string
-  status: OrgStatus
   /** Members only — everyone else gets these fields stripped by the API. */
   contactEmail?: string
   contactRole?: string
-  verificationNote?: string
-  reviewNote?: string
-  verificationDeadline?: string
-  verifiedAt?: string
   createdAt: string
   _count?: { members: number; projects: number }
 }
 
+export type OrgRole = 'MEMBER' | 'ADMIN'
+export type OrgMemberStatus = 'ACTIVE' | 'INVITED' | 'REQUESTED'
+
+export type OrgMember = {
+  orgId: string
+  userId: string
+  role: OrgRole
+  status: OrgMemberStatus
+  joinedAt: string
+  user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
+}
+
+/** A group that invited the signed-in student. */
+export type OrgInvite = OrgRef & { role: OrgRole; invitedAt: string }
+
 /** `GET /orgs/:slug` — the group page's full payload. */
 export type OrgDetail = Org & {
-  members: {
-    orgId: string
-    userId: string
-    role: string
-    user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
-  }[]
+  /** Active members. */
+  members: OrgMember[]
+  /** Admins only: invitations out, and requests to join. */
+  invited?: OrgMember[]
+  requests?: OrgMember[]
+  /** Where the caller stands with the group, and their role in it. */
+  myStatus: OrgMemberStatus | null
+  myRole: OrgRole | null
   activities: OrgActivity[]
   projects: {
     orgId: string
@@ -410,26 +481,25 @@ export type OrgDetail = Org & {
   }[]
 }
 
-/** A group awaiting a decision, as the admin queue sees it. */
-export type AdminOrg = Org & {
-  members: { userId: string; role: string; user: Pick<User, 'id' | 'name' | 'email'> }[]
-  _count: { members: number; projects: number; activities: number }
-}
-
-/** For a group left over from the old self-serve verification flow. */
-export type OrgDecision = 'APPROVE' | 'DENY'
-
 /** A report as the moderation queue sees it — reporter and project inlined. */
+export type ReportTargetType = 'PROJECT' | 'COMMENT' | 'COLLECTION' | 'USER' | 'ORG_ACTIVITY'
+
 export type AdminReport = {
   id: string
+  targetType: ReportTargetType
   reason: ReportReason
   details?: string
+  /** What was reported, as it read when it was reported. */
+  excerpt?: string | null
   status: ReportStatus
   createdAt: string
   reviewedAt?: string
   reviewNote?: string
   reporter: Pick<User, 'id' | 'name' | 'email'>
   reviewedBy?: { id: string; name: string }
+  /** Whoever posted what was reported. */
+  subject: (Pick<User, 'id' | 'name' | 'email'> & { suspendedAt: string | null }) | null
+  /** The project reported, or the one a reported comment is on. */
   project: {
     id: string
     title: string
@@ -437,7 +507,24 @@ export type AdminReport = {
     visibility: Visibility
     takenDownAt?: string
     owner: Pick<User, 'id' | 'name' | 'email'>
-  }
+  } | null
+  comment: { id: string; body: string; deletedAt: string | null } | null
+  collection: { id: string; title: string; description?: string | null } | null
+  activity: {
+    id: string
+    title: string
+    description?: string | null
+    org: { slug: string; name: string }
+  } | null
+}
+
+/** An account as the moderators' Users tab lists it. */
+export type AdminUser = Pick<User, 'id' | 'name' | 'email'> & {
+  createdAt: string
+  isAdmin: boolean
+  suspendedAt: string | null
+  messagingSuspendedAt: string | null
+  _count: { ownedProjects: number; comments: number; reportsAbout: number }
 }
 
 export type ReportDecision = 'DISMISS' | 'WARN' | 'TAKE_DOWN'
@@ -493,9 +580,19 @@ export const api = {
     me: () => request<MeUser>('/auth/me'),
     logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
     login: (body: { email: string; password: string }) =>
-      request<{ id: string; email: string; name: string }>('/auth/login', post(body)),
+      request<SignedIn>('/auth/login', post(body)),
     register: (body: { name: string; email: string; password: string }) =>
-      request<{ id: string; email: string; name: string }>('/auth/register', post(body)),
+      request<CheckEmail>('/auth/register', post(body)),
+    verify: (token: string) => request<SignedIn>('/auth/verify', post({ token })),
+    resendVerification: (email: string) =>
+      request<CheckEmail>('/auth/resend-verification', post({ email })),
+    forgotPassword: (email: string) =>
+      request<CheckEmail>('/auth/forgot-password', post({ email })),
+    resetPassword: (token: string, password: string) =>
+      request<SignedIn>('/auth/reset-password', post({ token, password })),
+    changePassword: (body: { currentPassword?: string; newPassword: string }) =>
+      request<{ ok: boolean }>('/auth/password', post(body)),
+    logoutEverywhere: () => request<{ ok: boolean }>('/auth/logout-everywhere', post()),
   },
   projects: {
     list: (params?: {
@@ -540,6 +637,18 @@ export const api = {
     comments: (id: string) => request<CommentThread[]>(`/projects/${id}/comments`),
     addComment: (id: string, body: string, parentId?: string) =>
       request<CommentThread>(`/projects/${id}/comments`, post({ body, parentId })),
+    editComment: (id: string, commentId: string, body: string) =>
+      request<{ id: string; body: string; editedAt: string }>(
+        `/projects/${id}/comments/${commentId}`,
+        { method: 'PATCH', body: JSON.stringify({ body }) }
+      ),
+    deleteComment: (id: string, commentId: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/comments/${commentId}`, { method: 'DELETE' }),
+    reportComment: (id: string, commentId: string, body: ReportBody) =>
+      request<{ id: string; status: ReportStatus }>(
+        `/projects/${id}/comments/${commentId}/report`,
+        post(body)
+      ),
     helpful: (id: string, commentId: string) =>
       request<{ helpful: boolean; helpfulCount: number }>(
         `/projects/${id}/comments/${commentId}/helpful`,
@@ -549,17 +658,26 @@ export const api = {
       request<ProjectLink>(`/projects/${id}/links`, post(link)),
     deleteLink: (id: string, linkId: string) =>
       request<{ ok: boolean }>(`/projects/${id}/links/${linkId}`, { method: 'DELETE' }),
-    inviteCollaborator: (id: string, email: string) =>
-      request<unknown>(`/projects/${id}/collaborators`, post({ email })),
+    people: (id: string) => request<ProjectPeople>(`/projects/${id}/people`),
+    cancelEmailInvite: (id: string, email: string) =>
+      request<{ ok: boolean }>(`/projects/${id}/email-invites/${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+      }),
+    inviteCollaborator: (id: string, email: string, title?: string) =>
+      request<unknown>(`/projects/${id}/collaborators`, post({ email, title })),
     versions: (id: string) => request<ProjectVersion[]>(`/projects/${id}/versions`),
     /** A snapshot; with a note it is also an update on the project's timeline. */
+    restoreVersion: (id: string, versionNum: number) =>
+      request<{ restored: number; savedAs: number }>(
+        `/projects/${id}/versions/${versionNum}/restore`,
+        post()
+      ),
     createVersion: (id: string, note?: string) =>
       request<ProjectVersion>(`/projects/${id}/versions`, post({ note })),
     fork: (id: string) => request<ProjectSummary>(`/projects/${id}/fork`, post()),
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
     requestAccess: (id: string) =>
       request<{ ok: boolean }>(`/projects/${id}/request-access`, post()),
-    accessRequests: (id: string) => request<AccessRequest[]>(`/projects/${id}/access-requests`),
     approveAccessRequest: (id: string, userId: string) =>
       request<unknown>(`/projects/${id}/collaborators/${userId}`, {
         method: 'PATCH',
@@ -624,8 +742,15 @@ export const api = {
   admin: {
     reports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminReport[]>(`/admin/reports?status=${status}`),
-    decide: (id: string, body: { decision: ReportDecision; note?: string }) =>
+    decide: (id: string, body: { decision: ReportDecision; note?: string; suspend?: boolean }) =>
       request<AdminReport>(`/admin/reports/${id}/decision`, post(body)),
+    restoreProject: (id: string, note?: string) =>
+      request<{ ok: boolean }>(`/admin/projects/${id}/restore`, post({ note })),
+    users: (q: string) => request<AdminUser[]>(`/admin/users?q=${encodeURIComponent(q)}`),
+    suspend: (userId: string, note?: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/suspend`, post({ note })),
+    liftSuspension: (userId: string) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}/suspension`, { method: 'DELETE' }),
     messageReports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminMessageReport[]>(`/admin/message-reports?status=${status}`),
     decideMessageReport: (id: string, body: { decision: MessageReportDecision; note?: string }) =>
@@ -634,10 +759,6 @@ export const api = {
       request<{ ok: boolean }>(`/admin/users/${userId}/messaging-suspension`, {
         method: 'DELETE',
       }),
-    orgs: (status: OrgStatus | 'all' = 'IN_REVIEW') =>
-      request<AdminOrg[]>(`/admin/orgs?status=${status}`),
-    decideOrg: (slug: string, body: { decision: OrgDecision; note?: string }) =>
-      request<AdminOrg>(`/admin/orgs/${slug}/decision`, post(body)),
     spotlights: () => request<AdminSpotlight[]>('/admin/spotlight'),
     pickSpotlight: (body: { projectId: string; note?: string; weekOf?: string }) =>
       request<AdminSpotlight>('/admin/spotlight', post(body)),
@@ -668,6 +789,7 @@ export const api = {
     update: (
       slug: string,
       body: Partial<{
+        name: string
         description: string
         campus: string
         websiteUrl: string
@@ -682,12 +804,43 @@ export const api = {
     ) => request<OrgActivity>(`/orgs/${slug}/activities`, post(body)),
     deleteActivity: (slug: string, id: string) =>
       request<{ ok: boolean }>(`/orgs/${slug}/activities/${id}`, { method: 'DELETE' }),
+    reportActivity: (slug: string, id: string, body: ReportBody) =>
+      request<{ id: string; status: ReportStatus }>(
+        `/orgs/${slug}/activities/${id}/report`,
+        post(body)
+      ),
     addProject: (slug: string, projectId: string) =>
       request<unknown>(`/orgs/${slug}/projects`, post({ projectId })),
     removeProject: (slug: string, projectId: string) =>
       request<{ ok: boolean }>(`/orgs/${slug}/projects/${projectId}`, { method: 'DELETE' }),
-    addMember: (slug: string, email: string) =>
-      request<unknown>(`/orgs/${slug}/members`, post({ email })),
+    addMember: (slug: string, email: string, role: OrgRole = 'MEMBER') =>
+      request<unknown>(`/orgs/${slug}/members`, post({ email, role })),
+    join: (slug: string) => request<{ status: OrgMemberStatus }>(`/orgs/${slug}/join`, post()),
+    answerInvite: (slug: string, accepted: boolean) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/membership`, post({ accepted })),
+    updateMember: (slug: string, userId: string, body: { role?: OrgRole; approve?: boolean }) =>
+      request<OrgMember>(`/orgs/${slug}/members/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    removeMember: (slug: string, userId: string) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/members/${userId}`, { method: 'DELETE' }),
+    delete: (slug: string) => request<{ ok: boolean }>(`/orgs/${slug}`, { method: 'DELETE' }),
+    updateActivity: (
+      slug: string,
+      id: string,
+      body: {
+        title?: string
+        description?: string
+        date?: string
+        link?: string
+        imageUrl?: string
+      }
+    ) =>
+      request<OrgActivity>(`/orgs/${slug}/activities/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
   },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
@@ -698,6 +851,8 @@ export const api = {
     collaborations: (id: string, params?: { skip?: number }) =>
       request<ProjectSummary[]>(paged(`/users/${id}/collaborations`, params?.skip)),
     /** Verified groups the caller belongs to — what a project can be linked to. */
+    invites: () => request<PendingInvite[]>('/users/me/invites'),
+    orgInvites: () => request<OrgInvite[]>('/users/me/org-invites'),
     myOrgs: () => request<(OrgRef & { id: string })[]>('/users/me/orgs'),
     /** The caller's own saved projects. */
     saved: (params?: { skip?: number }) =>
@@ -709,7 +864,7 @@ export const api = {
         faculty: string
         campus: string
         program: string
-        classYear: number
+        classYear: number | null
         bio: string
         openTo: string[]
         websiteUrl: string | null
@@ -717,17 +872,31 @@ export const api = {
         linkedinUrl: string | null
         courses: string[]
         allowMessages: boolean
+        emailNotifications: boolean
       }>
     ) => request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
+    /** A top-level download: the browser saves the JSON the API sends. */
+    exportUrl: () => `${API_URL}/users/me/export`,
+    deleteAccount: (confirmEmail: string) =>
+      request<{ ok: boolean }>('/users/me', {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmEmail }),
+      }),
     follow: (id: string) =>
       request<{ following: boolean }>(`/users/${id}/follow`, { method: 'POST' }),
     followingMe: (id: string) => request<{ following: boolean }>(`/users/${id}/follow/me`),
+    followers: (id: string, skip = 0) =>
+      request<PersonSummary[]>(`/users/${id}/followers${skip ? `?skip=${skip}` : ''}`),
+    following: (id: string, skip = 0) =>
+      request<PersonSummary[]>(`/users/${id}/following${skip ? `?skip=${skip}` : ''}`),
     uploadAvatar: (file: File) => {
       const form = new FormData()
       form.append('file', file)
       return request<MeUser>('/users/me/avatar', { method: 'POST', body: form })
     },
     deleteAvatar: () => request<{ ok: boolean }>('/users/me/avatar', { method: 'DELETE' }),
+    report: (id: string, body: ReportBody) =>
+      request<{ id: string; status: ReportStatus }>(`/users/${id}/report`, post(body)),
   },
   courses: {
     /** 404s (as an error) for a course without one, which is most of them. */
@@ -756,6 +925,8 @@ export const api = {
         body: JSON.stringify(body),
       }),
     delete: (id: string) => request<{ ok: boolean }>(`/collections/${id}`, { method: 'DELETE' }),
+    report: (id: string, body: ReportBody) =>
+      request<{ id: string; status: ReportStatus }>(`/collections/${id}/report`, post(body)),
     add: (id: string, projectId: string) =>
       request<{ ok: boolean }>(`/collections/${id}/items`, post({ projectId })),
     remove: (id: string, projectId: string) =>
@@ -776,8 +947,10 @@ export const api = {
       request<{ id: string; status: ReportStatus }>(`/messages/${userId}/report`, post(body)),
   },
   notifications: {
-    list: () =>
-      request<{ notifications: Notification[]; unreadCount: number }>('/users/me/notifications'),
+    list: (before?: string) =>
+      request<{ notifications: Notification[]; unreadCount: number; nextBefore: string | null }>(
+        `/users/me/notifications${before ? `?before=${encodeURIComponent(before)}` : ''}`
+      ),
     markRead: (id: string) =>
       request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, post()),
     markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', post()),

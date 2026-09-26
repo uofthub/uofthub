@@ -1,11 +1,9 @@
 import type { ReactNode } from 'react'
 import { cx } from './cx'
-import { soonProps } from './soon'
 
 export type TabOption<T extends string> = {
   value: T
   label: ReactNode
-  soon?: boolean | string
 }
 
 type TabsProps<T extends string> = {
@@ -34,9 +32,7 @@ function TabButtons<T extends string>({
         role="tab"
         aria-selected={selected}
         className={cx(item(selected), itemClassName)}
-        {...(o.soon
-          ? soonProps(typeof o.soon === 'string' ? o.soon : undefined)
-          : { onClick: () => onChange(o.value) })}
+        onClick={() => onChange(o.value)}
       >
         {o.label}
       </button>

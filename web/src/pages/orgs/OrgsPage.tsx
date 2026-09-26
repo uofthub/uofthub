@@ -6,7 +6,6 @@ import { api, type Org } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { CAMPUS_SHORT, CAMPUSES } from '../../lib/campus'
 import { useDocumentTitle } from '../../lib/hooks'
-import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import { CONTACT_EMAIL } from '../../lib/site'
 import {
   Button,
@@ -15,12 +14,10 @@ import {
   Chip,
   cx,
   EmptyState,
-  Heading,
   Icon,
   Page,
   PageLede,
   PageTitle,
-  Pill,
   Spinner,
 } from '../../components/ui'
 import { CreateOrgDialog } from './CreateOrgDialog'
@@ -53,9 +50,6 @@ function OrgCard({ org }: { org: Org }) {
         <p className="line-clamp-2 text-14 leading-[1.45] text-ink-3">{org.description}</p>
       )}
       <div className="mt-auto flex flex-wrap items-center gap-3 text-13">
-        {org.status !== 'VERIFIED' && (
-          <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
-        )}
         {org._count && (
           <span className="text-muted">
             {org._count.members} members · {org._count.projects} projects
@@ -77,9 +71,6 @@ export default function OrgsPage() {
     queryKey: ['orgs', campus],
     queryFn: () => api.orgs.list({ campus: campus || undefined }),
   })
-  // Only a group's own members are ever sent an unverified group.
-  const verified = orgs.filter((o) => o.status === 'VERIFIED')
-  const mine = orgs.filter((o) => o.status !== 'VERIFIED')
 
   return (
     <Page width="wide" className="flex flex-col gap-8">
@@ -123,29 +114,13 @@ export default function OrgsPage() {
         ))}
       </div>
 
-      {mine.length > 0 && (
-        <section className="flex flex-col gap-3.5">
-          <div>
-            <Heading>Your groups, waiting for approval</Heading>
-            <p className="mt-1 text-14 text-muted">
-              Only members can see these until a moderator approves them.
-            </p>
-          </div>
-          <CardGrid>
-            {mine.map((o) => (
-              <OrgCard key={o.id} org={o} />
-            ))}
-          </CardGrid>
-        </section>
-      )}
-
       {isLoading ? (
         <Spinner />
-      ) : verified.length === 0 ? (
-        <EmptyState icon="users" title="No verified groups yet" />
+      ) : orgs.length === 0 ? (
+        <EmptyState icon="users" title="No groups yet" />
       ) : (
         <CardGrid>
-          {verified.map((o) => (
+          {orgs.map((o) => (
             <OrgCard key={o.id} org={o} />
           ))}
         </CardGrid>

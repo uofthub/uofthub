@@ -1,6 +1,7 @@
 import type { NotificationType, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { publish } from './live.js'
+import { emailNotification } from './notificationEmails.js'
 
 /**
  * Writing to somebody's notification feed.
@@ -29,6 +30,7 @@ export async function notify(
     data: { userId, type, key, payload: payload as Prisma.InputJsonValue },
   })
   await publish([userId], 'notification')
+  emailNotification([userId], type, payload)
 }
 
 /**
@@ -114,4 +116,5 @@ export async function notifyMany(
     })),
   })
   await publish(audience, 'notification')
+  emailNotification(audience, type, payload)
 }

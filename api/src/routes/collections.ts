@@ -4,6 +4,7 @@ import { db } from '../db/client.js'
 import { getOptionalUserId, isListed, visibleProjectWhere } from '../lib/visibility.js'
 import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { withCovers } from '../lib/covers.js'
+import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 
 /**
  * Collections: a student's hand-picked set of projects ("Best of UTM 2026").
@@ -332,6 +333,32 @@ export const collectionRoutes: FastifyPluginAsync = async (app) => {
         where: { collectionId: found.collection.id, projectId: request.params.projectId },
       })
       return { ok: true, inCollection: false }
+    }
+  )
+
+  // POST /collections/:id/report — { reason, details? }
+  app.post<{ Params: { id: string }; Body: { reason?: string; details?: string } }>(
+    '/:id/report',
+    { preHandler: [app.authenticate], config: reportRateLimit },
+    async (request, reply) => {
+      const reason = request.body?.reason
+      if (!isReportReason(reason))
+        return reply.code(400).send({ error: 'A valid reason is required' })
+      const collection = await db.collection.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, ownerId: true, title: true, description: true },
+      })
+      if (!collection) return reply.code(404).send({ error: 'Not found' })
+      const report = await fileReport({
+        reporterId: request.user.sub,
+        subjectUserId: collection.ownerId,
+        target: { targetType: 'COLLECTION', collectionId: collection.id },
+        reason,
+        details: request.body.details,
+        excerpt: [collection.title, collection.description].filter(Boolean).join('\n\n'),
+      })
+      if ('error' in report) return reply.code(report.status).send({ error: report.error })
+      return reply.code(201).send(report)
     }
   )
 }

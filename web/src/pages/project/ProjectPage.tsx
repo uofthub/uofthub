@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { api, isNotFound } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { facultyByName } from '../../lib/faculties'
 import { useDocumentTitle } from '../../lib/hooks'
 import { courseOf } from '../../lib/projectView'
 import { CONTACT_EMAIL } from '../../lib/site'
-import { Button, cx, EmptyState, Icon, Notice, Page, Spinner } from '../../components/ui'
+import {
+  Button,
+  cx,
+  EmptyState,
+  ErrorText,
+  Icon,
+  Notice,
+  Page,
+  Spinner,
+  SuccessText,
+} from '../../components/ui'
 import { Gallery } from './Gallery'
 import { InfoCard } from './InfoCard'
 import { UpdateDialog } from './OwnerDialogs'
@@ -17,6 +27,24 @@ import { Comments, Related, Updates } from './Sections'
 /** The page's two columns: the story, and a 440px column of facts beside it. */
 const grid = 'grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_440px] xl:gap-8'
 
+/**
+ * For a TA or instructor handed a link to work they can't see yet — a draft,
+ * or course work hidden until after grading. The owner decides.
+ */
+function RequestAccess({ projectId }: { projectId: string }) {
+  const ask = useMutation({ mutationFn: () => api.projects.requestAccess(projectId) })
+  if (ask.isSuccess)
+    return <SuccessText>Asked. You’ll get a notification when they decide.</SuccessText>
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <Button variant="primary" icon="lock" onClick={() => ask.mutate()} disabled={ask.isPending}>
+        Request access
+      </Button>
+      {ask.isError && <ErrorText>{ask.error.message}</ErrorText>}
+    </div>
+  )
+}
+
 /** The Project page board. */
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -24,10 +52,17 @@ export default function ProjectPage() {
   const { user } = useAuth()
   const [updating, setUpdating] = useState(false)
 
-  const { data: project, isLoading } = useQuery({
+  const {
+    data: project,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['project', id],
     queryFn: () => api.projects.get(id!),
     enabled: !!id,
+    // A 404 is an answer, not a blip worth three more tries.
+    retry: (count, err) => !isNotFound(err) && count < 2,
   })
   const { data: versions = [] } = useQuery({
     queryKey: ['versions', id],
@@ -42,6 +77,19 @@ export default function ProjectPage() {
   }, [project, hash])
 
   if (isLoading) return <Spinner />
+  if (error && !isNotFound(error)) {
+    return (
+      <Page>
+        <EmptyState
+          icon="alert"
+          title="This project didn’t load"
+          action={<Button onClick={() => refetch()}>Try again</Button>}
+        >
+          Something went wrong on our side or with the connection.
+        </EmptyState>
+      </Page>
+    )
+  }
   if (!project) {
     return (
       <Page>
@@ -49,18 +97,24 @@ export default function ProjectPage() {
           icon="eyeOff"
           title="This project isn’t here"
           action={
-            <Button variant="primary" to="/explore">
-              Explore projects
-            </Button>
+            user?.role === 'FACULTY' && id ? (
+              <RequestAccess projectId={id} />
+            ) : (
+              <Button variant="primary" to={user ? '/explore' : '/session'}>
+                {user ? 'Explore projects' : 'Log in'}
+              </Button>
+            )
           }
         >
-          It may have been deleted, or it is private to the people who made it.
+          It may have been deleted, or it is private to the people who made it
+          {user ? '.' : ' — if you were given the link, log in; it may be shared with U of T only.'}
+          {user?.role === 'FACULTY' &&
+            ' If a student gave you this link to review their work, ask them for access.'}
         </EmptyState>
       </Page>
     )
   }
 
-  const isOwner = user?.id === project.ownerId
   const course = courseOf(project)
   const faculty = project.owner?.faculty
 
@@ -103,7 +157,7 @@ export default function ProjectPage() {
       )}
 
       <div className={grid}>
-        <Gallery project={project} isOwner={isOwner} />
+        <Gallery project={project} isOwner={project.canEdit} />
         <InfoCard project={project} latest={versions[0]} />
       </div>
 
@@ -115,7 +169,7 @@ export default function ProjectPage() {
           <Updates
             project={project}
             versions={versions}
-            isOwner={isOwner}
+            isOwner={project.canEdit}
             onPost={() => setUpdating(true)}
           />
           <Comments project={project} />

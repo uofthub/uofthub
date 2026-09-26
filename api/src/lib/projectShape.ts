@@ -2,6 +2,7 @@ import type { Prisma, ReactionKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import { withCovers } from './covers.js'
 import { signedDownloadUrl } from './storage.js'
+import { thumbnailContentType } from './outputs.js'
 
 /**
  * The one shape every project list returns — directory, feed, profile,
@@ -23,16 +24,16 @@ export const OWNER_SELECT = {
 export const CARD_INCLUDE = {
   owner: OWNER_SELECT,
   links: true,
-  // Accepted only: an invitation nobody has answered is not a credit.
+  // Accepted collaborators only: an invitation nobody has answered is not a
+  // credit, and nor is a TA's viewer access — that is access to the work, not
+  // a part in making it.
   collaborators: {
-    where: { accepted: true },
-    select: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    where: { accepted: true, role: 'COLLABORATOR' },
+    select: { title: true, user: { select: { id: true, name: true, avatarUrl: true } } },
   },
   _count: { select: { comments: true } },
-  // "Built with UofT Robotics" — only verified groups: an unverified page is
-  // invisible to everyone but its members, and so is being linked to it.
+  // "Built with UofT Robotics".
   orgProjects: {
-    where: { org: { status: 'VERIFIED' } },
     select: { org: { select: { slug: true, name: true, type: true } } },
   },
 } satisfies Prisma.ProjectInclude
@@ -155,7 +156,10 @@ type ContentRow = Prisma.ProjectGetPayload<{ include: typeof CONTENT_INCLUDE }>
 async function signThumbnail(key: string | null): Promise<string | undefined> {
   if (!key) return undefined
   try {
-    return await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' })
+    return await signedDownloadUrl(key, 'thumbnail', {
+      disposition: 'inline',
+      contentType: thumbnailContentType(key),
+    })
   } catch {
     return undefined
   }

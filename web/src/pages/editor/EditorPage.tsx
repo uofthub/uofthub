@@ -187,10 +187,10 @@ export default function EditorPage() {
     )
   }
   if ((id && project.isLoading) || (!id && template.isLoading)) return <Spinner />
-  if (id && (!project.data || project.data.ownerId !== user.id)) {
+  if (id && !project.data?.canEdit) {
     return (
       <Page>
-        <EmptyState icon="lock" title="Only the project’s owner can edit it">
+        <EmptyState icon="lock" title="Only the project’s owner and collaborators can edit it">
           <Link to={id ? `/projects/${id}` : '/'}>Back to the project</Link>
         </EmptyState>
       </Page>
@@ -225,6 +225,8 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
   const [invite, setInvite] = useState({ email: '', role: '' })
 
   const editing = !!project
+  // A collaborator edits the work; its visibility stays with the owner.
+  const isOwner = !project || project.ownerId === user?.id
   const takenDown = !!project?.takenDownAt
   const update = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const updateOutput = (key: string, patch: Partial<DraftOutput>) =>
@@ -306,7 +308,7 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
 
   const save = useMutation({
     mutationFn: (as: Visibility | undefined) =>
-      saveDraft(draft, { projectId, visibility: as }, api.projects),
+      saveDraft(draft, { projectId, visibility: as, publish: isOwner }, api.projects),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['projects'] })
       qc.invalidateQueries({ queryKey: ['userProjects'] })
@@ -711,59 +713,62 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
           </EditorCard>
         )}
 
-        <EditorCard title="Who can see this?" className="gap-3.5">
-          {takenDown ? (
-            <p className="text-14 text-muted">
-              A moderator took this project down, so it stays private to you and your collaborators.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3 md:flex-row">
-              {choices.map((v) => {
-                const on = v.value === visibility
-                return (
-                  <label
-                    key={v.value}
-                    className={cx(
-                      choice(on),
-                      'relative flex flex-1 cursor-pointer flex-col gap-1.5 rounded-xl p-4'
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="visibility"
-                      checked={on}
-                      onChange={() => setVisibility(v.value)}
-                      className="absolute top-4 right-4 m-0 size-4.5 accent-navy-ink"
-                    />
-                    <span className="text-navy-ink">
-                      <Icon name={v.icon} size={20} />
-                    </span>
-                    <span className="text-15 font-semibold">{v.label}</span>
-                    <span className="text-13 leading-[1.4] text-muted">{v.hint}</span>
-                  </label>
-                )
-              })}
-            </div>
-          )}
-          <Field
-            label="Keep it hidden until"
-            hint="Optional. Until this day (Toronto time) only you and your collaborators can see it — useful for course work before grades are out."
-          >
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={draft.showFrom}
-                onChange={(e) => update({ showFrom: e.target.value })}
-                className="w-50"
-              />
-              {draft.showFrom && (
-                <Button size="sm" variant="ghost" onClick={() => update({ showFrom: '' })}>
-                  Clear
-                </Button>
-              )}
-            </div>
-          </Field>
-        </EditorCard>
+        {isOwner && (
+          <EditorCard title="Who can see this?" className="gap-3.5">
+            {takenDown ? (
+              <p className="text-14 text-muted">
+                A moderator took this project down, so it stays private to you and your
+                collaborators.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3 md:flex-row">
+                {choices.map((v) => {
+                  const on = v.value === visibility
+                  return (
+                    <label
+                      key={v.value}
+                      className={cx(
+                        choice(on),
+                        'relative flex flex-1 cursor-pointer flex-col gap-1.5 rounded-xl p-4'
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        checked={on}
+                        onChange={() => setVisibility(v.value)}
+                        className="absolute top-4 right-4 m-0 size-4.5 accent-navy-ink"
+                      />
+                      <span className="text-navy-ink">
+                        <Icon name={v.icon} size={20} />
+                      </span>
+                      <span className="text-15 font-semibold">{v.label}</span>
+                      <span className="text-13 leading-[1.4] text-muted">{v.hint}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+            <Field
+              label="Keep it hidden until"
+              hint="Optional. Until this day (Toronto time) only you and your collaborators can see it — useful for course work before grades are out."
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={draft.showFrom}
+                  onChange={(e) => update({ showFrom: e.target.value })}
+                  className="w-50"
+                />
+                {draft.showFrom && (
+                  <Button size="sm" variant="ghost" onClick={() => update({ showFrom: '' })}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </Field>
+          </EditorCard>
+        )}
 
         {failed.length > 0 && (
           <Notice

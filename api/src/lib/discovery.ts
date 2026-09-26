@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 import { CAMPUSES } from './campus.js'
+import { FACULTIES } from './faculties.js'
 
 /**
  * Turns "AI projects from Engineering students this year" into the filters the
@@ -17,24 +18,19 @@ import { CAMPUSES } from './campus.js'
  * in is a change to `parseQuery`, not to the route.
  */
 
-/** Faculties the model may choose from. Anything else is dropped by the schema. */
-export const FACULTIES = [
-  'Arts & Science',
-  'Engineering',
-  'Medicine',
-  'Law',
-  'Education',
-  'Rotman',
-  'Music',
-  'Architecture',
-  'Information',
-  'Kinesiology',
-] as const
+/**
+ * Faculties the model may choose from: the same fixed list profiles are
+ * filled from (lib/faculties.ts), so a chosen faculty matches exactly.
+ * Anything else is dropped by the schema.
+ */
+export { FACULTIES }
 
 const DiscoverFilters = z.object({
   search: z
     .string()
-    .describe('Keywords to match against a project title, description or tags. Omit if the query has no topic.')
+    .describe(
+      'Keywords to match against a project title, description or tags. Omit if the query has no topic.'
+    )
     .nullable(),
   faculty: z
     .enum(FACULTIES)
@@ -78,6 +74,8 @@ Fill only the fields the request actually implies, and leave every other field n
 Examples:
 - "show me machine learning projects" → search: "machine learning"
 - "trending engineering projects" → faculty: "Engineering", sort: "trending"
+- "what are Rotman students making" → faculty: "Rotman Commerce"
+- "nursing research" → search: "research", faculty: "Nursing"
 - "what have students built in CSC309 this year" → tag: "CSC309", within: "year"
 - "cool stuff from med students lately" → faculty: "Medicine", sort: "new"
 - "robotics at UTM" → search: "robotics", campus: "UTM"

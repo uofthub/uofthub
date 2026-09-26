@@ -1,20 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-
-/**
- * Light or dark, and whether the ⌘K command panel is open.
- *
- * The theme is resolved before first paint by the script in index.html (same
- * storage key, same fallback to the OS preference), so this only has to keep
- * `<html data-theme>` in step once React is running.
- */
-interface ThemeState {
-  darkMode: boolean
-  setDarkMode: (dark: boolean) => void
-  commandOpen: boolean
-  setCommandOpen: (open: boolean) => void
-}
-
-const ThemeContext = createContext<ThemeState | null>(null)
+import { useEffect, useState, type ReactNode } from 'react'
+import { ThemeContext } from './theme'
 
 const KEY = 'dark-mode'
 
@@ -65,10 +50,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme must be used inside <ThemeProvider>')
-  return ctx
 }

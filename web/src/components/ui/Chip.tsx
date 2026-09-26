@@ -2,7 +2,6 @@ import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
-import { soonProps } from './soon'
 
 type ChipTone = 'default' | 'subtle' | 'outline' | 'active' | 'navy' | 'green'
 type ChipSize = 'md' | 'sm' | 'xs'
@@ -19,7 +18,6 @@ type ChipProps = {
   /** Makes it a toggle button. */
   onClick?: ButtonHTMLAttributes<HTMLButtonElement>['onClick']
   pressed?: boolean
-  soon?: boolean | string
 }
 
 const TONE: Record<ChipTone, string> = {
@@ -48,7 +46,6 @@ export function Chip({
   to,
   onClick,
   pressed,
-  soon,
 }: ChipProps) {
   const classes = cx(
     'inline-flex items-center gap-1.5 rounded-full font-medium whitespace-nowrap',
@@ -65,18 +62,6 @@ export function Chip({
     </>
   )
 
-  if (soon) {
-    return (
-      <button
-        type="button"
-        className={classes}
-        style={style}
-        {...soonProps(typeof soon === 'string' ? soon : undefined)}
-      >
-        {content}
-      </button>
-    )
-  }
   if (to) {
     return (
       <Link to={to} className={classes} style={style}>

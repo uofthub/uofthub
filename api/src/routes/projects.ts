@@ -9,25 +9,31 @@ import {
 import { db } from '../db/client.js'
 import {
   VIEW_CHECK_SELECT,
+  canEditProject,
   canViewProject,
   canViewProjectId,
   getOptionalUserId,
+  listedProjectWhere,
   visibleProjectWhere,
 } from '../lib/visibility.js'
+import { coverUrls } from '../lib/covers.js'
 import { safeExternalUrl } from '../lib/url.js'
 import {
   PROJECT_FILE_COUNT_CAP,
   TEXT_PREVIEW_MAX_BYTES,
+  UploadError,
   categoryFor,
+  contentTypeFor,
   extOf,
-  matchesDeclaredType,
   previewKindFor,
+  streamValidated,
 } from '../lib/fileValidation.js'
 import {
   deleteObject,
   getObjectHead,
   objectKey,
   putObject,
+  putObjectStream,
   signedDownloadUrl,
 } from '../lib/storage.js'
 import {
@@ -41,6 +47,7 @@ import {
   withContent,
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
+import { restoreVersion, snapshotVersion } from '../lib/versions.js'
 import { trendingIds } from '../lib/trending.js'
 import { facetsFor } from '../lib/facets.js'
 import { parseCampus } from '../lib/campus.js'
@@ -49,8 +56,12 @@ import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
 import { announcePublish } from '../lib/publishing.js'
+import { sendProjectInviteEmail } from '../lib/authEmails.js'
 import { bySession } from '../lib/rateLimit.js'
-import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
+import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
+import { blockedBetween } from '../lib/blocks.js'
+import { isModerator } from '../lib/admin.js'
+import { removeComment } from '../lib/comments.js'
 import { ImportError, importFromLink } from '../lib/linkImport.js'
 import { parseDetails, parseSections } from '../lib/projectContent.js'
 import { courseWhere, facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
@@ -75,6 +86,18 @@ const importRateLimit = {
   rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession },
 }
 
+// Writing to other people: every comment and invitation lands in somebody
+// else's notifications, so each is budgeted per student.
+const commentRateLimit = {
+  rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession },
+}
+const accessRequestRateLimit = {
+  rateLimit: { max: 20, timeWindow: '1 hour', keyGenerator: bySession },
+}
+const inviteRateLimit = {
+  rateLimit: { max: 30, timeWindow: '1 hour', keyGenerator: bySession },
+}
+
 const PROJECT_TYPES: ProjectType[] = [
   'APP',
   'RESEARCH',
@@ -88,17 +111,72 @@ const PROJECT_TYPES: ProjectType[] = [
 const PROJECT_STATUSES: ProjectStatus[] = ['IN_PROGRESS', 'SHIPPED', 'HELP_WANTED']
 const VISIBILITIES: Visibility[] = ['PRIVATE', 'UOFT', 'PUBLIC', 'UNLISTED']
 
+/** Matches the editor's field. */
+const TITLE_MAX = 120
 /** A card's one line. Generous next to the form's 120, for pitches split out of old descriptions. */
 const PITCH_MAX = 280
+/** The long overview; room for a README brought in by a GitHub import. */
+const DESCRIPTION_MAX = 20_000
+const TAGS_MAX = 10
+const TAG_MAX = 40
+const LINKS_MAX = 20
+const LINK_LABEL_MAX = 80
+const URL_MAX = 2000
 /** A version's release note — one line in the Updates timeline. */
 const NOTE_MAX = 280
 const COMMENT_MAX = 4000
+const COLLABORATOR_TITLE_MAX = 40
+/** A stored filename; the tail is kept, since that is where the extension is. */
+const FILE_NAME_MAX = 200
 
 /** `undefined` leaves a field alone, `null` clears it, anything unknown is an error. */
 function parseEnum<T extends string>(value: unknown, allowed: T[]): T | null | undefined | false {
   if (value === undefined) return undefined
   if (value === null || value === '') return null
   return allowed.includes(value as T) ? (value as T) : false
+}
+
+/**
+ * Tags as stored: trimmed, a leading # dropped, deduplicated case-insensitively
+ * with the first spelling kept. `undefined` leaves them alone; anything that is
+ * not a short list of short strings is an error.
+ */
+function parseTags(raw: unknown): string[] | undefined | { error: string } {
+  if (raw === undefined) return undefined
+  if (!Array.isArray(raw) || raw.some((t) => typeof t !== 'string'))
+    return { error: 'Tags must be a list of words' }
+  const seen = new Set<string>()
+  const tags: string[] = []
+  for (const t of raw as string[]) {
+    const tag = t.trim().replace(/^#/, '').replace(/\s+/g, ' ')
+    if (!tag || seen.has(tag.toLowerCase())) continue
+    if (tag.length > TAG_MAX) return { error: `A tag is at most ${TAG_MAX} characters` }
+    seen.add(tag.toLowerCase())
+    tags.push(tag)
+  }
+  if (tags.length > TAGS_MAX) return { error: `At most ${TAGS_MAX} tags` }
+  return tags
+}
+
+/** A title, trimmed. `undefined` leaves it alone; empty or too long is an error. */
+function parseTitle(raw: unknown): string | undefined | { error: string } {
+  if (raw === undefined) return undefined
+  const title = typeof raw === 'string' ? raw.trim() : ''
+  if (!title) return { error: 'Title is required' }
+  if (title.length > TITLE_MAX) return { error: `A title is at most ${TITLE_MAX} characters` }
+  return title
+}
+
+/** A link as stored: an http(s) URL and a short label, or the error to refuse it with. */
+function parseLink(raw: unknown): { label: string; url: string } | { error: string } {
+  const link = (raw ?? {}) as { label?: unknown; url?: unknown }
+  const label = typeof link.label === 'string' ? link.label.trim() : ''
+  const url =
+    typeof link.url === 'string' && link.url.length <= URL_MAX ? safeExternalUrl(link.url) : null
+  if (!url) return { error: `Link "${label}" must be an http(s) URL` }
+  if (label.length > LINK_LABEL_MAX)
+    return { error: `A link label is at most ${LINK_LABEL_MAX} characters` }
+  return { label, url }
 }
 
 /**
@@ -123,6 +201,9 @@ const asJson = (value: object | null) =>
 
 /** The editable fields shared by create and update, validated once. */
 function parseFields(body: {
+  title?: unknown
+  description?: unknown
+  tags?: unknown
   pitch?: string | null
   type?: string | null
   status?: string | null
@@ -137,6 +218,9 @@ function parseFields(body: {
 }):
   | { error: string }
   | {
+      title?: string
+      description?: string | null
+      tags?: string[]
       pitch?: string | null
       type?: ProjectType | null
       status?: ProjectStatus | null
@@ -148,6 +232,20 @@ function parseFields(body: {
       courseCode?: string | null
       template?: { templateCode: string | null; templateVersion: number | null }
     } {
+  const title = parseTitle(body.title)
+  if (typeof title === 'object') return title
+  let description: string | null | undefined
+  if (body.description !== undefined) {
+    if (body.description !== null && typeof body.description !== 'string')
+      return { error: 'A description must be text' }
+    description = body.description?.trim() || null
+    if (description && description.length > DESCRIPTION_MAX)
+      return {
+        error: `A description is at most ${DESCRIPTION_MAX.toLocaleString('en')} characters`,
+      }
+  }
+  const tags = parseTags(body.tags)
+  if (tags && !Array.isArray(tags)) return tags
   const type = parseEnum(body.type, PROJECT_TYPES)
   if (type === false) return { error: 'Unknown project type' }
   const status = parseEnum(body.status, PROJECT_STATUSES)
@@ -176,7 +274,8 @@ function parseFields(body: {
     if (body.templateCode === null) template = { templateCode: null, templateVersion: null }
     else if (!isKnownTemplate(body.templateCode, Number(body.templateVersion)))
       return { error: 'Unknown course template' }
-    else template = { templateCode: body.templateCode, templateVersion: Number(body.templateVersion) }
+    else
+      template = { templateCode: body.templateCode, templateVersion: Number(body.templateVersion) }
   }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
@@ -185,6 +284,9 @@ function parseFields(body: {
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
   }
   return {
+    title,
+    description,
+    tags,
     pitch,
     type,
     status,
@@ -198,14 +300,14 @@ function parseFields(body: {
   }
 }
 
-/** An output of a project the caller owns, or the status to refuse with. */
+/** An output of a project the caller may edit, or the status to refuse with. */
 async function ownOutput(projectId: string, outputId: string, userId: string) {
   const output = await db.projectOutput.findFirst({
     where: { id: outputId, projectId },
-    select: { id: true, thumbnailKey: true, project: { select: { ownerId: true } } },
+    select: { id: true, thumbnailKey: true, project: { select: { id: true, ownerId: true } } },
   })
   if (!output) return { status: 404 as const }
-  if (output.project.ownerId !== userId) return { status: 403 as const }
+  if (!(await canEditProject(output.project, userId))) return { status: 403 as const }
   return output
 }
 
@@ -308,6 +410,16 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
+  // GET /projects/sitemap — every listed public project, for search engines
+  app.get('/sitemap', async () => {
+    return db.project.findMany({
+      where: listedProjectWhere(false),
+      select: { id: true, updatedAt: true },
+      orderBy: { publishedAt: 'desc' },
+      take: 10_000,
+    })
+  })
+
   // GET /projects/facets — counts for Explore's tiles and the home rails
   app.get('/facets', async (request) => facetsFor(!!(await getOptionalUserId(request))))
 
@@ -327,6 +439,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
               select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true },
             },
           },
+          orderBy: { invitedAt: 'asc' },
         },
         // storageKey is an internal R2 pointer, never sent to the client —
         // downloads go through the signed-URL route below instead.
@@ -348,7 +461,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
     const [shaped, following, followerCount] = await Promise.all([
       decorate(
-        [{ ...project, collaborators: project.collaborators.filter((c) => c.accepted) }],
+        [
+          {
+            ...project,
+            // Credited makers only — not pending invitations, not TA viewers.
+            collaborators: project.collaborators.filter(
+              (c) => c.accepted && c.role === 'COLLABORATOR'
+            ),
+          },
+        ],
         callerId
       ).then(([p]) => p),
       callerId
@@ -363,22 +484,65 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         ? db.projectFollow.count({ where: { projectId: project.id } })
         : undefined,
     ])
+    const canEdit =
+      !!callerId &&
+      (callerId === project.ownerId ||
+        project.collaborators.some(
+          (c) => c.userId === callerId && c.accepted && c.role === 'COLLABORATOR'
+        ))
     return {
       ...(await withContent(shaped, project)),
       following,
+      // Whether the caller may edit its content — the owner, or a collaborator.
+      canEdit,
       ...(followerCount !== undefined && { followerCount }),
     }
+  })
+
+  // GET /projects/:id/share — what a link preview shows: title, pitch and
+  // image. Public, showing projects only — a preview is read by whatever site
+  // the link is pasted into, signed in as nobody.
+  app.get<{ Params: { id: string } }>('/:id/share', async (request, reply) => {
+    const project = await db.project.findFirst({
+      where: { AND: [{ id: request.params.id }, listedProjectWhere(false)] },
+      select: { id: true, title: true, pitch: true, owner: { select: { name: true } } },
+    })
+    if (!project) return reply.code(404).send({ error: 'Not found' })
+    const { covers } = await coverUrls([project.id])
+    return {
+      title: project.title,
+      pitch: project.pitch,
+      ownerName: project.owner.name,
+      // A stable address that signs a fresh URL each time it is fetched —
+      // previews are fetched long after they are generated.
+      image: covers.has(project.id)
+        ? `${process.env.API_URL ?? 'http://localhost:3001'}/projects/${project.id}/cover`
+        : null,
+    }
+  })
+
+  // GET /projects/:id/cover — the cover image, for link previews
+  app.get<{ Params: { id: string } }>('/:id/cover', async (request, reply) => {
+    const project = await db.project.findFirst({
+      where: { AND: [{ id: request.params.id }, listedProjectWhere(false)] },
+      select: { id: true },
+    })
+    if (!project) return reply.code(404).send({ error: 'Not found' })
+    const { covers } = await coverUrls([project.id])
+    const url = covers.get(project.id)
+    if (!url) return reply.code(404).send({ error: 'No image' })
+    return reply.redirect(url)
   })
 
   // POST /projects
   app.post<{
     Body: {
-      title: string
+      title?: string
       pitch?: string
       description?: string
       type?: string
       status?: string
-      tags?: string[]
+      tags?: unknown
       visibility?: string
       showFrom?: string | null
       sections?: unknown
@@ -390,31 +554,29 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       links?: { label: string; url: string }[]
     }
   }>('/', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { title, description, tags = [], links = [] } = request.body
-
-    if (!title?.trim()) return reply.code(400).send({ error: 'Title is required' })
-    const fields = parseFields(request.body)
+    const links: unknown = request.body.links ?? []
+    const fields = parseFields({ ...request.body, title: request.body.title ?? '' })
     if ('error' in fields) return reply.code(400).send({ error: fields.error })
 
     // Reject javascript:/data: links up front rather than storing them.
+    if (!Array.isArray(links) || links.length > LINKS_MAX)
+      return reply.code(400).send({ error: `At most ${LINKS_MAX} links` })
     const safeLinks: { label: string; url: string }[] = []
-    for (const link of links) {
-      const url = safeExternalUrl(link?.url)
-      if (!url) {
-        return reply.code(400).send({ error: `Link "${link?.label ?? ''}" must be an http(s) URL` })
-      }
-      safeLinks.push({ label: String(link.label ?? '').trim(), url })
+    for (const raw of links) {
+      const link = parseLink(raw)
+      if ('error' in link) return reply.code(400).send({ error: link.error })
+      safeLinks.push(link)
     }
 
     const project = await db.project.create({
       data: {
         ownerId: request.user.sub,
-        title: title.trim(),
+        title: fields.title!,
         pitch: fields.pitch ?? undefined,
-        description: description?.trim() || undefined,
+        description: fields.description ?? undefined,
         type: fields.type ?? undefined,
         status: fields.status ?? undefined,
-        tags,
+        tags: fields.tags ?? [],
         visibility: fields.visibility ?? 'PRIVATE',
         showFrom: fields.showFrom ?? undefined,
         sections: fields.sections,
@@ -445,7 +607,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       description?: string
       type?: string | null
       status?: string | null
-      tags?: string[]
+      tags?: unknown
       visibility?: string
       showFrom?: string | null
       sections?: unknown
@@ -459,14 +621,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   }>('/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const project = await db.project.findUnique({ where: { id: request.params.id } })
     if (!project) return reply.code(404).send({ error: 'Not found' })
-    if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+    const isOwner = project.ownerId === request.user.sub
+    if (!isOwner && !(await canEditProject(project, request.user.sub)))
+      return reply.code(403).send({ error: 'Forbidden' })
 
-    const { title, description, tags } = request.body
-    if (title !== undefined && !title.trim())
-      return reply.code(400).send({ error: 'Title is required' })
     const fields = parseFields(request.body)
     if ('error' in fields) return reply.code(400).send({ error: fields.error })
-    const { visibility } = fields
+    const { visibility, title, description, tags } = fields
+    // Collaborators edit the work; who can see it, and when, is the owner's.
+    if (!isOwner && (visibility !== undefined || fields.showFrom !== undefined))
+      return reply
+        .code(403)
+        .send({ error: 'Only the project’s owner can change who sees it, or when' })
     const outputs =
       request.body.outputs === undefined ? undefined : parseOutputs(request.body.outputs)
     if (outputs && 'error' in outputs) return reply.code(400).send({ error: outputs.error })
@@ -496,8 +662,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return tx.project.update({
           where: { id: project.id },
           data: {
-            ...(title !== undefined && { title: title.trim() }),
-            ...(description !== undefined && { description: description.trim() || null }),
+            ...(title !== undefined && { title }),
+            ...(description !== undefined && { description }),
             ...(tags !== undefined && { tags }),
             ...(fields.pitch !== undefined && { pitch: fields.pitch }),
             ...(fields.type !== undefined && { type: fields.type }),
@@ -615,9 +781,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!kind || !REACTION_KINDS.includes(kind as ReactionKind)) {
         return reply.code(400).send({ error: 'A valid reaction kind is required' })
       }
-      if (!(await canViewProjectId(id, userId))) {
+      const target = await db.project.findUnique({ where: { id }, select: VIEW_CHECK_SELECT })
+      if (!target || !canViewProject(target, userId)) {
         return reply.code(404).send({ error: 'Not found' })
       }
+      if (await blockedBetween(userId, target.ownerId))
+        return reply.code(403).send({ error: 'You can’t react to this project' })
 
       const where = { projectId_userId_kind: { projectId: id, userId, kind: kind as ReactionKind } }
       const existing = await db.projectReaction.findUnique({ where })
@@ -729,17 +898,36 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     })
 
     type Row = (typeof rows)[number] & { helpful?: { userId: string }[] }
-    const shape = (c: Row) => ({
-      id: c.id,
-      projectId: c.projectId,
-      userId: c.userId,
-      parentId: c.parentId,
-      body: c.body,
-      createdAt: c.createdAt,
-      user: c.user,
-      helpfulCount: c._count.helpful,
-      helpfulByMe: !!c.helpful?.length,
-    })
+    // A deleted comment that kept its place for its replies says nothing
+    // about who wrote it or what it said.
+    const shape = (c: Row) =>
+      c.deletedAt
+        ? {
+            id: c.id,
+            projectId: c.projectId,
+            userId: null,
+            parentId: c.parentId,
+            body: '',
+            createdAt: c.createdAt,
+            editedAt: null,
+            deleted: true,
+            user: null,
+            helpfulCount: 0,
+            helpfulByMe: false,
+          }
+        : {
+            id: c.id,
+            projectId: c.projectId,
+            userId: c.userId,
+            parentId: c.parentId,
+            body: c.body,
+            createdAt: c.createdAt,
+            editedAt: c.editedAt,
+            deleted: false,
+            user: c.user,
+            helpfulCount: c._count.helpful,
+            helpfulByMe: !!c.helpful?.length,
+          }
 
     const replies = new Map<string, ReturnType<typeof shape>[]>()
     for (const c of rows) {
@@ -757,7 +945,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   // POST /projects/:id/comments — a comment, or with parentId a reply
   app.post<{ Params: { id: string }; Body: { body: string; parentId?: string } }>(
     '/:id/comments',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate], config: commentRateLimit },
     async (request, reply) => {
       const body = request.body?.body?.trim()
       if (!body) return reply.code(400).send({ error: 'Comment body is required' })
@@ -766,9 +954,16 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const projectId = request.params.id
       const userId = request.user.sub
-      if (!(await canViewProjectId(projectId, userId))) {
+      const onProject = await db.project.findUnique({
+        where: { id: projectId },
+        select: VIEW_CHECK_SELECT,
+      })
+      if (!onProject || !canViewProject(onProject, userId)) {
         return reply.code(404).send({ error: 'Not found' })
       }
+      // Blocked either way, the conversation is closed — as it is in messages.
+      if (await blockedBetween(userId, onProject.ownerId))
+        return reply.code(403).send({ error: 'You can’t comment on this project' })
 
       // One level of replies: answering a reply files it under the same
       // top-level comment, so a thread never becomes a staircase.
@@ -776,11 +971,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (request.body.parentId) {
         const target = await db.comment.findUnique({
           where: { id: request.body.parentId },
-          select: { id: true, userId: true, projectId: true, parentId: true },
+          select: { id: true, userId: true, projectId: true, parentId: true, deletedAt: true },
         })
         if (!target || target.projectId !== projectId) {
           return reply.code(400).send({ error: 'That comment is not on this project' })
         }
+        if (!target.deletedAt && (await blockedBetween(userId, target.userId)))
+          return reply.code(403).send({ error: 'You can’t reply to this comment' })
         parent = target.parentId
           ? await db.comment.findUnique({
               where: { id: target.parentId },
@@ -789,7 +986,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           : target
         // Whoever was actually answered hears about it, even when the reply is
         // filed under the thread's first comment.
-        if (target.userId !== userId) {
+        if (target.userId !== userId && !target.deletedAt) {
           const [actor, project] = await Promise.all([
             db.user.findUnique({ where: { id: userId }, select: { name: true } }),
             db.project.findUnique({
@@ -822,7 +1019,109 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         extra: { excerpt: comment.body.slice(0, COMMENT_EXCERPT_MAX) },
       })
 
-      return reply.code(201).send({ ...comment, helpfulCount: 0, helpfulByMe: false, replies: [] })
+      return reply.code(201).send({
+        ...comment,
+        deleted: false,
+        helpfulCount: 0,
+        helpfulByMe: false,
+        replies: [],
+      })
+    }
+  )
+
+  // PATCH /projects/:id/comments/:commentId — { body }. Its author only.
+  app.patch<{ Params: { id: string; commentId: string }; Body: { body?: string } }>(
+    '/:id/comments/:commentId',
+    { preHandler: [app.authenticate], config: commentRateLimit },
+    async (request, reply) => {
+      const body = String(request.body?.body ?? '').trim()
+      if (!body) return reply.code(400).send({ error: 'Comment body is required' })
+      if (body.length > COMMENT_MAX)
+        return reply.code(400).send({ error: `A comment is at most ${COMMENT_MAX} characters` })
+
+      const comment = await db.comment.findUnique({
+        where: { id: request.params.commentId },
+        select: { id: true, projectId: true, userId: true, deletedAt: true },
+      })
+      if (!comment || comment.projectId !== request.params.id || comment.deletedAt)
+        return reply.code(404).send({ error: 'Not found' })
+      if (comment.userId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canViewProjectId(comment.projectId, request.user.sub)))
+        return reply.code(404).send({ error: 'Not found' })
+
+      return db.comment.update({
+        where: { id: comment.id },
+        data: { body, editedAt: new Date() },
+        select: { id: true, body: true, editedAt: true },
+      })
+    }
+  )
+
+  // DELETE /projects/:id/comments/:commentId — its author, the project's
+  // owner (it is their page), or a moderator.
+  //
+  // A comment with replies keeps its place, emptied, so the answers under it
+  // still read as a thread; one without is deleted outright.
+  app.delete<{ Params: { id: string; commentId: string } }>(
+    '/:id/comments/:commentId',
+    { preHandler: [app.authenticate], config: { allowSuspended: true } },
+    async (request, reply) => {
+      const comment = await db.comment.findUnique({
+        where: { id: request.params.commentId },
+        select: {
+          id: true,
+          projectId: true,
+          userId: true,
+          deletedAt: true,
+          project: { select: { ownerId: true } },
+          _count: { select: { replies: true } },
+        },
+      })
+      if (!comment || comment.projectId !== request.params.id || comment.deletedAt)
+        return reply.code(404).send({ error: 'Not found' })
+      const me = request.user.sub
+      const allowed =
+        comment.userId === me || comment.project.ownerId === me || (await isModerator(me))
+      if (!allowed) return reply.code(403).send({ error: 'Forbidden' })
+
+      await removeComment(comment.id, comment._count.replies > 0)
+      return { ok: true }
+    }
+  )
+
+  // POST /projects/:id/comments/:commentId/report — { reason, details? }
+  app.post<{
+    Params: { id: string; commentId: string }
+    Body: { reason?: string; details?: string }
+  }>(
+    '/:id/comments/:commentId/report',
+    { preHandler: [app.authenticate], config: reportRateLimit },
+    async (request, reply) => {
+      const reason = request.body?.reason
+      if (!isReportReason(reason))
+        return reply.code(400).send({ error: 'A valid reason is required' })
+      const comment = await db.comment.findUnique({
+        where: { id: request.params.commentId },
+        select: { id: true, projectId: true, userId: true, body: true, deletedAt: true },
+      })
+      if (
+        !comment ||
+        comment.projectId !== request.params.id ||
+        comment.deletedAt ||
+        !(await canViewProjectId(comment.projectId, request.user.sub))
+      )
+        return reply.code(404).send({ error: 'Not found' })
+
+      const report = await fileReport({
+        reporterId: request.user.sub,
+        subjectUserId: comment.userId,
+        target: { targetType: 'COMMENT', projectId: comment.projectId, commentId: comment.id },
+        reason,
+        details: request.body.details,
+        excerpt: comment.body,
+      })
+      if ('error' in report) return reply.code(report.status).send({ error: report.error })
+      return reply.code(201).send(report)
     }
   )
 
@@ -837,9 +1136,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const comment = await db.comment.findUnique({
         where: { id: commentId },
-        select: { projectId: true, userId: true },
+        select: { projectId: true, userId: true, deletedAt: true },
       })
-      if (!comment || comment.projectId !== id) return reply.code(404).send({ error: 'Not found' })
+      if (!comment || comment.projectId !== id || comment.deletedAt)
+        return reply.code(404).send({ error: 'Not found' })
       // Voting your own comment helpful says nothing.
       if (comment.userId === userId)
         return reply.code(400).send({ error: 'You cannot mark your own comment helpful' })
@@ -853,35 +1153,118 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
-  // POST /projects/:id/collaborators — invite
-  app.post<{ Params: { id: string }; Body: { email: string } }>(
-    '/:id/collaborators',
+  // GET /projects/:id/people — the owner's view of who is on the project:
+  // credited collaborators, invitations still waiting (to accounts and to
+  // addresses without one), TAs with access, and access requests.
+  app.get<{ Params: { id: string } }>(
+    '/:id/people',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const project = await db.project.findUnique({
         where: { id: request.params.id },
-        include: { owner: { select: { name: true } } },
+        select: { id: true, ownerId: true },
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
-      // Emails are stored lowercased at sign-up, so normalize before lookup.
-      const invitee = await db.user.findUnique({
-        where: { email: (request.body.email ?? '').trim().toLowerCase() },
+      const [rows, emailInvites] = await Promise.all([
+        db.projectCollaborator.findMany({
+          where: { projectId: project.id },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatarUrl: true,
+                faculty: true,
+                campus: true,
+              },
+            },
+          },
+          orderBy: { invitedAt: 'asc' },
+        }),
+        db.projectEmailInvite.findMany({
+          where: { projectId: project.id },
+          select: { email: true, title: true, invitedAt: true },
+          orderBy: { invitedAt: 'asc' },
+        }),
+      ])
+      const person = (r: (typeof rows)[number]) => ({
+        userId: r.userId,
+        user: r.user,
+        title: r.title,
+        invitedAt: r.invitedAt,
       })
-      if (!invitee) return reply.code(404).send({ error: 'User not found' })
-      if (invitee.id === request.user.sub)
-        return reply.code(400).send({ error: 'Cannot invite yourself' })
+      return {
+        collaborators: rows.filter((r) => r.role === 'COLLABORATOR' && r.accepted).map(person),
+        pending: rows.filter((r) => r.role === 'COLLABORATOR' && !r.accepted).map(person),
+        emailInvites,
+        viewers: rows.filter((r) => r.role === 'VIEWER' && r.accepted).map(person),
+        accessRequests: rows.filter((r) => r.role === 'VIEWER' && !r.accepted).map(person),
+      }
+    }
+  )
 
+  // POST /projects/:id/collaborators — { email, title? } invite
+  //
+  // To an account, it is a pending collaborator row and a notification. To a
+  // U of T address with no account yet, it waits as an email invitation and
+  // becomes a pending row once that address signs up (lib/accounts.ts).
+  app.post<{ Params: { id: string }; Body: { email?: string; title?: string } }>(
+    '/:id/collaborators',
+    { preHandler: [app.authenticate], config: inviteRateLimit },
+    async (request, reply) => {
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: { owner: { select: { name: true, email: true } } },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+
+      const email = String(request.body?.email ?? '')
+        .trim()
+        .toLowerCase()
+      if (!email) return reply.code(400).send({ error: 'An email address is required' })
+      if (email === project.owner.email)
+        return reply.code(400).send({ error: 'Cannot invite yourself' })
+      const title = String(request.body?.title ?? '').trim() || null
+      if (title && title.length > COLLABORATOR_TITLE_MAX)
+        return reply
+          .code(400)
+          .send({ error: `A role is at most ${COLLABORATOR_TITLE_MAX} characters` })
+
+      const invitee = await db.user.findUnique({ where: { email }, select: { id: true } })
+      if (!invitee) {
+        if (!/@(mail\.)?utoronto\.ca$/.test(email))
+          return reply.code(400).send({ error: 'Invite someone by their U of T email address' })
+        if (
+          await db.projectEmailInvite.findUnique({
+            where: { projectId_email: { projectId: project.id, email } },
+          })
+        )
+          return reply.code(409).send({ error: 'Already invited' })
+        await db.projectEmailInvite.create({
+          data: { projectId: project.id, email, title, invitedById: request.user.sub },
+        })
+        await sendProjectInviteEmail(email, project.owner.name, project.title)
+        return reply.code(201).send({ email, title, pending: true, hasAccount: false })
+      }
+
+      const existing = await db.projectCollaborator.findUnique({
+        where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
+      })
+      if (existing?.role === 'COLLABORATOR')
+        return reply
+          .code(409)
+          .send({ error: existing.accepted ? 'Already a collaborator' : 'Already invited' })
+
+      // A TA with viewer access (or asking for it) becomes an invited
+      // collaborator instead: one row per person per project.
       const collab = await db.projectCollaborator.upsert({
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
-        update: {},
-        create: {
-          projectId: project.id,
-          userId: invitee.id,
-          role: 'COLLABORATOR',
-          accepted: false,
-        },
+        update: { role: 'COLLABORATOR', accepted: false, title, invitedAt: new Date() },
+        create: { projectId: project.id, userId: invitee.id, role: 'COLLABORATOR', title },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
 
@@ -889,19 +1272,45 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         projectId: project.id,
         projectTitle: project.title,
         inviterName: project.owner.name,
+        title,
       })
 
-      return reply.code(201).send(collab)
+      return reply.code(201).send({ ...collab, pending: true, hasAccount: true })
     }
   )
 
-  // PATCH /projects/:id/collaborators/:userId — accept/deny an invite (by the
-  // invitee), or approve/deny a pending VIEWER access request (by the owner)
-  app.patch<{ Params: { id: string; userId: string }; Body: { accepted: boolean } }>(
+  // DELETE /projects/:id/email-invites/:email — the owner withdraws an
+  // invitation to an address that has no account yet
+  app.delete<{ Params: { id: string; email: string } }>(
+    '/:id/email-invites/:email',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        select: { ownerId: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      await db.projectEmailInvite.deleteMany({
+        where: { projectId: request.params.id, email: request.params.email.toLowerCase() },
+      })
+      return { ok: true }
+    }
+  )
+
+  // PATCH /projects/:id/collaborators/:userId — { accepted }. The invitee
+  // answers their invitation, or the owner decides a TA's access request.
+  //
+  // A no is a delete, not a row left at `accepted: false` — that is what a
+  // pending invitation looks like, so a declined one would wait forever.
+  app.patch<{ Params: { id: string; userId: string }; Body: { accepted?: boolean } }>(
     '/:id/collaborators/:userId',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
       const { id, userId } = request.params
+      if (typeof request.body?.accepted !== 'boolean')
+        return reply.code(400).send({ error: 'accepted must be true or false' })
+      const accepted = request.body.accepted
 
       const project = await db.project.findUnique({
         where: { id },
@@ -925,35 +1334,39 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         !isSelf && request.user.sub === project.ownerId && invite.role === 'VIEWER'
       if (!isSelf && !isOwnerDecidingAccessRequest)
         return reply.code(403).send({ error: 'Forbidden' })
+      // Asking for access and then granting it to yourself is not a decision.
+      if (isSelf && invite.role === 'VIEWER' && !invite.accepted && accepted)
+        return reply.code(403).send({ error: 'The project’s owner decides access requests' })
 
-      const collab = await db.projectCollaborator.update({
-        where: { projectId_userId: { projectId: id, userId } },
-        data: { accepted: request.body.accepted },
-      })
+      const where = { projectId_userId: { projectId: id, userId } }
+      const collab = accepted
+        ? await db.projectCollaborator.update({ where, data: { accepted: true } })
+        : (await db.projectCollaborator.delete({ where }), null)
 
       if (isOwnerDecidingAccessRequest) {
         await notify(userId, 'ACCESS_REQUEST_DECIDED', {
           projectId: project.id,
           projectTitle: project.title,
-          accepted: request.body.accepted,
+          accepted,
         })
-      } else if (project.ownerId !== userId) {
+      } else if (project.ownerId !== userId && !invite.accepted) {
         await notify(project.ownerId, 'COLLABORATOR_RESPONDED', {
           projectId: project.id,
           projectTitle: project.title,
           userName: invite.user.name,
-          accepted: request.body.accepted,
+          accepted,
         })
       }
 
-      return collab
+      return collab ?? { ok: true, accepted: false }
     }
   )
 
-  // DELETE /projects/:id/collaborators/:userId
+  // DELETE /projects/:id/collaborators/:userId — the owner removes someone
+  // (or withdraws an invitation, or denies a request); anyone leaves themself.
   app.delete<{ Params: { id: string; userId: string } }>(
     '/:id/collaborators/:userId',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate], config: { allowSuspended: true } },
     async (request, reply) => {
       const { id, userId } = request.params
       const project = await db.project.findUnique({
@@ -997,14 +1410,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const project = await db.project.findUnique({ where: { id: request.params.id } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canEditProject(project, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
 
-      const url = safeExternalUrl(request.body.url)
-      if (!url) return reply.code(400).send({ error: 'Link must be an http(s) URL' })
+      const parsed = parseLink(request.body)
+      if ('error' in parsed) return reply.code(400).send({ error: parsed.error })
+      if ((await db.projectLink.count({ where: { projectId: project.id } })) >= LINKS_MAX)
+        return reply.code(400).send({ error: `A project has at most ${LINKS_MAX} links` })
 
-      const link = await db.projectLink.create({
-        data: { projectId: project.id, label: String(request.body.label ?? '').trim(), url },
-      })
+      const link = await db.projectLink.create({ data: { projectId: project.id, ...parsed } })
       return reply.code(201).send(link)
     }
   )
@@ -1016,7 +1430,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const project = await db.project.findUnique({ where: { id: request.params.id } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canEditProject(project, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
 
       const output = await db.projectOutput.findFirst({
         where: { linkId: request.params.linkId, projectId: project.id },
@@ -1037,40 +1452,21 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   // ── FILES ───────────────────────────────────────────────────────────────────
 
   // POST /projects/:id/files — multipart upload, owner only
+  //
+  // Streamed straight to storage: the head of the file is checked against its
+  // extension by its bytes before anything is stored, and the upload is cut
+  // off the moment it passes its category's size cap. A 250MB video never
+  // sits in this process's memory.
   app.post<{ Params: { id: string } }>(
     '/:id/files',
     { preHandler: [app.authenticate], config: uploadRateLimit },
     async (request, reply) => {
       const project = await db.project.findUnique({ where: { id: request.params.id } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canEditProject(project, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
 
-      const data = await request.file()
-      if (!data) return reply.code(400).send({ error: 'No file uploaded' })
-
-      const ext = extOf(data.filename)
-      const category = categoryFor(ext)
-      if (!category) return reply.code(400).send({ error: `Unsupported file type: .${ext || '?'}` })
-
-      const buffer = await data.toBuffer()
-      // @fastify/multipart truncates rather than throwing when the stream
-      // exceeds the registered global limit (250MB) — buffer.length would
-      // otherwise look like a plausible, if large, file.
-      if (data.file.truncated) {
-        return reply.code(413).send({ error: 'File exceeds the 250MB upload limit' })
-      }
-      if (buffer.length > category.maxSizeBytes) {
-        return reply.code(413).send({
-          error: `File exceeds the ${category.name} size limit (${category.maxSizeBytes / (1024 * 1024)}MB)`,
-        })
-      }
-
-      // Checked against the actual bytes, not the client-declared filename or
-      // MIME type — this is what stops a renamed executable getting through.
-      if (!(await matchesDeclaredType(buffer, ext))) {
-        return reply.code(400).send({ error: 'File content does not match its extension' })
-      }
-
+      // Before reading a byte of the body.
       const fileCount = await db.projectFile.count({ where: { projectId: project.id } })
       if (fileCount >= PROJECT_FILE_COUNT_CAP) {
         return reply
@@ -1078,20 +1474,38 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: `This project already has the ${PROJECT_FILE_COUNT_CAP}-file limit` })
       }
 
+      const data = await request.file()
+      if (!data) return reply.code(400).send({ error: 'No file uploaded' })
+
+      const name = data.filename.slice(-FILE_NAME_MAX)
+      const ext = extOf(name)
+      const category = categoryFor(ext)
+      if (!category) {
+        data.file.resume()
+        return reply.code(400).send({ error: `Unsupported file type: .${ext || '?'}` })
+      }
+
       // No storage quota for now — per-file size and per-project count above
-      // are the only limits. Group allowances and personal quotas were set
-      // aside with the redesign (docs/redesign.md); files are no longer
-      // billed to a group.
-      const key = objectKey(project.id, data.filename)
-      await putObject(key, buffer, data.mimetype)
+      // are the only limits (docs/redesign.md).
+      const key = objectKey(project.id, name)
+      let sizeBytes: number
+      try {
+        sizeBytes = await streamValidated(data.file, ext, category, (body, type) =>
+          putObjectStream(key, body, type)
+        )
+      } catch (err) {
+        await deleteObjects([key])
+        if (err instanceof UploadError) return reply.code(err.status).send({ error: err.message })
+        throw err
+      }
 
       const file = await db.projectFile.create({
         data: {
           projectId: project.id,
-          name: data.filename,
+          name,
           storageKey: key,
-          sizeBytes: buffer.length,
-          mimeType: data.mimetype,
+          sizeBytes,
+          mimeType: contentTypeFor(ext),
         },
         select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
       })
@@ -1106,7 +1520,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const project = await db.project.findUnique({ where: { id: request.params.id } })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canEditProject(project, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
 
       // Scope to this project, same reasoning as DELETE .../links/:linkId.
       const file = await db.projectFile.findFirst({
@@ -1141,7 +1556,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!file) return reply.code(404).send({ error: 'File not found' })
 
-      const url = await signedDownloadUrl(file.storageKey, file.name)
+      const url = await signedDownloadUrl(file.storageKey, file.name, {
+        contentType: contentTypeFor(extOf(file.name)),
+      })
       return reply.redirect(url)
     }
   )
@@ -1186,7 +1603,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       return {
         kind,
         name: file.name,
-        url: await signedDownloadUrl(file.storageKey, file.name, { disposition: 'inline' }),
+        url: await signedDownloadUrl(file.storageKey, file.name, {
+          disposition: 'inline',
+          contentType: contentTypeFor(extOf(file.name)),
+        }),
       }
     }
   )
@@ -1267,7 +1687,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           .code(output.status)
           .send({ error: output.status === 404 ? 'Not found' : 'Forbidden' })
 
-      const data = await request.file()
+      const data = await request.file({ limits: { fileSize: THUMBNAIL_MAX_BYTES + 1 } })
       if (!data) return reply.code(400).send({ error: 'No image uploaded' })
       const buffer = await data.toBuffer()
       if (data.file.truncated || buffer.length > THUMBNAIL_MAX_BYTES)
@@ -1280,7 +1700,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       await putObject(key, buffer, contentType)
       await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: key } })
       await deleteObjects([output.thumbnailKey])
-      return { thumbnailUrl: await signedDownloadUrl(key, 'thumbnail', { disposition: 'inline' }) }
+      return {
+        thumbnailUrl: await signedDownloadUrl(key, 'thumbnail', {
+          disposition: 'inline',
+          contentType,
+        }),
+      }
     }
   )
 
@@ -1326,82 +1751,30 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const project = await db.project.findUnique({
         where: { id: request.params.id },
-        include: {
-          references: {
-            orderBy: { position: 'asc' },
-            select: {
-              kind: true,
-              title: true,
-              url: true,
-              doi: true,
-              authors: true,
-              year: true,
-              note: true,
-            },
-          },
-          outputs: {
-            orderBy: { position: 'asc' },
-            select: {
-              kind: true,
-              label: true,
-              primaryOfProjectId: true,
-              file: { select: { name: true } },
-              link: { select: { label: true, url: true } },
-            },
-          },
-        },
+        select: { id: true, title: true, ...VIEW_CHECK_SELECT, takenDownAt: true },
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
+      if (!(await canEditProject({ id: project.id, ownerId: project.ownerId }, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
 
       const note = request.body?.note?.trim() || null
       if (note && note.length > NOTE_MAX) {
         return reply.code(400).send({ error: `An update note is at most ${NOTE_MAX} characters` })
       }
 
-      const latest = await db.projectVersion.findFirst({
-        where: { projectId: project.id },
-        orderBy: { versionNum: 'desc' },
-      })
-
-      const version = await db.projectVersion.create({
-        data: {
-          projectId: project.id,
-          versionNum: (latest?.versionNum ?? 0) + 1,
-          note,
-          title: project.title,
-          description: project.description,
-          sections: project.sections ?? Prisma.DbNull,
-          details: project.details ?? Prisma.DbNull,
-          tags: project.tags,
-          courseCode: project.courseCode,
-          references: project.references,
-          // Named, not pointed at: the file or link may be gone by the time
-          // anyone looks back.
-          outputs: project.outputs.map((o) => ({
-            kind: o.kind,
-            label: o.label,
-            primary: o.primaryOfProjectId !== null,
-            ...(o.file && { file: o.file.name }),
-            ...(o.link && { link: o.link }),
-          })),
-        },
-      })
+      const version = await snapshotVersion(project.id, note)
 
       // A version with a note is an update, and its followers asked to hear
       // about those. Only the ones who can still see the project are told —
       // it may have gone back to a draft since they followed it.
       if (note && !project.takenDownAt) {
-        const [followers, collaborators] = await Promise.all([
-          db.projectFollow.findMany({ where: { projectId: project.id }, select: { userId: true } }),
-          db.projectCollaborator.findMany({
-            where: { projectId: project.id },
-            select: { userId: true, accepted: true },
-          }),
-        ])
+        const followers = await db.projectFollow.findMany({
+          where: { projectId: project.id },
+          select: { userId: true },
+        })
         const audience = followers
           .map((f) => f.userId)
-          .filter((userId) => canViewProject({ ...project, collaborators }, userId))
+          .filter((userId) => canViewProject(project, userId))
         await notifyMany(
           audience,
           'PROJECT_UPDATED',
@@ -1410,6 +1783,27 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         )
       }
       return reply.code(201).send(version)
+    }
+  )
+
+  // POST /projects/:id/versions/:num/restore — put that version's content
+  // back. What is there now is saved as a version first, so it can be got back.
+  app.post<{ Params: { id: string; num: string } }>(
+    '/:id/versions/:num/restore',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, ownerId: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (!(await canEditProject(project, request.user.sub)))
+        return reply.code(403).send({ error: 'Forbidden' })
+      const num = Number(request.params.num)
+      if (!Number.isInteger(num)) return reply.code(404).send({ error: 'No such version' })
+      const result = await restoreVersion(project.id, num)
+      if (!result) return reply.code(404).send({ error: 'No such version' })
+      return result
     }
   )
 
@@ -1564,31 +1958,36 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // ── TA / FACULTY ACCESS REQUESTS ────────────────────────────────────────────
 
-  // POST /projects/:id/request-access — faculty/TA requests VIEWER access
+  // POST /projects/:id/request-access — a TA or instructor asks to see a
+  // project they cannot see yet: a draft, or course work still hidden until
+  // its show-from date. Somebody has to have given them the link, so the
+  // request goes to the owner, who approves or denies it (PATCH/DELETE
+  // .../collaborators/:userId).
+  //
+  // The answer is the same whether or not the project exists, so a request is
+  // never a way to learn which ids are real.
   app.post<{ Params: { id: string } }>(
     '/:id/request-access',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate], config: accessRequestRateLimit },
     async (request, reply) => {
       if (request.user.role !== 'FACULTY') {
-        return reply.code(403).send({ error: 'Only faculty/TAs can request access' })
+        return reply.code(403).send({ error: 'Only faculty and TAs can request access' })
       }
+      const sent = { ok: true, message: 'If the project exists, its owner has been asked' }
 
       const project = await db.project.findUnique({
         where: { id: request.params.id },
         include: { collaborators: { select: { userId: true, accepted: true } } },
       })
-      // 404, like every read: a 403 here would confirm that a private or
-      // still-hidden project exists to anyone who guessed its id.
-      if (!project || !canViewProject(project, request.user.sub))
-        return reply.code(404).send({ error: 'Not found' })
-      if (project.visibility === 'PRIVATE') {
-        return reply.code(403).send({ error: 'Cannot request access to a private project' })
-      }
+      if (!project || project.ownerId === request.user.sub) return reply.code(202).send(sent)
+      // Anything they can already open needs no request.
+      if (canViewProject(project, request.user.sub))
+        return reply.code(409).send({ error: 'You can already see this project' })
 
       const existing = await db.projectCollaborator.findUnique({
         where: { projectId_userId: { projectId: project.id, userId: request.user.sub } },
       })
-      if (existing) return reply.code(409).send({ error: 'Access already requested or granted' })
+      if (existing) return reply.code(202).send(sent)
 
       const [requester] = await Promise.all([
         db.user.findUnique({ where: { id: request.user.sub }, select: { name: true } }),
@@ -1609,27 +2008,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         requesterName: requester?.name,
       })
 
-      return { ok: true, message: 'Access request sent to project owner' }
-    }
-  )
-
-  // GET /projects/:id/access-requests — owner sees pending VIEWER requests
-  app.get<{ Params: { id: string } }>(
-    '/:id/access-requests',
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const project = await db.project.findUnique({ where: { id: request.params.id } })
-      if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
-
-      const requests = await db.projectCollaborator.findMany({
-        where: { projectId: project.id, role: 'VIEWER', accepted: false },
-        include: {
-          user: { select: { id: true, name: true, email: true, faculty: true, campus: true } },
-        },
-        orderBy: { invitedAt: 'desc' },
-      })
-      return requests
+      return reply.code(202).send(sent)
     }
   )
 
@@ -1662,27 +2041,16 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           .code(403)
           .send({ error: 'Only U of T-visible or public projects can be reported' })
       }
-      if (project.ownerId === request.user.sub) {
-        return reply.code(400).send({ error: 'You cannot report your own project' })
-      }
-
       // One open report per person per project: a second one adds nothing to
       // the queue, and re-reporting is only useful once the first was decided.
-      const existing = await db.report.findFirst({
-        where: { projectId: project.id, reporterId: request.user.sub, status: 'OPEN' },
-        select: { id: true },
+      const report = await fileReport({
+        reporterId: request.user.sub,
+        subjectUserId: project.ownerId,
+        target: { targetType: 'PROJECT', projectId: project.id },
+        reason,
+        details: request.body.details,
       })
-      if (existing) return reply.code(409).send({ error: 'You have already reported this project' })
-
-      const report = await db.report.create({
-        data: {
-          projectId: project.id,
-          reporterId: request.user.sub,
-          reason,
-          details: reportDetails(request.body.details),
-        },
-        select: { id: true, reason: true, status: true, createdAt: true },
-      })
+      if ('error' in report) return reply.code(report.status).send({ error: report.error })
       return reply.code(201).send(report)
     }
   )

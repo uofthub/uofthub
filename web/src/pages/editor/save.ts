@@ -57,7 +57,15 @@ export async function saveDraft(
    * `visibility` is left out for a project a moderator took down: the API
    * refuses any change to it, the same value included.
    */
-  target: { projectId?: string; visibility?: Visibility },
+  target: {
+    projectId?: string
+    visibility?: Visibility
+    /**
+     * False for a collaborator: who can see the project, and when, is its
+     * owner's to decide, so step 6 is skipped rather than refused.
+     */
+    publish?: boolean
+  },
   projects: ProjectsApi
 ): Promise<SaveResult> {
   const failed: string[] = []
@@ -128,14 +136,16 @@ export async function saveDraft(
 
   // 5. Invitations.
   for (const invite of draft.invites) {
-    const sent = await projects.inviteCollaborator(projectId, invite.email).catch(note(invite.email))
+    const sent = await projects
+      .inviteCollaborator(projectId, invite.email, invite.role || undefined)
+      .catch(note(invite.email))
     if (sent) invited.add(invite.email)
   }
 
   const result = { projectId, failed, uploaded, outputIds, thumbnailsDone, removed, invited }
 
   // 6. Visibility last, and only when everything else is in place.
-  if (failed.length > 0) return { ...result, visibilityApplied: false }
+  if (failed.length > 0 || target.publish === false) return { ...result, visibilityApplied: false }
   const applied = await projects
     .update(projectId, {
       ...(target.visibility && { visibility: target.visibility }),

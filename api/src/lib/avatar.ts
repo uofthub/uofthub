@@ -9,6 +9,9 @@ export function avatarObjectKey(userId: string): string {
  * on every request rather than embedding one directly — signed URLs expire
  * in 5 minutes, which is too short to store.
  */
-export function avatarUrlFor(userId: string): string {
-  return `${process.env.API_URL ?? 'http://localhost:3001'}/users/${userId}/avatar`
+export function avatarUrlFor(userId: string, version?: number): string {
+  const base = `${process.env.API_URL ?? 'http://localhost:3001'}/users/${userId}/avatar`
+  // The version only changes the URL, so a browser cannot keep showing the
+  // picture it cached under the old one.
+  return version ? `${base}?v=${version}` : base
 }

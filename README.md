@@ -23,9 +23,11 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Visibility** — Draft / U of T / Public / Unlisted, defaulting to Draft, plus an optional show-from date that keeps course work hidden until after grading
 - **Profiles** — name, faculty, campus, program, year, courses, "Open to" and personal links; pinned projects above the rest
 - **Discovery** — Explore (search and filter by faculty, course, type, campus or topic), a feed at `/feed` with Following, Campus and Your program tabs, this week's trending, a weekly spotlight, Looking for help, collections, and AI search at `/discover`
-- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments, versions with update notes, forks, and one-to-one messages with block and report
-- **Clubs & labs** — group pages with events, created by moderators; projects credit the groups they were built with
-- **Moderation** — reports on projects and conversations, reviewed at `/admin`
+- **Collaboration** — invite collaborators (by U of T email, with or without an account yet) who then edit the project with you; TAs and instructors can ask for read access to a draft
+- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, forks, and one-to-one messages; block and report
+- **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
+- **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer, data export and account deletion at `/settings`
+- **Moderation** — reports on projects, comments, collections, profiles, group events and conversations, reviewed at `/admin`, with account suspension
 
 The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.
 
@@ -51,8 +53,8 @@ A pnpm workspace with two apps and one shared package.
 | **API** (`api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
-| **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password |
-| **Email** | Resend · **AI search** OpenAI — each degrades to a no-op when its key is unset |
+| **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password with the address confirmed by email |
+| **Email** | Resend (required in production: sign-up confirmation and password reset) · **AI search** OpenAI — degrades to keyword search when its key is unset |
 | **Tests / CI** | Vitest against a real Postgres, GitHub Actions on every PR |
 
 Every decision above, with the reasoning: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -83,7 +85,7 @@ pnpm dev                               # API on :3001, web on :5173
 
 `pnpm dev` applies any pending migrations before the API starts, and the API reads `api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
 
-Sign in with email + password locally: Microsoft OAuth needs real credentials. **Every other integration is optional** — with no keys, email no-ops with a warning, and AI search falls back to keyword search.
+Sign up with email + password locally: Microsoft OAuth needs real credentials. With no Resend key, the link that confirms your address is printed in the API's console — open it to finish signing up. **Every other integration is optional** — with no keys, email no-ops with a warning, and AI search falls back to keyword search.
 
 If `docker compose` says *permission denied* on `/var/run/docker.sock`, your user can't reach the Docker daemon yet — run it once with `sudo`, or add yourself to the `docker` group.
 
@@ -121,6 +123,6 @@ Contributions are welcome — please read [CONTRIBUTING.md](docs/CONTRIBUTING.md
 
 ## License
 
-Not yet decided, and deliberately not MIT. Until a licence is chosen and added to this repository, the source is publicly readable but **all rights are reserved** — no permission to use, copy, modify or redistribute it is granted by its being on GitHub.
+Proprietary. Copyright © 2026 Renfred Alonge. All rights reserved — see [LICENSE](LICENSE). The source is not open source: no permission to use, copy, modify or redistribute it is granted, whether or not the repository is publicly readable.
 
-This does not affect your own work: projects, files and everything else students publish on uofthub stay theirs, as [/terms](docs/prd.md) sets out. The licence question is about this codebase only.
+This does not affect your own work: projects, files and everything else students publish on uofthub stay theirs, as [/terms](docs/prd.md) sets out. The licence covers this codebase only.

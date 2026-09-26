@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { api, API_URL } from '../../lib/api'
+import { api, API_URL, ApiError } from '../../lib/api'
+import { returnPath } from '../../lib/returnTo'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { Logo } from '../../components/shell'
@@ -13,6 +14,7 @@ import {
   Field,
   Icon,
   Input,
+  LinkButton,
   SegmentedTabs,
   type IconName,
 } from '../../components/ui'
@@ -22,35 +24,87 @@ const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
 const MIN_PASSWORD_LENGTH = 10
 
 const HIGHLIGHTS: { icon: IconName; text: string }[] = [
-  { icon: 'shieldCheck', text: 'Verified with your U of T email' },
+  { icon: 'shieldCheck', text: 'Every account proves it owns a U of T email' },
   { icon: 'lock', text: 'You choose what’s public, U of T only, or a draft' },
   { icon: 'users', text: 'Credit every collaborator on the work you share' },
 ]
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'forgot'
 
-function CredentialsForm({ mode }: { mode: Mode }) {
+/** What the Microsoft round trip can come back with, as `?error=`. */
+const OAUTH_ERRORS: Record<string, string> = {
+  domain: 'That Microsoft account isn’t a U of T one. Sign in with your utoronto.ca account.',
+  oauth: 'Microsoft sign-in didn’t go through. Try again, or use your email and password.',
+}
+
+/** "Check your inbox", after anything that sent an email. */
+function CheckEmail({ email, what, onBack }: { email: string; what: string; onBack: () => void }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl bg-fill p-5">
+      <p className="flex items-center gap-2 font-semibold">
+        <Icon name="inbox" size={18} /> Check your inbox
+      </p>
+      <p className="text-15 text-ink-3">
+        If <b>{email}</b> can {what}, a link is on its way. It can take a minute — check your junk
+        folder too.
+      </p>
+      <LinkButton className="self-start" onClick={onBack}>
+        Back to log in
+      </LinkButton>
+    </div>
+  )
+}
+
+function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   const { refetch } = useAuth()
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [show, setShow] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null)
 
+  const email = form.email.trim().toLowerCase()
   const submit = useMutation({
-    mutationFn: () =>
-      mode === 'login'
-        ? api.auth.login({ email: form.email, password: form.password })
-        : api.auth.register({ name: form.name, email: form.email, password: form.password }),
-    // The session cookie arrives with the response; refetch drives the redirect.
-    onSuccess: () => refetch(),
+    mutationFn: async () => {
+      if (mode === 'login') {
+        await api.auth.login({ email: form.email, password: form.password })
+        return 'signed-in' as const
+      }
+      if (mode === 'signup')
+        await api.auth.register({ name: form.name, email: form.email, password: form.password })
+      else await api.auth.forgotPassword(email)
+      return 'sent' as const
+    },
+    onSuccess: (outcome) => {
+      // The session cookie arrives with the response; refetch drives the redirect.
+      if (outcome === 'signed-in') refetch()
+      else setSentTo(email)
+    },
+  })
+  const resend = useMutation({
+    mutationFn: () => api.auth.resendVerification(email),
+    onSuccess: () => setSentTo(email),
   })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const email = form.email.trim().toLowerCase()
+  if (sentTo)
+    return (
+      <CheckEmail
+        email={sentTo}
+        what={mode === 'forgot' ? 'sign in to uofthub' : 'finish signing up'}
+        onBack={() => {
+          setSentTo(null)
+          setMode('login')
+        }}
+      />
+    )
+
+  const unverified = submit.error instanceof ApiError && submit.error.code === 'UNVERIFIED'
   const domainOk = !email || UOFT_DOMAINS.some((d) => email.endsWith(d))
   const complete =
     !!email &&
-    form.password.length > 0 &&
-    (mode === 'login' || (!!form.name.trim() && form.password.length >= MIN_PASSWORD_LENGTH))
+    (mode === 'forgot' ||
+      (form.password.length > 0 &&
+        (mode === 'login' || (!!form.name.trim() && form.password.length >= MIN_PASSWORD_LENGTH))))
 
   return (
     <form
@@ -60,6 +114,12 @@ function CredentialsForm({ mode }: { mode: Mode }) {
         if (complete && domainOk) submit.mutate()
       }}
     >
+      {mode === 'forgot' && (
+        <p className="text-15 text-ink-3">
+          We’ll email you a link to choose a new password. It also works for an account that only
+          signs in with Microsoft today.
+        </p>
+      )}
       {mode === 'signup' && (
         <Field label="Full name">
           <Input
@@ -67,6 +127,7 @@ function CredentialsForm({ mode }: { mode: Mode }) {
             onChange={set('name')}
             autoComplete="name"
             placeholder="Jordan Lee"
+            maxLength={80}
           />
         </Field>
       )}
@@ -79,31 +140,45 @@ function CredentialsForm({ mode }: { mode: Mode }) {
           placeholder="you@mail.utoronto.ca"
         />
       </Field>
-      <Field
-        label="Password"
-        hint={mode === 'signup' ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
-      >
-        <span className="relative block">
-          <Input
-            className="pr-12"
-            type={show ? 'text' : 'password'}
-            value={form.password}
-            onChange={set('password')}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            placeholder="••••••••••"
-          />
-          <Button
-            variant="ghost"
-            size="md"
-            iconOnly
-            icon={show ? 'eyeOff' : 'eye'}
-            aria-label={show ? 'Hide password' : 'Show password'}
-            onClick={() => setShow((s) => !s)}
-            className="absolute top-0.5 right-0.5"
-          />
-        </span>
-      </Field>
-      {submit.isError && <ErrorText>{(submit.error as Error).message}</ErrorText>}
+      {mode !== 'forgot' && (
+        <Field
+          label="Password"
+          hint={mode === 'signup' ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
+        >
+          <span className="relative block">
+            <Input
+              className="pr-12"
+              type={show ? 'text' : 'password'}
+              value={form.password}
+              onChange={set('password')}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              placeholder="••••••••••"
+            />
+            <Button
+              variant="ghost"
+              size="md"
+              iconOnly
+              icon={show ? 'eyeOff' : 'eye'}
+              aria-label={show ? 'Hide password' : 'Show password'}
+              onClick={() => setShow((s) => !s)}
+              className="absolute top-0.5 right-0.5"
+            />
+          </span>
+        </Field>
+      )}
+      {submit.isError && (
+        <ErrorText>
+          {(submit.error as Error).message}
+          {unverified && (
+            <>
+              {' '}
+              <LinkButton onClick={() => resend.mutate()} disabled={resend.isPending}>
+                Send the link again
+              </LinkButton>
+            </>
+          )}
+        </ErrorText>
+      )}
       <Button
         type="submit"
         variant="primary"
@@ -111,13 +186,19 @@ function CredentialsForm({ mode }: { mode: Mode }) {
         disabled={!complete || !domainOk || submit.isPending}
       >
         {submit.isPending
-          ? mode === 'login'
-            ? 'Signing in…'
-            : 'Creating account…'
-          : mode === 'login'
-            ? 'Log in'
-            : 'Create account'}
+          ? { login: 'Signing in…', signup: 'Creating account…', forgot: 'Sending…' }[mode]
+          : { login: 'Log in', signup: 'Create account', forgot: 'Email me a link' }[mode]}
       </Button>
+      {mode === 'login' && (
+        <LinkButton className="self-center text-14" onClick={() => setMode('forgot')}>
+          Forgot password?
+        </LinkButton>
+      )}
+      {mode === 'forgot' && (
+        <LinkButton className="self-center text-14" onClick={() => setMode('login')}>
+          Back to log in
+        </LinkButton>
+      )}
     </form>
   )
 }
@@ -127,13 +208,15 @@ export default function SessionPage() {
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [mode, setMode] = useState<Mode>(
     (location.state as { mode?: Mode } | null)?.mode ?? 'login'
   )
-  useDocumentTitle(mode === 'login' ? 'Log in' : 'Sign up')
+  const oauthError = OAUTH_ERRORS[params.get('error') ?? '']
+  useDocumentTitle({ login: 'Log in', signup: 'Sign up', forgot: 'Reset your password' }[mode])
 
   useEffect(() => {
-    if (user) navigate('/feed', { replace: true })
+    if (user) navigate(returnPath(), { replace: true })
   }, [user, navigate])
 
   return (
@@ -171,9 +254,10 @@ export default function SessionPage() {
           <div className="lg:hidden">
             <Logo />
           </div>
+          {oauthError && <ErrorText>{oauthError}</ErrorText>}
           <SegmentedTabs<Mode>
             label="Account"
-            value={mode}
+            value={mode === 'forgot' ? 'login' : mode}
             onChange={setMode}
             options={[
               { value: 'login', label: 'Log in' },
@@ -183,12 +267,18 @@ export default function SessionPage() {
           />
           <div>
             <h2 className="font-display text-30 font-bold tracking-tighter">
-              {mode === 'login' ? 'Welcome back' : 'Create your account'}
+              {
+                {
+                  login: 'Welcome back',
+                  signup: 'Create your account',
+                  forgot: 'Forgot your password?',
+                }[mode]
+              }
             </h2>
             <p className="mt-1.5 text-15 text-muted">
-              {mode === 'login'
-                ? 'Sign in with the Microsoft account attached to your U of T email.'
-                : 'Any current student, alum or faculty member with a U of T email can join.'}
+              {mode === 'signup'
+                ? 'Any current student, alum or faculty member with a U of T email can join. We’ll email you to confirm the address is yours.'
+                : 'Sign in with the Microsoft account attached to your U of T email.'}
             </p>
           </div>
           <Button
@@ -206,7 +296,7 @@ export default function SessionPage() {
           >
             <span>or with email</span>
           </Eyebrow>
-          <CredentialsForm key={mode} mode={mode} />
+          <CredentialsForm key={mode} mode={mode} setMode={setMode} />
           <p className="text-center text-13 text-muted">
             Anything you mark public can be seen by anyone on the internet.
           </p>

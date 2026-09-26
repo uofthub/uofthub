@@ -13,15 +13,18 @@ import {
 const link = (label: string, url: string) => ({ id: label, projectId: 'p', label, url })
 
 describe('courses', () => {
-  it.each(['CSC309', 'csc309', 'MAT102', 'CSC309H1', 'ENG100Y5'])(
+  it.each(['CSC309', 'csc309', 'MAT102', 'CSC309H1', 'ENG100Y5', 'CSCA08H3', 'MATA31', 'mgeb02h3'])(
     'reads %s as a course code',
     (code) => {
       expect(isCourseCode(code)).toBe(true)
     }
   )
-  it.each(['React', 'CS309', 'CSC30', 'hackathon'])('does not read %s as one', (tag) => {
-    expect(isCourseCode(tag)).toBe(false)
-  })
+  it.each(['React', 'CS309', 'CSC30', 'hackathon', 'CSCE08', 'CSCAB8'])(
+    'does not read %s as one',
+    (tag) => {
+      expect(isCourseCode(tag)).toBe(false)
+    }
+  )
   it('reads the course from its own field, never from the tags', () => {
     expect(courseOf({ courseCode: 'CSC211H5' })).toBe('CSC211H5')
     expect(courseOf({ courseCode: null })).toBeUndefined()

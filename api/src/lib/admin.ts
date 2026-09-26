@@ -18,3 +18,9 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply)
     reply.code(403).send({ error: 'Forbidden' })
   }
 }
+
+/** Whether this account is a moderator, for routes open to others too. */
+export async function isModerator(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { isAdmin: true } })
+  return !!user?.isAdmin
+}

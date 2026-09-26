@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type ProjectDetail } from '../../lib/api'
+import { api, type ProjectDetail, type ProjectPerson } from '../../lib/api'
 import { formatBytes, lookFor, previewKindFor } from '../../lib/files'
 import { safeLinks, LINK_ICONS, timeAgo } from '../../lib/projectView'
 import { REACTIONS, reactionLabel } from '../../lib/reactions'
@@ -266,49 +266,92 @@ export function FilesDialog({ project, onClose }: { project: ProjectDetail; onCl
   )
 }
 
-/* ------------------------------ collaborators ------------------------------ */
+/* --------------------------------- people ---------------------------------- */
 
-export function InviteDialog({
+/** One person in the People dialog, with whatever the owner can do about them. */
+function PersonRow({
+  person,
+  note,
+  children,
+}: {
+  person: ProjectPerson
+  note: string
+  children: ReactNode
+}) {
+  return (
+    <ManageRow
+      icon={<Avatar person={person.user} size={32} />}
+      action={<span className="flex gap-1.5">{children}</span>}
+    >
+      <Link to={`/u/${person.userId}`} className="text-14 font-semibold text-ink">
+        {person.user.name}
+      </Link>
+      <span className="text-13 text-muted">{[person.title, note].filter(Boolean).join(' · ')}</span>
+    </ManageRow>
+  )
+}
+
+/**
+ * Who is on the project, and inviting more: credited collaborators,
+ * invitations still waiting, TAs with access and their requests. Owner only.
+ */
+export function PeopleDialog({
   project,
   onClose,
 }: {
   project: ProjectDetail
   onClose: () => void
 }) {
+  const qc = useQueryClient()
   const [email, setEmail] = useState('')
-  const invite = useMutation({
-    mutationFn: () => api.projects.inviteCollaborator(project.id, email.trim()),
+  const [title, setTitle] = useState('')
+  const { data: people, isLoading } = useQuery({
+    queryKey: ['people', project.id],
+    queryFn: () => api.projects.people(project.id),
   })
+  const done = () => {
+    qc.invalidateQueries({ queryKey: ['people', project.id] })
+    invalidate(qc, project.id)
+  }
+  const invite = useMutation({
+    mutationFn: () =>
+      api.projects.inviteCollaborator(project.id, email.trim(), title.trim() || undefined),
+    onSuccess: () => {
+      setEmail('')
+      setTitle('')
+      done()
+    },
+  })
+  const remove = useMutation({
+    mutationFn: (userId: string) => api.projects.removeCollaborator(project.id, userId),
+    onSuccess: done,
+  })
+  const approve = useMutation({
+    mutationFn: (userId: string) => api.projects.approveAccessRequest(project.id, userId),
+    onSuccess: done,
+  })
+  const withdraw = useMutation({
+    mutationFn: (address: string) => api.projects.cancelEmailInvite(project.id, address),
+    onSuccess: done,
+  })
+  const busy = remove.isPending || approve.isPending || withdraw.isPending
+  const error = [invite, remove, approve, withdraw].find((m) => m.isError)?.error
 
   return (
     <Dialog
-      title="Invite a collaborator"
+      title="People"
       onClose={onClose}
-      footer={
-        invite.isSuccess ? (
-          <Button onClick={onClose}>Close</Button>
-        ) : (
-          <>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button
-              variant="primary"
-              icon="userPlus"
-              onClick={() => invite.mutate()}
-              disabled={!email.trim() || invite.isPending}
-            >
-              {invite.isPending ? 'Inviting…' : 'Invite'}
-            </Button>
-          </>
-        )
-      }
+      width={560}
+      footer={<Button onClick={onClose}>Done</Button>}
     >
-      {invite.isSuccess ? (
-        <SuccessText>Invitation sent. They appear on the project once they accept.</SuccessText>
-      ) : (
-        <Field
-          label="Their U of T email"
-          hint="Collaborators confirm before they appear on the project."
-        >
+      <form
+        className="flex flex-wrap items-end gap-2.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (email.trim()) invite.mutate()
+        }}
+      >
+        <Field label="Invite by U of T email" className="min-w-0 grow basis-56">
           <Input
             type="email"
             value={email}
@@ -316,8 +359,116 @@ export function InviteDialog({
             placeholder="name@mail.utoronto.ca"
           />
         </Field>
+        <Field label="Their role" className="basis-36">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Designer"
+            maxLength={40}
+          />
+        </Field>
+        <Button
+          type="submit"
+          variant="primary"
+          icon="userPlus"
+          disabled={!email.trim() || invite.isPending}
+        >
+          {invite.isPending ? 'Inviting…' : 'Invite'}
+        </Button>
+      </form>
+      <Intro>
+        They confirm before they appear on the project. Someone without an account yet gets an
+        email, and the invitation waits for them. Collaborators can edit the project’s content; only
+        you choose who can see it.
+      </Intro>
+      {invite.isSuccess && <SuccessText>Invitation sent.</SuccessText>}
+      {error && <ErrorText>{error.message}</ErrorText>}
+
+      {isLoading || !people ? (
+        <Spinner />
+      ) : (
+        <>
+          {people.accessRequests.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <Eyebrow as="h3">Asking for access</Eyebrow>
+              <ManageList>
+                {people.accessRequests.map((p) => (
+                  <PersonRow key={p.userId} person={p} note={p.user.faculty ?? p.user.email}>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={busy}
+                      onClick={() => approve.mutate(p.userId)}
+                    >
+                      Approve
+                    </Button>
+                    <Button size="sm" disabled={busy} onClick={() => remove.mutate(p.userId)}>
+                      Deny
+                    </Button>
+                  </PersonRow>
+                ))}
+              </ManageList>
+            </section>
+          )}
+
+          <section className="flex flex-col gap-2">
+            <Eyebrow as="h3">Collaborators</Eyebrow>
+            {people.collaborators.length === 0 &&
+            people.pending.length === 0 &&
+            people.emailInvites.length === 0 ? (
+              <p className="text-14 text-muted">Nobody yet — just you.</p>
+            ) : (
+              <ManageList>
+                {people.collaborators.map((p) => (
+                  <PersonRow key={p.userId} person={p} note="Collaborator">
+                    <Button size="sm" disabled={busy} onClick={() => remove.mutate(p.userId)}>
+                      Remove
+                    </Button>
+                  </PersonRow>
+                ))}
+                {people.pending.map((p) => (
+                  <PersonRow key={p.userId} person={p} note={`Invited ${timeAgo(p.invitedAt)}`}>
+                    <Button size="sm" disabled={busy} onClick={() => remove.mutate(p.userId)}>
+                      Withdraw
+                    </Button>
+                  </PersonRow>
+                ))}
+                {people.emailInvites.map((i) => (
+                  <ManageRow
+                    key={i.email}
+                    icon={<Icon name="inbox" size={18} />}
+                    action={
+                      <Button size="sm" disabled={busy} onClick={() => withdraw.mutate(i.email)}>
+                        Withdraw
+                      </Button>
+                    }
+                  >
+                    <span className="text-14 font-semibold wrap-anywhere">{i.email}</span>
+                    <span className="text-13 text-muted">
+                      {[i.title, 'No account yet — invited by email'].filter(Boolean).join(' · ')}
+                    </span>
+                  </ManageRow>
+                ))}
+              </ManageList>
+            )}
+          </section>
+
+          {people.viewers.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <Eyebrow as="h3">Can view (TAs and instructors)</Eyebrow>
+              <ManageList>
+                {people.viewers.map((p) => (
+                  <PersonRow key={p.userId} person={p} note="Viewer">
+                    <Button size="sm" disabled={busy} onClick={() => remove.mutate(p.userId)}>
+                      Remove
+                    </Button>
+                  </PersonRow>
+                ))}
+              </ManageList>
+            </section>
+          )}
+        </>
       )}
-      {invite.isError && <ErrorText>{(invite.error as Error).message}</ErrorText>}
     </Dialog>
   )
 }
@@ -365,57 +516,6 @@ function ViewsChart({ days }: { days: { date: string; count: number }[] }) {
         </tbody>
       </table>
     </figure>
-  )
-}
-
-function AccessRequests({ projectId }: { projectId: string }) {
-  const qc = useQueryClient()
-  const { data: requests = [] } = useQuery({
-    queryKey: ['access-requests', projectId],
-    queryFn: () => api.projects.accessRequests(projectId),
-  })
-  const done = () => {
-    qc.invalidateQueries({ queryKey: ['access-requests', projectId] })
-    invalidate(qc, projectId)
-  }
-  const approve = useMutation({
-    mutationFn: (userId: string) => api.projects.approveAccessRequest(projectId, userId),
-    onSuccess: done,
-  })
-  const deny = useMutation({
-    mutationFn: (userId: string) => api.projects.removeCollaborator(projectId, userId),
-    onSuccess: done,
-  })
-
-  if (requests.length === 0) return null
-  const busy = approve.isPending || deny.isPending
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      <Eyebrow as="span">Access requests</Eyebrow>
-      {requests.map((r) => (
-        <div key={r.userId} className="flex items-center gap-2.5">
-          <Avatar person={r.user} size={32} />
-          <div className="min-w-0 grow">
-            <div className="text-14 font-semibold">{r.user.name}</div>
-            <div className="text-13 text-muted">
-              {r.user.faculty ?? r.user.email} — wants viewer access
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => approve.mutate(r.userId)}
-            disabled={busy}
-          >
-            Approve
-          </Button>
-          <Button size="sm" onClick={() => deny.mutate(r.userId)} disabled={busy}>
-            Deny
-          </Button>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -523,8 +623,6 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
               ))}
             </div>
           )}
-
-          <AccessRequests projectId={projectId} />
         </>
       )}
     </Dialog>

@@ -52,7 +52,12 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
 
   return (
     <Card as="article" className="overflow-hidden">
-      {reporting && <ReportDialog projectId={project.id} onClose={() => setReporting(false)} />}
+      {reporting && (
+        <ReportDialog
+          target={{ kind: 'project', projectId: project.id }}
+          onClose={() => setReporting(false)}
+        />
+      )}
       {collecting && (
         <AddToCollectionDialog projectId={project.id} onClose={() => setCollecting(false)} />
       )}

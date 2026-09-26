@@ -87,9 +87,9 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
     body: (
       <>
         <p>
-          Anyone signed in can report a U of T-visible or public project with the{' '}
-          <strong>Report</strong> button on the project page. Private projects cannot be reported —
-          nobody outside the project can see them.
+          Anyone signed in can report a U of T-visible or public project, a comment, a collection, a
+          profile or a group event with its <strong>Report</strong> button. Private projects cannot
+          be reported — nobody outside the project can see them.
         </p>
         <p>A moderator reads every report and does one of three things:</p>
         <ul>
@@ -98,13 +98,14 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             report existed.
           </li>
           <li>
-            <strong>Warns the owner</strong> — the project stays up, and the owner gets a
-            notification explaining what to fix.
+            <strong>Warns whoever posted it</strong> — it stays up, and they get a notification
+            explaining what to fix.
           </li>
           <li>
-            <strong>Takes the project down</strong> — visibility is forced back to private and the
-            owner cannot re-open it. Nothing is deleted: the project, its files and its history stay
-            in the owner's account.
+            <strong>Takes it down</strong> — a project is forced back to private and its owner
+            cannot re-open it; nothing is deleted, and the project, its files and its history stay
+            in the owner's account. A comment, collection or event is removed. A profile loses its
+            bio, links and photo.
           </li>
         </ul>
         <p>
@@ -116,7 +117,7 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         </p>
         <p>
           Reporting in bad faith — to bury a competitor's project or harass its owner — is itself a
-          violation. If a decision on your project is wrong, email{' '}
+          violation. If a decision about something of yours is wrong, email{' '}
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and a human will look at it again.
         </p>
       </>
@@ -129,13 +130,19 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
       <>
         <p>
           An account requires a current <code>@mail.utoronto.ca</code> or <code>@utoronto.ca</code>{' '}
-          address. That is the only thing we verify — we do not check your program, your year, or
-          whether you are still enrolled.
+          address, proven by signing in with Microsoft or following the link we email you. That is
+          the only thing we verify — we do not check your program, your year, or whether you are
+          still enrolled.
         </p>
         <p>
-          We may suspend an account that repeatedly publishes material covered above. We do not
-          delete a student's work to make a point: a suspension makes projects private, it does not
-          erase them.
+          We may suspend an account that repeatedly publishes material covered above. A suspended
+          account can still sign in, read, download its data and delete itself, but cannot post,
+          comment, react, follow or message until a moderator lifts it. We do not delete a student's
+          work to make a point: a suspension erases nothing.
+        </p>
+        <p>
+          You can block another student from their profile or a conversation. Neither of you can
+          then message, comment on, react to or follow the other. They are not told.
         </p>
       </>
     ),

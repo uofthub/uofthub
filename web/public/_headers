@@ -1,0 +1,16 @@
+# Cloudflare Pages response headers for the web app.
+#
+# The Content-Security-Policy allows scripts only from this site (no inline
+# script — see public/theme.js), fonts from Google Fonts, and anything over
+# https for images, media, previews and API calls: signed storage URLs and the
+# API live on other hosts, and differ between deployments.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; frame-src 'self' blob: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Hashed build output never changes under the same name.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

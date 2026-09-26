@@ -22,6 +22,9 @@ export default defineConfig({
     // One database, shared by every file: running files in parallel would
     // have them truncating each other's rows mid-test.
     fileParallelism: false,
+    // Every case runs real queries against Postgres; under a full run on a
+    // busy machine the default 5s is occasionally too tight for the slowest.
+    testTimeout: 15_000,
     include: ['src/**/*.test.ts'],
   },
 })

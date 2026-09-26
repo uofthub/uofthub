@@ -47,8 +47,6 @@ describe('creating a group', () => {
       where: { slug: 'robotics' },
       include: { members: true },
     })
-    expect(org).toMatchObject({ status: 'VERIFIED', verificationDeadline: null })
-    expect(org?.verifiedAt).not.toBeNull()
     expect(org?.members).toEqual([expect.objectContaining({ userId: exec.id, role: 'ADMIN' })])
     // Listed for everyone, signed in or not.
     expect((await call('GET', '/orgs')).json().map((o: { slug: string }) => o.slug)).toEqual([
@@ -78,54 +76,6 @@ describe('creating a group', () => {
     const mod = await createUser({ isAdmin: true })
     await call('POST', '/orgs', mod, NEW_ORG)
     expect((await call('POST', '/orgs/robotics/verify', mod, { note: 'hi' })).statusCode).toBe(404)
-  })
-})
-
-describe('groups left over from self-serve verification', () => {
-  async function legacy(creator: User) {
-    return db.organization.create({
-      data: {
-        name: 'Old group',
-        slug: 'old-group',
-        status: 'IN_REVIEW',
-        contactEmail: 'exec@mail.utoronto.ca',
-        members: { create: { userId: creator.id, role: 'ADMIN' } },
-      },
-    })
-  }
-
-  it('stay hidden from strangers until a moderator approves them', async () => {
-    const creator = await createUser()
-    await legacy(creator)
-    expect((await call('GET', '/orgs/old-group', await createUser())).statusCode).toBe(404)
-    expect((await call('GET', '/orgs/old-group', creator)).statusCode).toBe(200)
-
-    const mod = await createUser({ isAdmin: true })
-    expect(
-      (await call('POST', '/admin/orgs/old-group/decision', mod, { decision: 'APPROVE' }))
-        .statusCode
-    ).toBe(200)
-    expect((await call('GET', '/orgs/old-group')).statusCode).toBe(200)
-  })
-
-  it('can be denied, which deletes them, but no longer sent back for more info', async () => {
-    const mod = await createUser({ isAdmin: true })
-    await legacy(await createUser())
-    const info = await call('POST', '/admin/orgs/old-group/decision', mod, {
-      decision: 'REQUEST_INFO',
-    })
-    expect(info.statusCode).toBe(400)
-    await call('POST', '/admin/orgs/old-group/decision', mod, { decision: 'DENY' })
-    expect(await db.organization.count()).toBe(0)
-  })
-
-  it('is closed to non-moderators', async () => {
-    const creator = await createUser()
-    await legacy(creator)
-    expect(
-      (await call('POST', '/admin/orgs/old-group/decision', creator, { decision: 'APPROVE' }))
-        .statusCode
-    ).toBe(403)
   })
 })
 

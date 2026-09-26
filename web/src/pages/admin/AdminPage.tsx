@@ -1,20 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { OrgStatus, ReportStatus } from '@uofthub/types'
-import {
-  api,
-  type AdminOrg,
-  type AdminReport,
-  type OrgDecision,
-  type ReportDecision,
-} from '../../lib/api'
+import type { ReportStatus } from '@uofthub/types'
+import { api, type AdminReport, type ReportDecision, type ReportTargetType } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CreateOrgDialog } from '../orgs/CreateOrgDialog'
 import { MessageReportRow } from './MessageReportRow'
 import { STATUS_LABELS, reasonShort } from '../../lib/moderation'
-import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import {
   Button,
   Card,
@@ -32,6 +25,7 @@ import {
   SegmentedTabs,
   Spinner,
   TextArea,
+  Toggle,
 } from '../../components/ui'
 import { Decisions, QueueCard, Quote } from './QueueCard'
 
@@ -46,42 +40,85 @@ const DECISIONS: { value: ReportDecision; label: string; hint: string }[] = [
   {
     value: 'DISMISS',
     label: 'Dismiss',
-    hint: 'Nothing wrong — closes the report; the owner is not told.',
+    hint: 'Nothing wrong — closes the report; nobody is told.',
   },
   {
     value: 'WARN',
-    label: 'Warn owner',
-    hint: 'Notifies the owner with your note; the project stays up.',
+    label: 'Warn',
+    hint: 'Notifies whoever posted it with your note; it stays up.',
   },
   {
     value: 'TAKE_DOWN',
     label: 'Take down',
-    hint: 'Forces the project private and notifies the owner.',
+    hint: 'A project goes private; a comment, collection or event is removed; a profile loses its bio, links and photo.',
   },
 ]
-const ORG_DECISIONS: { value: OrgDecision; label: string; hint: string }[] = [
-  {
-    value: 'APPROVE',
-    label: 'Approve',
-    hint: 'Publishes the page.',
-  },
-  { value: 'DENY', label: 'Deny', hint: 'Deletes the group and its data.' },
-]
+
+const TARGET_LABELS: Record<ReportTargetType, string> = {
+  PROJECT: 'Project',
+  COMMENT: 'Comment',
+  COLLECTION: 'Collection',
+  USER: 'Profile',
+  ORG_ACTIVITY: 'Group event',
+}
+
+/** Where a report's subject lives, and what to call it in the queue. */
+function reportTarget(report: AdminReport): { to: string; title: string } {
+  switch (report.targetType) {
+    case 'PROJECT':
+      return {
+        to: `/projects/${report.project?.id}`,
+        title: report.project?.title ?? 'Deleted project',
+      }
+    case 'COMMENT':
+      return {
+        to: `/projects/${report.project?.id}#comments`,
+        title: `Comment on “${report.project?.title ?? 'a deleted project'}”`,
+      }
+    case 'COLLECTION':
+      return {
+        to: report.collection ? `/collections/${report.collection.id}` : '/collections',
+        title: report.collection?.title ?? 'Deleted collection',
+      }
+    case 'USER':
+      return { to: `/u/${report.subject?.id}`, title: report.subject?.name ?? 'Deleted account' }
+    case 'ORG_ACTIVITY':
+      return {
+        to: report.activity ? `/orgs/${report.activity.org.slug}` : '/orgs',
+        title: report.activity
+          ? `${report.activity.title} · ${report.activity.org.name}`
+          : 'Deleted event',
+      }
+  }
+}
 
 function ReportRow({ report }: { report: AdminReport }) {
   const qc = useQueryClient()
   const [note, setNote] = useState('')
+  const [suspend, setSuspend] = useState(false)
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['admin-reports'] })
+    qc.invalidateQueries({ queryKey: ['admin-users'] })
+  }
   const decide = useMutation({
     mutationFn: (decision: ReportDecision) =>
-      api.admin.decide(report.id, { decision, note: note.trim() || undefined }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-reports'] }),
+      api.admin.decide(report.id, { decision, note: note.trim() || undefined, suspend }),
+    onSuccess: refresh,
   })
+  const restore = useMutation({
+    mutationFn: () => api.admin.restoreProject(report.project!.id, note.trim() || undefined),
+    onSuccess: refresh,
+  })
+  const { to, title } = reportTarget(report)
+  const subject = report.subject ?? report.project?.owner ?? null
+
   return (
     <QueueCard
-      to={`/projects/${report.project.id}`}
-      title={report.project.title}
+      to={to}
+      title={title}
       tags={
         <>
+          <Chip size="sm">{TARGET_LABELS[report.targetType]}</Chip>
           <Chip size="sm" tone="navy">
             {reasonShort(report.reason)}
           </Chip>
@@ -91,13 +128,23 @@ function ReportRow({ report }: { report: AdminReport }) {
       when={new Date(report.createdAt).toLocaleString()}
       meta={
         <>
-          Owner <Link to={`/u/${report.project.owner.id}`}>{report.project.owner.name}</Link> (
-          {report.project.owner.email}) · reported by{' '}
-          <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> (
-          {report.reporter.email}) · {report.project.visibility}
+          {subject && (
+            <>
+              Posted by <Link to={`/u/${subject.id}`}>{subject.name}</Link> ({subject.email})
+              {report.subject?.suspendedAt && ' — suspended'} ·{' '}
+            </>
+          )}
+          reported by <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> (
+          {report.reporter.email})
+          {report.targetType === 'PROJECT' && report.project && ` · ${report.project.visibility}`}
         </>
       }
     >
+      {report.excerpt && (
+        <Notice tone="navy" title="As reported">
+          <p className="whitespace-pre-wrap">{report.excerpt}</p>
+        </Notice>
+      )}
       {report.details && <Quote>{report.details}</Quote>}
       {report.status === 'OPEN' ? (
         <>
@@ -106,9 +153,14 @@ function ReportRow({ report }: { report: AdminReport }) {
             maxLength={1000}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Note to the owner (sent with a warning or take-down)…"
+            placeholder="Note to whoever posted it (sent with a warning, take-down or suspension)…"
           />
-          {decide.isError && <ErrorText>{(decide.error as Error).message}</ErrorText>}
+          {subject && !report.subject?.suspendedAt && (
+            <Toggle checked={suspend} onChange={setSuspend}>
+              Also suspend {subject.name}’s account
+            </Toggle>
+          )}
+          {decide.isError && <ErrorText>{decide.error.message}</ErrorText>}
           <Decisions>
             {DECISIONS.map((d) => (
               <Button
@@ -125,99 +177,115 @@ function ReportRow({ report }: { report: AdminReport }) {
           </Decisions>
         </>
       ) : (
-        <div className="text-13 text-muted">
-          {report.reviewedBy ? `Decided by ${report.reviewedBy.name}` : 'Decided'}
-          {report.reviewedAt && ` on ${new Date(report.reviewedAt).toLocaleDateString()}`}
-          {report.reviewNote && ` — “${report.reviewNote}”`}
+        <div className="flex flex-wrap items-center gap-3 text-13 text-muted">
+          <span>
+            {report.reviewedBy ? `Decided by ${report.reviewedBy.name}` : 'Decided'}
+            {report.reviewedAt && ` on ${new Date(report.reviewedAt).toLocaleDateString()}`}
+            {report.reviewNote && ` — “${report.reviewNote}”`}
+          </span>
+          {/* The appeal path: a take-down can be lifted from its report. */}
+          {report.targetType === 'PROJECT' && report.project?.takenDownAt && (
+            <Button size="sm" onClick={() => restore.mutate()} disabled={restore.isPending}>
+              Restore project
+            </Button>
+          )}
+          {restore.isError && <ErrorText>{restore.error.message}</ErrorText>}
         </div>
       )}
     </QueueCard>
   )
 }
 
-function OrgRow({ org }: { org: AdminOrg }) {
+/** Finding an account, and suspending or lifting it. */
+function UsersAdmin() {
   const qc = useQueryClient()
-  const [note, setNote] = useState('')
-  const [confirming, setConfirming] = useState(false)
-  const decide = useMutation({
-    mutationFn: (decision: OrgDecision) =>
-      api.admin.decideOrg(org.slug, { decision, note: note.trim() || undefined }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-orgs'] })
-      qc.invalidateQueries({ queryKey: ['orgs'] })
-    },
+  const [q, setQ] = useState('')
+  const [search, setSearch] = useState('')
+  const { data: users, isLoading } = useQuery({
+    queryKey: ['admin-users', search],
+    queryFn: () => api.admin.users(search),
   })
-  const creator = org.members[0]?.user
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-users'] })
+  const suspend = useMutation({
+    mutationFn: (id: string) => api.admin.suspend(id),
+    onSuccess: refresh,
+  })
+  const lift = useMutation({
+    mutationFn: (id: string) => api.admin.liftSuspension(id),
+    onSuccess: refresh,
+  })
+  const liftMessaging = useMutation({
+    mutationFn: (id: string) => api.admin.liftMessagingSuspension(id),
+    onSuccess: refresh,
+  })
+  const busy = suspend.isPending || lift.isPending || liftMessaging.isPending
+  const error = [suspend, lift, liftMessaging].find((m) => m.isError)?.error
+
   return (
-    <QueueCard
-      to={`/orgs/${org.slug}`}
-      title={org.name}
-      tags={
-        <>
-          <Chip size="sm" tone="navy">
-            {org.type === 'LAB' ? 'Lab' : 'Club'}
-          </Chip>
-          <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
-        </>
-      }
-      when={`created ${new Date(org.createdAt).toLocaleDateString()}`}
-      meta={
-        <>
-          Claimed role <b>{org.contactRole ?? '—'}</b> · contact {org.contactEmail ?? '—'}
-          {creator && (
-            <>
-              {' '}
-              · created by <Link to={`/u/${creator.id}`}>{creator.name}</Link> ({creator.email})
-            </>
-          )}{' '}
-          · {org._count.members} members, {org._count.projects} projects, {org._count.activities}{' '}
-          events
-        </>
-      }
-    >
-      {org.description && <p className="text-15">{org.description}</p>}
-      {org.verificationNote ? (
-        <Notice tone="navy" title="Evidence submitted">
-          <p className="whitespace-pre-wrap">{org.verificationNote}</p>
-        </Notice>
+    <div className="flex flex-col gap-4">
+      <form
+        className="flex gap-2.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          setSearch(q.trim())
+        }}
+      >
+        <Input
+          className="grow"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Name or email — empty lists everyone suspended"
+          aria-label="Find an account"
+        />
+        <Button type="submit" icon="search">
+          Find
+        </Button>
+      </form>
+      {error && <ErrorText>{error.message}</ErrorText>}
+      {isLoading ? (
+        <Spinner />
+      ) : !users?.length ? (
+        <EmptyState icon="user" title={search ? 'Nobody matches' : 'Nobody is suspended'} compact />
       ) : (
-        <p className="text-14 text-muted">Nothing submitted yet.</p>
-      )}
-      {org.status !== 'VERIFIED' && (
-        <>
-          <TextArea
-            rows={2}
-            maxLength={1000}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Note to the group contact (sent with every decision)…"
-          />
-          {decide.isError && <ErrorText>{(decide.error as Error).message}</ErrorText>}
-          <Decisions>
-            {ORG_DECISIONS.map((d) => (
-              <Button
-                key={d.value}
-                size="sm"
-                variant={d.value === 'DENY' ? 'danger' : 'default'}
-                title={d.hint}
-                disabled={decide.isPending}
-                // Denial deletes the group outright, so it takes two clicks.
-                onClick={() =>
-                  d.value === 'DENY' && !confirming ? setConfirming(true) : decide.mutate(d.value)
-                }
-              >
-                {d.value === 'DENY' && confirming ? 'Confirm delete' : d.label}
-              </Button>
-            ))}
-            {confirming && (
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-                Cancel
+        users.map((u) => (
+          <Card key={u.id} className="flex flex-wrap items-center gap-3 p-4">
+            <span className="flex min-w-0 grow flex-col">
+              <Link to={`/u/${u.id}`} className="font-semibold">
+                {u.name}
+              </Link>
+              <span className="text-13 text-muted">
+                {u.email} · joined {new Date(u.createdAt).toLocaleDateString()} ·{' '}
+                {u._count.ownedProjects} projects · {u._count.comments} comments ·{' '}
+                {u._count.reportsAbout} reports about them
+                {u.isAdmin && ' · moderator'}
+              </span>
+            </span>
+            {u.messagingSuspendedAt && (
+              <Button size="sm" disabled={busy} onClick={() => liftMessaging.mutate(u.id)}>
+                Lift messaging suspension
               </Button>
             )}
-          </Decisions>
-        </>
+            {u.suspendedAt ? (
+              <Button size="sm" disabled={busy} onClick={() => lift.mutate(u.id)}>
+                Lift suspension
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={busy}
+                onClick={() =>
+                  confirm(`Suspend ${u.name}? They can read, but not post, comment or message.`) &&
+                  suspend.mutate(u.id)
+                }
+              >
+                Suspend
+              </Button>
+            )}
+          </Card>
+        ))
       )}
-    </QueueCard>
+    </div>
   )
 }
 
@@ -352,11 +420,12 @@ function SpotlightAdmin() {
   )
 }
 
+type Section = 'reports' | 'messages' | 'users' | 'groups' | 'spotlight'
+
 export default function AdminPage() {
   const { user, loading } = useAuth()
-  const [section, setSection] = useState<'reports' | 'messages' | 'groups' | 'spotlight'>('reports')
+  const [section, setSection] = useState<Section>('reports')
   const [reportTab, setReportTab] = useState<ReportStatus | 'all'>('OPEN')
-  const [orgTab, setOrgTab] = useState<OrgStatus | 'all'>('IN_REVIEW')
   const [creatingOrg, setCreatingOrg] = useState(false)
   useDocumentTitle('Moderation')
 
@@ -370,11 +439,6 @@ export default function AdminPage() {
     queryFn: () => api.admin.messageReports(reportTab),
     enabled: !!user?.isAdmin && section === 'messages',
   })
-  const orgs = useQuery({
-    queryKey: ['admin-orgs', orgTab],
-    queryFn: () => api.admin.orgs(orgTab),
-    enabled: !!user?.isAdmin && section === 'groups',
-  })
 
   if (loading) return <Spinner />
   // The API gate is the real one; this only avoids an empty page.
@@ -386,35 +450,35 @@ export default function AdminPage() {
     )
   }
 
-  const list = section === 'reports' ? reports : section === 'messages' ? messageReports : orgs
+  const LEDES: Record<Section, string> = {
+    reports: 'Reported projects, comments, collections, profiles and group events, oldest first.',
+    messages: 'Conversations students reported, with the messages as they were when reported.',
+    users: 'Find an account to suspend it, or lift a suspension.',
+    groups: 'Group pages are created here, published at once, and handed to their exec.',
+    spotlight: 'The project at the top of everyone’s home feed this week.',
+  }
+  const queue = section === 'reports' ? reports : messageReports
 
   return (
     <Page width="narrow" className="flex flex-col gap-6">
       <div>
         <PageTitle>Moderation</PageTitle>
-        <PageLede>
-          {section === 'reports'
-            ? 'Reports on U of T-visible and public projects, oldest first.'
-            : section === 'messages'
-              ? 'Conversations students reported, with the messages as they were when reported.'
-              : section === 'groups'
-                ? 'Create group pages, and approve or deny groups left from the old self-serve flow.'
-                : 'The project at the top of everyone’s home feed this week.'}
-        </PageLede>
+        <PageLede>{LEDES[section]}</PageLede>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedTabs
+        <SegmentedTabs<Section>
           label="Queue"
           value={section}
           onChange={setSection}
           options={[
-            { value: 'reports', label: 'Project reports' },
-            { value: 'messages', label: 'Message reports' },
+            { value: 'reports', label: 'Reports' },
+            { value: 'messages', label: 'Messages' },
+            { value: 'users', label: 'Users' },
             { value: 'groups', label: 'Groups' },
             { value: 'spotlight', label: 'Spotlight' },
           ]}
         />
-        {section === 'spotlight' ? null : section === 'reports' || section === 'messages' ? (
+        {(section === 'reports' || section === 'messages') && (
           <SegmentedTabs<ReportStatus | 'all'>
             label="Report status"
             value={reportTab}
@@ -424,37 +488,29 @@ export default function AdminPage() {
               { value: 'all', label: 'All' },
             ]}
           />
-        ) : (
-          <SegmentedTabs<OrgStatus | 'all'>
-            label="Group status"
-            value={orgTab}
-            onChange={setOrgTab}
-            options={[
-              { value: 'IN_REVIEW', label: 'In review' },
-              { value: 'all', label: 'All' },
-            ]}
-          />
         )}
       </div>
       {creatingOrg && <CreateOrgDialog onClose={() => setCreatingOrg(false)} />}
-      {section === 'groups' && (
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-4.5">
-          <span className="text-14 text-muted">
-            Groups are set up here, published at once, and handed to their exec.
-          </span>
-          <Button variant="primary" icon="plus" onClick={() => setCreatingOrg(true)}>
-            New group
-          </Button>
-        </Card>
-      )}
       {/* Keyed on the queue too, so switching Open / All fades like a tab. */}
       <div
-        key={`${section}:${section === 'groups' ? orgTab : reportTab}`}
+        key={`${section}:${reportTab}`}
         className="flex flex-col gap-6 motion-safe:animate-tab-in"
       >
         {section === 'spotlight' ? (
           <SpotlightAdmin />
-        ) : list.isLoading ? (
+        ) : section === 'users' ? (
+          <UsersAdmin />
+        ) : section === 'groups' ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-4.5">
+            <span className="text-14 text-muted">
+              Each group’s admins manage its members and page. Moderators can delete a group from
+              its own page.
+            </span>
+            <Button variant="primary" icon="plus" onClick={() => setCreatingOrg(true)}>
+              New group
+            </Button>
+          </Card>
+        ) : queue.isLoading ? (
           <Spinner />
         ) : section === 'reports' ? (
           reports.data?.length ? (
@@ -465,21 +521,12 @@ export default function AdminPage() {
               title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
             />
           )
-        ) : section === 'messages' ? (
-          messageReports.data?.length ? (
-            messageReports.data.map((r) => <MessageReportRow key={r.id} report={r} />)
-          ) : (
-            <EmptyState
-              icon="flag"
-              title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
-            />
-          )
-        ) : orgs.data?.length ? (
-          orgs.data.map((o) => <OrgRow key={o.id} org={o} />)
+        ) : messageReports.data?.length ? (
+          messageReports.data.map((r) => <MessageReportRow key={r.id} report={r} />)
         ) : (
           <EmptyState
-            icon="users"
-            title={orgTab === 'IN_REVIEW' ? 'No groups waiting for approval' : 'No groups yet'}
+            icon="flag"
+            title={reportTab === 'OPEN' ? 'Nothing to review' : 'No reports yet'}
           />
         )}
       </div>

@@ -1,22 +1,25 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CommentThread } from '@uofthub/types'
 import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { courseOf, postedAt, timeAgo, timeShort, topicTags } from '../../lib/projectView'
-import { MiniRow } from '../../components/project'
+import { MiniRow, ReportDialog } from '../../components/project'
+import Markdown from '../../components/Markdown'
 import {
   Avatar,
   Badge,
   Button,
   cx,
+  Dialog,
   ErrorText,
   Heading,
   Icon,
   Input,
   LinkButton,
   Panel,
+  TextArea,
 } from '../../components/ui'
 
 /* --------------------------------- updates --------------------------------- */
@@ -26,18 +29,27 @@ function Node({
   when,
   children,
   last,
+  onOpen,
 }: {
   title: string
   when: string
   children?: string
   last?: boolean
+  /** Opens what the project said at this point. */
+  onOpen?: () => void
 }) {
   return (
     <div className="relative pl-8">
       <span className="absolute top-1 left-0 size-4 rounded-full border-3 border-navy-ink bg-surface" />
       {!last && <span className="absolute top-5.5 -bottom-4.5 left-1.75 w-0.5 bg-line" />}
       <div className="flex items-baseline gap-2.5">
-        <b className="text-15">{title}</b>
+        {onOpen ? (
+          <LinkButton className="text-15 font-bold" onClick={onOpen}>
+            {title}
+          </LinkButton>
+        ) : (
+          <b className="text-15">{title}</b>
+        )}
         <span className="text-13 text-muted">{when}</span>
       </div>
       {children && <div className="mt-0.5 text-15 text-ink-3">{children}</div>}
@@ -60,6 +72,7 @@ export function Updates({
   isOwner: boolean
   onPost: () => void
 }) {
+  const [viewing, setViewing] = useState<ProjectVersion | null>(null)
   return (
     <Panel
       title="Updates"
@@ -75,8 +88,21 @@ export function Updates({
       }
       id="updates"
     >
+      {viewing && (
+        <VersionDialog
+          project={project}
+          version={viewing}
+          canRestore={isOwner}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {versions.map((v) => (
-        <Node key={v.id} title={`v${v.versionNum}`} when={timeAgo(v.createdAt)}>
+        <Node
+          key={v.id}
+          title={`v${v.versionNum}`}
+          when={timeAgo(v.createdAt)}
+          onOpen={() => setViewing(v)}
+        >
           {v.note ?? 'Saved a new version'}
         </Node>
       ))}
@@ -88,6 +114,91 @@ export function Updates({
         {project.pitch ?? undefined}
       </Node>
     </Panel>
+  )
+}
+
+/**
+ * What the project said at one version, and — for its makers — putting that
+ * back. Files and outputs are named, not restored: they may be gone.
+ */
+function VersionDialog({
+  project,
+  version,
+  canRestore,
+  onClose,
+}: {
+  project: ProjectDetail
+  version: ProjectVersion
+  canRestore: boolean
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const restore = useMutation({
+    mutationFn: () => api.projects.restoreVersion(project.id, version.versionNum),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.id] })
+      qc.invalidateQueries({ queryKey: ['versions', project.id] })
+      onClose()
+    },
+  })
+  return (
+    <Dialog
+      title={`v${version.versionNum} · ${new Date(version.createdAt).toLocaleDateString()}`}
+      onClose={onClose}
+      width={680}
+      footer={
+        <>
+          <Button onClick={onClose}>Close</Button>
+          {canRestore && (
+            <Button
+              variant="primary"
+              disabled={restore.isPending}
+              onClick={() =>
+                confirm(
+                  'Put this version’s text, details, tags and references back? What is there now is saved as a new version first.'
+                ) && restore.mutate()
+              }
+            >
+              {restore.isPending ? 'Restoring…' : 'Restore this version'}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {version.note && <p className="text-15 font-semibold">{version.note}</p>}
+      <h3 className="font-display text-24 font-bold">{version.title}</h3>
+      {version.courseCode && <p className="text-14 text-muted">Made for {version.courseCode}</p>}
+      {version.description && <Markdown source={version.description} />}
+      {(version.sections ?? []).map((sec) => (
+        <section key={sec.id} className="flex flex-col gap-1.5">
+          <Heading className="text-18">{sec.title || sec.kind}</Heading>
+          {sec.body && <Markdown source={sec.body} />}
+        </section>
+      ))}
+      {(version.details ?? []).length > 0 && (
+        <dl className="grid grid-cols-[140px_1fr] gap-y-1.5 text-14">
+          {version.details!.map((d, i) => (
+            <Fragment key={i}>
+              <dt className="text-muted">{d.label}</dt>
+              <dd>{d.value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+      {(version.references ?? []).length > 0 && (
+        <p className="text-14 text-muted">
+          References: {version.references!.map((r) => r.title).join(' · ')}
+        </p>
+      )}
+      {(version.outputs ?? []).length > 0 && (
+        <p className="text-14 text-muted">
+          Outputs then:{' '}
+          {version.outputs!.map((o) => o.label || o.file || o.link?.label || o.kind).join(' · ')}
+        </p>
+      )}
+      {version.tags.length > 0 && <p className="text-14 text-muted">#{version.tags.join(' #')}</p>}
+      {restore.isError && <ErrorText>{restore.error.message}</ErrorText>}
+    </Dialog>
   )
 }
 
@@ -140,20 +251,55 @@ function CommentItem({
 }) {
   const { user } = useAuth()
   const qc = useQueryClient()
+  const [editing, setEditing] = useState<string | null>(null)
+  const [reporting, setReporting] = useState(false)
   const author = comment.userId === project.ownerId
   const name = comment.user?.name ?? 'Someone'
-  const mine = user?.id === comment.userId
+  const mine = !!user && user.id === comment.userId
+  // Its author, the project's owner or a moderator may remove it.
+  const canDelete = mine || user?.id === project.ownerId || !!user?.isAdmin
+  const refresh = () => qc.invalidateQueries({ queryKey: ['comments', project.id] })
 
   const helpful = useMutation({
     mutationFn: () => api.projects.helpful(project.id, comment.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments', project.id] }),
+    onSuccess: refresh,
   })
+  const save = useMutation({
+    mutationFn: (body: string) => api.projects.editComment(project.id, comment.id, body),
+    onSuccess: () => {
+      setEditing(null)
+      refresh()
+    },
+  })
+  const remove = useMutation({
+    mutationFn: () => api.projects.deleteComment(project.id, comment.id),
+    onSuccess: () => {
+      refresh()
+      qc.invalidateQueries({ queryKey: ['project', project.id] })
+    },
+  })
+
+  if (comment.deleted)
+    return (
+      <div className={cx('flex items-center gap-3', small && 'ml-14')}>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-fill text-muted">
+          <Icon name="trash" size={16} />
+        </span>
+        <p className="text-14 text-muted italic">This comment was deleted.</p>
+      </div>
+    )
 
   return (
     <div className={cx('flex items-start gap-3', small && 'ml-14')}>
+      {reporting && (
+        <ReportDialog
+          target={{ kind: 'comment', projectId: project.id, commentId: comment.id }}
+          onClose={() => setReporting(false)}
+        />
+      )}
       <Link to={`/u/${comment.userId}`} tabIndex={-1} aria-hidden="true">
         <Avatar
-          person={{ id: comment.userId, name, avatarUrl: comment.user?.avatarUrl }}
+          person={{ id: comment.userId ?? undefined, name, avatarUrl: comment.user?.avatarUrl }}
           size={small ? 32 : 40}
         />
       </Link>
@@ -168,11 +314,45 @@ function CommentItem({
             </Badge>
           )}{' '}
           <span className="text-muted">
-            · {[comment.user?.faculty, timeShort(comment.createdAt)].filter(Boolean).join(' · ')}
+            ·{' '}
+            {[comment.user?.faculty, timeShort(comment.createdAt), comment.editedAt && 'edited']
+              .filter(Boolean)
+              .join(' · ')}
           </span>
         </div>
-        <p className="text-15 leading-[1.55] wrap-anywhere whitespace-pre-wrap">{comment.body}</p>
-        <div className="flex gap-4">
+        {editing !== null ? (
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (editing.trim()) save.mutate(editing.trim())
+            }}
+          >
+            <TextArea
+              rows={3}
+              maxLength={4000}
+              value={editing}
+              onChange={(e) => setEditing(e.target.value)}
+              aria-label="Edit your comment"
+            />
+            <span className="flex gap-2">
+              <Button
+                size="sm"
+                type="submit"
+                variant="primary"
+                disabled={!editing.trim() || save.isPending}
+              >
+                Save
+              </Button>
+              <Button size="sm" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </span>
+          </form>
+        ) : (
+          <p className="text-15 leading-[1.55] wrap-anywhere whitespace-pre-wrap">{comment.body}</p>
+        )}
+        <div className="flex flex-wrap gap-4">
           <LinkButton
             className={cx(
               commentAction,
@@ -191,7 +371,29 @@ function CommentItem({
               Reply
             </LinkButton>
           )}
+          {mine && editing === null && (
+            <LinkButton className={commentAction} onClick={() => setEditing(comment.body)}>
+              Edit
+            </LinkButton>
+          )}
+          {canDelete && (
+            <LinkButton
+              className={commentAction}
+              disabled={remove.isPending}
+              onClick={() => confirm('Delete this comment?') && remove.mutate()}
+            >
+              Delete
+            </LinkButton>
+          )}
+          {user && !mine && (
+            <LinkButton className={commentAction} onClick={() => setReporting(true)}>
+              Report
+            </LinkButton>
+          )}
         </div>
+        {(save.isError || remove.isError) && (
+          <ErrorText>{(save.error ?? remove.error)!.message}</ErrorText>
+        )}
       </div>
     </div>
   )

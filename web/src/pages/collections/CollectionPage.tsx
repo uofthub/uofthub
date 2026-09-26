@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { timeAgo } from '../../lib/projectView'
+import { ReportDialog } from '../../components/project'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CollectionDialog } from '../../components/collection'
 import {
@@ -21,6 +22,7 @@ export default function CollectionPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
+  const [reporting, setReporting] = useState(false)
   const [layout, setLayout] = useState<CardLayout>('card')
 
   const { data, isLoading } = useQuery({
@@ -56,12 +58,23 @@ export default function CollectionPage() {
   return (
     <Page width="wide" className="flex flex-col gap-7">
       {editing && <CollectionDialog collection={data} onClose={() => setEditing(false)} />}
+      {reporting && (
+        <ReportDialog
+          target={{ kind: 'collection', collectionId: data.id }}
+          onClose={() => setReporting(false)}
+        />
+      )}
       <div className="flex flex-col gap-3">
         <Link to="/collections" className="text-14 font-semibold text-muted hover:text-navy-deep">
           ← Collections
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <PageTitle>{data.title}</PageTitle>
+          {user && !own && (
+            <Button icon="flag" variant="ghost" onClick={() => setReporting(true)}>
+              Report
+            </Button>
+          )}
           {(own || user?.isAdmin) && (
             <span className="flex items-center gap-2">
               {own && (

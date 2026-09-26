@@ -51,7 +51,7 @@ export function uniqueIp(): string {
 let seq = 0
 
 export async function createUser(
-  overrides: { email?: string; name?: string; isAdmin?: boolean } = {}
+  overrides: { email?: string; name?: string; isAdmin?: boolean; verified?: boolean } = {}
 ) {
   seq += 1
   const faculty = overrides.email?.endsWith('@utoronto.ca') ?? false
@@ -61,6 +61,9 @@ export async function createUser(
       name: overrides.name ?? `Student ${seq}`,
       isAdmin: overrides.isAdmin ?? false,
       faculty: faculty ? 'Arts & Science' : undefined,
+      // Confirmed unless a test says otherwise — the state every account a
+      // route sees is in, since an unconfirmed one cannot sign in.
+      emailVerifiedAt: overrides.verified === false ? null : new Date(),
     },
   })
 }
@@ -74,6 +77,7 @@ export async function cookieFor(user: { id: string; email: string }): Promise<{ 
       email: user.email,
       // Mirrors getRole() in routes/auth.ts: staff addresses are FACULTY.
       role: user.email.endsWith('@utoronto.ca') ? 'FACULTY' : 'STUDENT',
+      sv: (user as { sessionVersion?: number }).sessionVersion ?? 0,
     }),
   }
 }
@@ -153,15 +157,13 @@ export async function createProject(
   return project
 }
 
-/** A verified group with `userId` as its admin, skipping the review flow. */
-export async function createVerifiedOrg(userId: string, overrides: { slug?: string } = {}) {
+/** A group with `userId` as its admin, as a moderator would have set it up. */
+export async function createOrg(userId: string, overrides: { slug?: string } = {}) {
   seq += 1
   return db.organization.create({
     data: {
       name: `Group ${seq}`,
       slug: overrides.slug ?? `group-${seq}`,
-      status: 'VERIFIED',
-      verifiedAt: new Date(),
       contactEmail: 'exec@mail.utoronto.ca',
       contactRole: 'President',
       members: { create: { userId, role: 'ADMIN' } },

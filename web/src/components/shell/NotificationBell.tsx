@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Notification } from '@uofthub/types'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { messageFor } from '../../lib/notifications'
@@ -17,34 +16,57 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
   // items the student opened it to see. Freezing what was unread at open
   // keeps them highlighted until the list is opened again.
   const [wasUnread, setWasUnread] = useState<Set<string>>(new Set())
-  const [answered, setAnswered] = useState<Set<string>>(new Set())
 
-  const { data } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => api.notifications.list(),
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['notifications', 'list'],
+    queryFn: ({ pageParam }) => api.notifications.list(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
     enabled: !!user,
     // Kept current by the live stream — see lib/live.ts.
   })
 
+  // Invitations still waiting, read from the invitations themselves rather
+  // than from the notifications that announced them: an old one scrolled out
+  // of the list is still waiting, and an answered one is not. Under the
+  // notifications key, so the live stream refreshes both.
+  const { data: invites = [] } = useQuery({
+    queryKey: ['notifications', 'invites'],
+    queryFn: () => api.users.invites(),
+    enabled: !!user,
+  })
+  const { data: orgInvites = [] } = useQuery({
+    queryKey: ['notifications', 'org-invites'],
+    queryFn: () => api.users.orgInvites(),
+    enabled: !!user,
+  })
+  const answerOrg = useMutation({
+    mutationFn: ({ slug, accepted }: { slug: string; accepted: boolean }) =>
+      api.orgs.answerInvite(slug, accepted),
+    onSuccess: (_data, { slug }) => {
+      qc.invalidateQueries({ queryKey: ['notifications', 'org-invites'] })
+      qc.invalidateQueries({ queryKey: ['org', slug] })
+    },
+  })
   const respond = useMutation({
-    mutationFn: ({ n, accepted }: { n: Notification; accepted: boolean }) =>
-      api.projects.respondToInvite(String(n.payload.projectId), user!.id, accepted),
-    onSuccess: (_data, { n }) => {
-      setAnswered((prev) => new Set(prev).add(n.id))
-      qc.invalidateQueries({ queryKey: ['project', n.payload.projectId] })
+    mutationFn: ({ projectId, accepted }: { projectId: string; accepted: boolean }) =>
+      api.projects.respondToInvite(projectId, user!.id, accepted),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: ['notifications', 'invites'] })
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
     },
   })
 
   if (!user) return null
 
-  const notifications = data?.notifications ?? []
-  const unread = data?.unreadCount ?? 0
+  const notifications = data?.pages.flatMap((p) => p.notifications) ?? []
+  const unread = data?.pages[0]?.unreadCount ?? 0
 
   const onOpen = async () => {
     setWasUnread(new Set(notifications.filter((n) => !n.read).map((n) => n.id)))
     if (unread === 0) return
     await api.notifications.markAllRead()
-    qc.invalidateQueries({ queryKey: ['notifications'] })
+    qc.invalidateQueries({ queryKey: ['notifications', 'list'] })
   }
 
   return (
@@ -74,6 +96,65 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
               Notifications
             </Heading>
           </div>
+          {(invites.length > 0 || orgInvites.length > 0) && (
+            <section className="mx-1 mb-2 flex flex-col gap-2 rounded-lg bg-navy-wash p-2.5">
+              <span className="text-13 font-semibold text-navy-ink">Waiting for your answer</span>
+              {invites.map((invite) => (
+                <div key={invite.projectId} className="flex flex-col gap-1.5">
+                  <span className="text-14 leading-[1.4]">
+                    <b>{invite.owner.name}</b> invited you to <b>{invite.projectTitle}</b>
+                    {invite.title && ` as ${invite.title}`}
+                  </span>
+                  <span className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() =>
+                        respond.mutate({ projectId: invite.projectId, accepted: true })
+                      }
+                      disabled={respond.isPending}
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        respond.mutate({ projectId: invite.projectId, accepted: false })
+                      }
+                      disabled={respond.isPending}
+                    >
+                      Decline
+                    </Button>
+                  </span>
+                </div>
+              ))}
+              {orgInvites.map((invite) => (
+                <div key={invite.slug} className="flex flex-col gap-1.5">
+                  <span className="text-14 leading-[1.4]">
+                    <b>{invite.name}</b> invited you to join
+                    {invite.role === 'ADMIN' && ' as an admin'}
+                  </span>
+                  <span className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => answerOrg.mutate({ slug: invite.slug, accepted: true })}
+                      disabled={answerOrg.isPending}
+                    >
+                      Join
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => answerOrg.mutate({ slug: invite.slug, accepted: false })}
+                      disabled={answerOrg.isPending}
+                    >
+                      Decline
+                    </Button>
+                  </span>
+                </div>
+              ))}
+            </section>
+          )}
           {notifications.length === 0 ? (
             <p className="px-3 pt-2 pb-3.5 text-14 text-muted">
               Nothing yet. Reactions, comments and follows on your work show up here.
@@ -95,32 +176,17 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
                       </span>
                       <span className="text-12 text-muted">{timeAgo(n.createdAt)}</span>
                     </Link>
-                    {n.type === 'COLLABORATOR_INVITED' && !answered.has(n.id) && (
-                      // Answered here rather than on the project page: a pending
-                      // collaborator can't open a PRIVATE project yet, so the
-                      // link above would 404 until they accept.
-                      <div className="flex items-center gap-2 px-3 pb-2.5">
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => respond.mutate({ n, accepted: true })}
-                          disabled={respond.isPending}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => respond.mutate({ n, accepted: false })}
-                          disabled={respond.isPending}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    )}
                   </li>
                 )
               })}
             </ul>
+          )}
+          {hasNextPage && (
+            <div className="px-3 pb-2.5">
+              <Button size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+                {isFetchingNextPage ? 'Loading…' : 'Show older'}
+              </Button>
+            </div>
           )}
         </div>
       )}

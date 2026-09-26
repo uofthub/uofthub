@@ -33,10 +33,14 @@ describe('a project’s course', () => {
     })
     expect(created.json().courseCode).toBe('CSC211H5')
 
-    const bad = await call('PATCH', `/projects/${created.json().id}`, owner, { courseCode: 'CS 211' })
+    const bad = await call('PATCH', `/projects/${created.json().id}`, owner, {
+      courseCode: 'CS 211',
+    })
     expect(bad.statusCode).toBe(400)
 
-    const cleared = await call('PATCH', `/projects/${created.json().id}`, owner, { courseCode: null })
+    const cleared = await call('PATCH', `/projects/${created.json().id}`, owner, {
+      courseCode: null,
+    })
     expect(cleared.json().courseCode).toBeNull()
   })
 
@@ -77,7 +81,10 @@ describe('the migration that moved course codes out of tags', () => {
     new URL('../../prisma/migrations/20260926000000_course_code/migration.sql', import.meta.url),
     'utf8'
   )
-  const backfill = sql.slice(sql.indexOf('WITH firsts'), sql.indexOf(';', sql.indexOf('WITH firsts')))
+  const backfill = sql.slice(
+    sql.indexOf('WITH firsts'),
+    sql.indexOf(';', sql.indexOf('WITH firsts'))
+  )
 
   it('makes the first course-code tag the course and drops every spelling of it', async () => {
     const owner = await createUser()
@@ -111,9 +118,12 @@ describe('course templates', () => {
       'Trade-offs & responsible use',
       'Recommendation',
     ])
-    expect(
-      template.sections[2].items.map((i: { label: string }) => i.label)
-    ).toEqual(['Human baseline', 'Algorithmic', 'Deep learning', 'LLM prompting'])
+    expect(template.sections[2].items.map((i: { label: string }) => i.label)).toEqual([
+      'Human baseline',
+      'Algorithmic',
+      'Deep learning',
+      'LLM prompting',
+    ])
     expect((await call('GET', '/courses/CSC211/template')).statusCode).toBe(200)
   })
 
@@ -197,5 +207,30 @@ describe('the feed and courses', () => {
     const { items } = (await call('GET', '/feed', me)).json()
     expect(items).toHaveLength(1)
     expect(items[0].reason).toEqual({ kind: 'COURSE', tag: 'CSC211H5' })
+  })
+})
+
+describe('UTSC course codes', () => {
+  it('files a project under one and finds it by its stem', async () => {
+    const { cookieFor, createUser, getApp } = await import('../test/helpers.js')
+    const owner = await createUser()
+    const app = await getApp()
+    const made = await app.inject({
+      method: 'POST',
+      url: '/projects',
+      cookies: await cookieFor(owner),
+      payload: { title: 'Intro project', courseCode: 'csca08h3', visibility: 'PUBLIC' },
+    })
+    expect(made.json().courseCode).toBe('CSCA08H3')
+    const found = await app.inject({ method: 'GET', url: '/projects?course=CSCA08' })
+    expect(found.json().map((p: { title: string }) => p.title)).toEqual(['Intro project'])
+
+    const profile = await app.inject({
+      method: 'PATCH',
+      url: '/users/me',
+      cookies: await cookieFor(owner),
+      payload: { courses: ['MATA31H3', 'CSC108'] },
+    })
+    expect(profile.json().courses).toEqual(['MATA31H3', 'CSC108'])
   })
 })

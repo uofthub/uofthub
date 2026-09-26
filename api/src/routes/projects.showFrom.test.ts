@@ -163,18 +163,26 @@ describe('asking about a project you cannot see', () => {
     expect(res.statusCode).toBe(404)
   })
 
-  it('answers an access request with a 404 too', async () => {
+  it('lets a TA ask for access to it, answering exactly as for an id that does not exist', async () => {
     const { hidden } = await seed()
     const ta = await createUser({ email: 'ta.person@utoronto.ca' })
-    const res = await call('POST', `/projects/${hidden.id}/request-access`, ta)
-    expect(res.statusCode).toBe(404)
+    const real = await call('POST', `/projects/${hidden.id}/request-access`, ta)
+    const fake = await call(
+      'POST',
+      '/projects/00000000-0000-0000-0000-000000000000/request-access',
+      ta
+    )
+
+    expect(real.statusCode).toBe(202)
+    expect(real.json()).toEqual(fake.json())
+    expect(await db.projectCollaborator.count({ where: { userId: ta.id, role: 'VIEWER' } })).toBe(1)
   })
 
-  it('answers the same for a private project', async () => {
+  it('lets a TA ask for access to a draft too', async () => {
     const owner = await createUser()
     const draft = await createProject(owner.id, { visibility: 'PRIVATE' })
     const ta = await createUser({ email: 'another.ta@utoronto.ca' })
-    expect((await call('POST', `/projects/${draft.id}/request-access`, ta)).statusCode).toBe(404)
+    expect((await call('POST', `/projects/${draft.id}/request-access`, ta)).statusCode).toBe(202)
   })
 })
 

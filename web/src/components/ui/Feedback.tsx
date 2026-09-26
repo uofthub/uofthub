@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
-import { soonProps } from './soon'
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
@@ -120,18 +119,13 @@ export function Toggle({
   checked,
   onChange,
   children,
-  soon,
 }: {
   checked: boolean
   onChange?: (checked: boolean) => void
   children: ReactNode
-  soon?: boolean | string
 }) {
   return (
-    <label
-      className="group inline-flex cursor-pointer items-center gap-2.5 text-15 font-semibold"
-      {...(soon ? soonProps(typeof soon === 'string' ? soon : undefined) : {})}
-    >
+    <label className="group inline-flex cursor-pointer items-center gap-2.5 text-15 font-semibold">
       <span
         className={cx(
           'relative inline-block h-6.5 w-11 rounded-full transition-colors duration-150',
@@ -152,7 +146,6 @@ export function Toggle({
         type="checkbox"
         className="sr-only"
         checked={checked}
-        disabled={!!soon}
         onChange={(e) => onChange?.(e.target.checked)}
       />
     </label>

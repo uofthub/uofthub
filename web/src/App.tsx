@@ -7,11 +7,13 @@ import ExplorePage from './pages/explore/ExplorePage'
 import ProjectPage from './pages/project/ProjectPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SessionPage from './pages/session/SessionPage'
+import { ResetPage, VerifyPage } from './pages/session/LinkPages'
 import OrgsPage from './pages/orgs/OrgsPage'
 import OrgPage from './pages/orgs/OrgPage'
 import AboutPage from './pages/info/AboutPage'
 import TermsPage from './pages/info/TermsPage'
 import PrivacyPage from './pages/info/PrivacyPage'
+import NotFoundPage from './pages/info/NotFoundPage'
 import { HelpWantedPage, SavedPage } from './pages/lists/ListPages'
 
 // Pages most visits never open are loaded when first needed, which keeps them
@@ -21,6 +23,7 @@ const DiscoverPage = lazy(() => import('./pages/info/DiscoverPage'))
 const CollectionsPage = lazy(() => import('./pages/collections/CollectionsPage'))
 const CollectionPage = lazy(() => import('./pages/collections/CollectionPage'))
 const MessagesPage = lazy(() => import('./pages/messages/MessagesPage'))
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'))
 // The editor carries its own weight (and loads pdf.js on top when a PDF is
 // picked), and only people posting ever open it.
 const EditorPage = lazy(() => import('./pages/editor/EditorPage'))
@@ -63,6 +66,9 @@ export default function App() {
             <Route path="/courses/:tag" element={<CourseToExplore />} />
             <Route path="/u/:id" element={<ProfilePage />} />
             <Route path="/session" element={<SessionPage />} />
+            <Route path="/verify" element={<VerifyPage />} />
+            <Route path="/reset" element={<ResetPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/orgs" element={<OrgsPage />} />
             <Route path="/orgs/:slug" element={<OrgPage />} />
@@ -76,7 +82,7 @@ export default function App() {
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/messages/:userId" element={<MessagesPage />} />
             <Route path="/help-wanted" element={<HelpWantedPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>
       </Suspense>

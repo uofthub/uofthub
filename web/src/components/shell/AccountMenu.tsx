@@ -39,6 +39,9 @@ export function AccountMenu() {
           <MenuItem icon="user" to={`/u/${user.id}`} close={close}>
             Your profile
           </MenuItem>
+          <MenuItem icon="settings" to="/settings" close={close}>
+            Settings
+          </MenuItem>
           <MenuItem icon="inbox" to="/messages" close={close}>
             Messages
           </MenuItem>

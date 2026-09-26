@@ -39,7 +39,11 @@ export function messageFor(n: Notification): { text: string; to: string } {
         to,
       }
     case 'ACCESS_REQUESTED':
-      return { text: `${p.requesterName} requested viewer access to "${p.projectTitle}"`, to }
+      // Straight to the People dialog, where it is decided.
+      return {
+        text: `${p.requesterName} requested viewer access to "${p.projectTitle}"`,
+        to: `${to}?people=1`,
+      }
     case 'ACCESS_REQUEST_DECIDED':
       return {
         text: `Your access request for "${p.projectTitle}" was ${p.accepted ? 'approved' : 'denied'}`,
@@ -49,7 +53,9 @@ export function messageFor(n: Notification): { text: string; to: string } {
       const action =
         p.action === 'TAKEN_DOWN'
           ? `"${p.projectTitle}" was taken down after a report`
-          : `A moderator reviewed a report about "${p.projectTitle}"`
+          : p.action === 'RESTORED'
+            ? `"${p.projectTitle}" was restored — you can publish it again`
+            : `A moderator reviewed a report about "${p.projectTitle}"`
       return { text: p.note ? `${action}: ${p.note}` : action, to }
     }
     case 'MESSAGING_MODERATED': {
@@ -59,6 +65,32 @@ export function messageFor(n: Notification): { text: string; to: string } {
           : 'A moderator reviewed a report about your messages'
       return { text: p.note ? `${action}: ${p.note}` : action, to: '/messages' }
     }
+    case 'CONTENT_MODERATED': {
+      const what = `your ${p.target ?? 'post'}`
+      const action =
+        p.action === 'TAKEN_DOWN'
+          ? `A moderator removed ${what} after a report`
+          : `A moderator reviewed a report about ${what}`
+      return { text: p.note ? `${action}: ${p.note}` : action, to: p.projectId ? to : '/settings' }
+    }
+    case 'ACCOUNT_MODERATED': {
+      const action =
+        p.action === 'LIFTED'
+          ? 'Your account suspension was lifted'
+          : 'A moderator suspended your account'
+      return { text: p.note ? `${action}: ${p.note}` : action, to: '/settings' }
+    }
+    case 'ORG_INVITED':
+      return { text: `${p.inviterName} invited you to join ${p.orgName}`, to: `/orgs/${p.slug}` }
+    case 'ORG_JOIN_REQUESTED':
+      return { text: `${p.actorName} asked to join ${p.orgName}`, to: `/orgs/${p.slug}` }
+    case 'ORG_MEMBERSHIP_DECIDED':
+      return {
+        text: p.accepted
+          ? `You’re now a member of ${p.orgName}`
+          : `Your request to join ${p.orgName} wasn’t approved`,
+        to: `/orgs/${p.slug}`,
+      }
     case 'PROJECT_LIKED':
       return { text: `${p.actorName} liked "${p.projectTitle}"`, to }
     case 'PROJECT_COMMENTED':

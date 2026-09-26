@@ -8,8 +8,9 @@ import type { IconName } from '../components/ui/Icon'
  */
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'text'
 
+// SVG is download-only, as the API serves it: it can carry script.
 const PREVIEW_KINDS: Record<PreviewKind, string[]> = {
-  image: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
+  image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
   pdf: ['pdf'],
   video: ['mp4', 'webm'],
   audio: ['mp3', 'wav'],

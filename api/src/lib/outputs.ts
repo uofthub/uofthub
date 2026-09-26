@@ -192,3 +192,9 @@ export async function thumbnailType(buffer: Buffer): Promise<string | null> {
 
 export const thumbnailKeyFor = (projectId: string, outputId: string, contentType: string) =>
   `projects/${projectId}/thumbs/${outputId}-${Date.now().toString(36)}.${contentType.split('/')[1]}`
+
+/** The type a stored thumbnail is served as, read back off its key. */
+export function thumbnailContentType(key: string): string {
+  const ext = key.split('.').pop() ?? ''
+  return ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : 'image/webp'
+}

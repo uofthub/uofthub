@@ -1,6 +1,8 @@
 import type { OutputKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import { signedDownloadUrl } from './storage.js'
+import { contentTypeFor, extOf } from './fileValidation.js'
+import { thumbnailContentType } from './outputs.js'
 
 /**
  * Cover thumbnails for a list of projects, and what each one leads with.
@@ -20,17 +22,23 @@ import { signedDownloadUrl } from './storage.js'
 // Mirrors the images category in fileValidation.ts. Matched on the filename
 // rather than mimeType because the extension is what upload validates against
 // — mimeType is whatever the browser claimed at the time.
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']
+// No SVG: it can carry script, so it is never shown inline.
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 const isImage = (name: string) =>
   IMAGE_EXTENSIONS.includes((name.split('.').pop() ?? '').toLowerCase())
 
-type Source = { key: string; name: string }
+type Source = { key: string; name: string; type: string }
 
 /**
  * What a project leads with, for a card's main button ("View poster") —
  * which file or link it is, not the file itself.
  */
-export type Lead = { kind: OutputKind; label: string | null; fileId: string | null; linkId: string | null }
+export type Lead = {
+  kind: OutputKind
+  label: string | null
+  fileId: string | null
+  linkId: string | null
+}
 
 type Covers = { covers: Map<string, string>; leads: Map<string, Lead> }
 
@@ -70,20 +78,36 @@ export async function coverUrls(projectIds: string[]): Promise<Covers> {
   )
   const sources = new Map<string, Source>()
   for (const p of primaries) {
-    if (p.thumbnailKey) sources.set(p.projectId, { key: p.thumbnailKey, name: 'cover' })
+    if (p.thumbnailKey)
+      sources.set(p.projectId, {
+        key: p.thumbnailKey,
+        name: 'cover',
+        type: thumbnailContentType(p.thumbnailKey),
+      })
     else if (p.file && isImage(p.file.name))
-      sources.set(p.projectId, { key: p.file.storageKey, name: p.file.name })
+      sources.set(p.projectId, {
+        key: p.file.storageKey,
+        name: p.file.name,
+        type: contentTypeFor(extOf(p.file.name)),
+      })
   }
   // The earliest image, since findMany came back in that order.
   for (const file of images) {
     if (!sources.has(file.projectId))
-      sources.set(file.projectId, { key: file.storageKey, name: file.name })
+      sources.set(file.projectId, {
+        key: file.storageKey,
+        name: file.name,
+        type: contentTypeFor(extOf(file.name)),
+      })
   }
 
   try {
     const signed = await Promise.all(
       [...sources].map(async ([projectId, source]) => {
-        const url = await signedDownloadUrl(source.key, source.name, { disposition: 'inline' })
+        const url = await signedDownloadUrl(source.key, source.name, {
+          disposition: 'inline',
+          contentType: source.type,
+        })
         return [projectId, url] as const
       })
     )

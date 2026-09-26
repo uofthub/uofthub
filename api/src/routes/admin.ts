@@ -1,13 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { OrgStatus, ReportStatus } from '@prisma/client'
+import type { ReportStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
-import { emailContactOfDecision } from '../lib/orgEmails.js'
+import { removeComment } from '../lib/comments.js'
+import { deleteObject } from '../lib/storage.js'
 import { startOfUtcWeek } from '../lib/dates.js'
 import { isListed } from '../lib/visibility.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
+const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
 
 /** What a moderator can do with a report, and the status it leaves behind. */
 const DECISIONS = {
@@ -18,16 +20,21 @@ const DECISIONS = {
 
 type Decision = keyof typeof DECISIONS
 
+const PERSON = { select: { id: true, name: true, email: true } } as const
+
 const REPORT_SELECT = {
   id: true,
+  targetType: true,
   reason: true,
   details: true,
+  excerpt: true,
   status: true,
   createdAt: true,
   reviewedAt: true,
   reviewNote: true,
-  reporter: { select: { id: true, name: true, email: true } },
+  reporter: PERSON,
   reviewedBy: { select: { id: true, name: true } },
+  subject: { select: { id: true, name: true, email: true, suspendedAt: true } },
   project: {
     select: {
       id: true,
@@ -35,10 +42,117 @@ const REPORT_SELECT = {
       description: true,
       visibility: true,
       takenDownAt: true,
-      owner: { select: { id: true, name: true, email: true } },
+      owner: PERSON,
+    },
+  },
+  comment: { select: { id: true, body: true, deletedAt: true } },
+  collection: { select: { id: true, title: true, description: true } },
+  activity: {
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      org: { select: { slug: true, name: true } },
     },
   },
 } as const
+
+type ReportRow = {
+  id: string
+  targetType: (typeof REPORT_TARGETS)[number]
+  projectId: string | null
+  commentId: string | null
+  collectionId: string | null
+  activityId: string | null
+  subjectUserId: string | null
+}
+
+/** Every open report about the same thing as this one. */
+function sameTargetWhere(report: ReportRow) {
+  switch (report.targetType) {
+    case 'PROJECT':
+      return { targetType: report.targetType, projectId: report.projectId }
+    case 'COMMENT':
+      return { targetType: report.targetType, commentId: report.commentId }
+    case 'COLLECTION':
+      return { targetType: report.targetType, collectionId: report.collectionId }
+    case 'ORG_ACTIVITY':
+      return { targetType: report.targetType, activityId: report.activityId }
+    case 'USER':
+      return { targetType: report.targetType, subjectUserId: report.subjectUserId }
+  }
+}
+
+/**
+ * Taking down what a report is about. A project is forced private and kept
+ * (see the route below); a comment, a collection or an event is removed; a
+ * profile has its free text and picture cleared. The account itself is a
+ * separate decision — see `suspend`.
+ */
+async function takeDown(report: ReportRow): Promise<void> {
+  switch (report.targetType) {
+    case 'PROJECT':
+      if (report.projectId)
+        await db.project.update({
+          where: { id: report.projectId },
+          data: { visibility: 'PRIVATE', takenDownAt: new Date() },
+        })
+      return
+    case 'COMMENT': {
+      if (!report.commentId) return
+      const comment = await db.comment.findUnique({
+        where: { id: report.commentId },
+        select: { _count: { select: { replies: true } } },
+      })
+      if (comment) await removeComment(report.commentId, comment._count.replies > 0)
+      return
+    }
+    case 'COLLECTION':
+      if (report.collectionId)
+        await db.collection.deleteMany({ where: { id: report.collectionId } })
+      return
+    case 'ORG_ACTIVITY':
+      if (report.activityId) await db.orgActivity.deleteMany({ where: { id: report.activityId } })
+      return
+    case 'USER': {
+      if (!report.subjectUserId) return
+      const user = await db.user.findUnique({
+        where: { id: report.subjectUserId },
+        select: { avatarKey: true },
+      })
+      await db.user.update({
+        where: { id: report.subjectUserId },
+        data: {
+          bio: null,
+          openTo: [],
+          websiteUrl: null,
+          githubUrl: null,
+          linkedinUrl: null,
+          avatarUrl: null,
+          avatarKey: null,
+          avatarIsCustom: false,
+        },
+      })
+      if (user?.avatarKey) await deleteObject(user.avatarKey).catch(() => undefined)
+      return
+    }
+  }
+}
+
+/** What a report's subject is told happened, in the words the bell uses. */
+const TARGET_WORDS: Record<ReportRow['targetType'], string> = {
+  PROJECT: 'project',
+  COMMENT: 'comment',
+  COLLECTION: 'collection',
+  USER: 'profile',
+  ORG_ACTIVITY: 'group event',
+}
+
+/** Suspend an account, and tell its owner. */
+async function suspend(userId: string, note: string | null) {
+  await db.user.update({ where: { id: userId }, data: { suspendedAt: new Date() } })
+  await notify(userId, 'ACCOUNT_MODERATED', { action: 'SUSPENDED', note })
+}
 
 /** The same three outcomes, for a conversation: suspending stands in for taking down. */
 const MESSAGE_DECISIONS = {
@@ -66,89 +180,188 @@ const MESSAGE_REPORT_SELECT = {
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   const adminOnly = { preHandler: [app.authenticate, requireAdmin] }
 
-  // GET /admin/reports?status=OPEN — the moderation queue. Defaults to OPEN
-  // because that's the only status that needs acting on; `all` shows history.
-  app.get<{ Querystring: { status?: string } }>('/reports', adminOnly, async (request, reply) => {
-    const status = request.query.status ?? 'OPEN'
-    if (status !== 'all' && !REPORT_STATUSES.includes(status as ReportStatus)) {
-      return reply.code(400).send({ error: 'Unknown status' })
-    }
-
-    const reports = await db.report.findMany({
-      where: status === 'all' ? {} : { status: status as ReportStatus },
-      select: REPORT_SELECT,
-      // Oldest first for the queue: the report waiting longest is the one to
-      // decide next. (`findMany` without an order is not stable.)
-      orderBy: { createdAt: status === 'OPEN' ? 'asc' : 'desc' },
-      take: 100,
-    })
-    return reports
-  })
-
-  // POST /admin/reports/:id/decision — dismiss / warn the owner / take down
-  app.post<{ Params: { id: string }; Body: { decision?: string; note?: string } }>(
-    '/reports/:id/decision',
+  // GET /admin/reports?status=OPEN&type — the moderation queue. Defaults to
+  // OPEN because that's the only status that needs acting on; `all` shows
+  // history. `type` narrows it to one kind of thing reported.
+  app.get<{ Querystring: { status?: string; type?: string } }>(
+    '/reports',
     adminOnly,
     async (request, reply) => {
-      const decision = request.body?.decision as Decision | undefined
-      if (!decision || !(decision in DECISIONS)) {
-        return reply.code(400).send({ error: 'Decision must be DISMISS, WARN or TAKE_DOWN' })
+      const status = request.query.status ?? 'OPEN'
+      if (status !== 'all' && !REPORT_STATUSES.includes(status as ReportStatus)) {
+        return reply.code(400).send({ error: 'Unknown status' })
       }
-      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+      const type = request.query.type
+      if (type && !REPORT_TARGETS.includes(type as ReportRow['targetType']))
+        return reply.code(400).send({ error: 'Unknown type' })
 
-      const report = await db.report.findUnique({
-        where: { id: request.params.id },
-        include: { project: { select: { id: true, title: true, ownerId: true } } },
-      })
-      if (!report) return reply.code(404).send({ error: 'Not found' })
-      if (report.status !== 'OPEN')
-        return reply.code(409).send({ error: 'This report has already been decided' })
-
-      const decided = {
-        status: DECISIONS[decision],
-        reviewedAt: new Date(),
-        reviewedById: request.user.sub,
-        reviewNote: note,
-      }
-
-      // The project is actioned before the report is read back, so the
-      // response carries the project's post-decision state rather than the
-      // visibility it had a moment ago.
-      if (decision === 'TAKE_DOWN') {
-        // Forced back to PRIVATE rather than deleted — the student keeps their
-        // work and their files; it just stops being visible to anyone else.
-        // `takenDownAt` is what stops them simply setting it public again
-        // (see PATCH /projects/:id).
-        await db.project.update({
-          where: { id: report.projectId },
-          data: { visibility: 'PRIVATE', takenDownAt: new Date() },
-        })
-
-        // A project that drew one report usually drew several. Closing the
-        // duplicates with the same decision keeps the queue honest and, more
-        // to the point, stops the owner being notified once per report.
-        await db.report.updateMany({
-          where: { projectId: report.projectId, status: 'OPEN' },
-          data: decided,
-        })
-      }
-
-      const updated = await db.report.update({
-        where: { id: report.id },
-        data: decided,
+      return db.report.findMany({
+        where: {
+          ...(status !== 'all' && { status: status as ReportStatus }),
+          ...(type && { targetType: type as ReportRow['targetType'] }),
+        },
         select: REPORT_SELECT,
+        // Oldest first for the queue: the report waiting longest is the one to
+        // decide next. (`findMany` without an order is not stable.)
+        orderBy: { createdAt: status === 'OPEN' ? 'asc' : 'desc' },
+        take: 100,
       })
+    }
+  )
 
-      if (decision !== 'DISMISS') {
-        await notify(report.project.ownerId, 'PROJECT_MODERATED', {
+  // POST /admin/reports/:id/decision — { decision, note?, suspend? }
+  //
+  // Dismiss, warn whoever posted it, or take it down. A warning or a
+  // take-down closes every other open report about the same thing, so a
+  // much-reported comment tells its author once. `suspend` also suspends the
+  // author's account, whatever the decision about the content.
+  app.post<{
+    Params: { id: string }
+    Body: { decision?: string; note?: string; suspend?: boolean }
+  }>('/reports/:id/decision', adminOnly, async (request, reply) => {
+    const decision = request.body?.decision as Decision | undefined
+    if (!decision || !(decision in DECISIONS)) {
+      return reply.code(400).send({ error: 'Decision must be DISMISS, WARN or TAKE_DOWN' })
+    }
+    const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+
+    const report = await db.report.findUnique({
+      where: { id: request.params.id },
+      include: { project: { select: { id: true, title: true, ownerId: true } } },
+    })
+    if (!report) return reply.code(404).send({ error: 'Not found' })
+    // Filed before reports named their subject: a project's is its owner.
+    const subjectId = report.subjectUserId ?? report.project?.ownerId ?? null
+    if (report.status !== 'OPEN')
+      return reply.code(409).send({ error: 'This report has already been decided' })
+    if (request.body?.suspend && subjectId === request.user.sub)
+      return reply.code(400).send({ error: 'You cannot suspend yourself' })
+
+    const decided = {
+      status: DECISIONS[decision],
+      reviewedAt: new Date(),
+      reviewedById: request.user.sub,
+      reviewNote: note,
+    }
+
+    // Reports are closed before the content goes: removing a comment or a
+    // collection unlinks the reports about it.
+    if (decision === 'DISMISS') {
+      await db.report.update({ where: { id: report.id }, data: decided })
+    } else {
+      await db.report.updateMany({
+        where: { status: 'OPEN', ...sameTargetWhere(report) },
+        data: decided,
+      })
+    }
+    if (decision === 'TAKE_DOWN') await takeDown(report)
+
+    if (decision !== 'DISMISS' && subjectId) {
+      if (report.targetType === 'PROJECT' && report.project) {
+        await notify(subjectId, 'PROJECT_MODERATED', {
           projectId: report.project.id,
           projectTitle: report.project.title,
           action: DECISIONS[decision],
           note,
         })
+      } else {
+        await notify(subjectId, 'CONTENT_MODERATED', {
+          target: TARGET_WORDS[report.targetType],
+          projectId: report.projectId,
+          action: DECISIONS[decision],
+          note,
+        })
       }
+    }
+    if (request.body?.suspend && subjectId) await suspend(subjectId, note)
 
-      return updated
+    return db.report.findUniqueOrThrow({ where: { id: report.id }, select: REPORT_SELECT })
+  })
+
+  // POST /admin/projects/:id/restore — { note? } lift a take-down, after an
+  // appeal. The project stays private; its owner can publish it again.
+  app.post<{ Params: { id: string }; Body: { note?: string } }>(
+    '/projects/:id/restore',
+    adminOnly,
+    async (request, reply) => {
+      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, title: true, ownerId: true, takenDownAt: true },
+      })
+      if (!project) return reply.code(404).send({ error: 'Not found' })
+      if (!project.takenDownAt)
+        return reply.code(409).send({ error: 'This project is not taken down' })
+      await db.project.update({ where: { id: project.id }, data: { takenDownAt: null } })
+      await notify(project.ownerId, 'PROJECT_MODERATED', {
+        projectId: project.id,
+        projectTitle: project.title,
+        action: 'RESTORED',
+        note,
+      })
+      return { ok: true }
+    }
+  )
+
+  // ── ACCOUNTS ────────────────────────────────────────────────────────────────
+
+  // GET /admin/users?q= — find an account by name or email
+  app.get<{ Querystring: { q?: string } }>('/users', adminOnly, async (request) => {
+    const q = (request.query.q ?? '').trim().slice(0, 100)
+    return db.user.findMany({
+      where: q
+        ? {
+            OR: [
+              { email: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : { OR: [{ suspendedAt: { not: null } }, { messagingSuspendedAt: { not: null } }] },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        isAdmin: true,
+        suspendedAt: true,
+        messagingSuspendedAt: true,
+        _count: { select: { ownedProjects: true, comments: true, reportsAbout: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    })
+  })
+
+  // POST /admin/users/:id/suspend — { note? }
+  app.post<{ Params: { id: string }; Body: { note?: string } }>(
+    '/users/:id/suspend',
+    adminOnly,
+    async (request, reply) => {
+      if (request.params.id === request.user.sub)
+        return reply.code(400).send({ error: 'You cannot suspend yourself' })
+      const user = await db.user.findUnique({
+        where: { id: request.params.id },
+        select: { id: true, suspendedAt: true },
+      })
+      if (!user) return reply.code(404).send({ error: 'Not found' })
+      if (user.suspendedAt) return reply.code(409).send({ error: 'Already suspended' })
+      await suspend(user.id, (request.body?.note ?? '').trim().slice(0, 1000) || null)
+      return { ok: true }
+    }
+  )
+
+  // DELETE /admin/users/:id/suspension — lift an account suspension
+  app.delete<{ Params: { id: string } }>(
+    '/users/:id/suspension',
+    adminOnly,
+    async (request, reply) => {
+      const { count } = await db.user.updateMany({
+        where: { id: request.params.id, suspendedAt: { not: null } },
+        data: { suspendedAt: null },
+      })
+      if (count === 0) return reply.code(404).send({ error: 'Not suspended' })
+      await notify(request.params.id, 'ACCOUNT_MODERATED', { action: 'LIFTED', note: null })
+      return { ok: true }
     }
   )
 
@@ -246,71 +459,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
-  // ── STUDENT GROUP VERIFICATION ──────────────────────────────────────────────
-
-  const ORG_STATUSES = ['PENDING_VERIFICATION', 'IN_REVIEW', 'INFO_REQUESTED', 'VERIFIED'] as const
-
-  // GET /admin/orgs?status=IN_REVIEW — groups waiting on a decision
-  app.get<{ Querystring: { status?: string } }>('/orgs', adminOnly, async (request, reply) => {
-    const status = request.query.status ?? 'IN_REVIEW'
-    if (status !== 'all' && !ORG_STATUSES.includes(status as OrgStatus)) {
-      return reply.code(400).send({ error: 'Unknown status' })
-    }
-
-    const orgs = await db.organization.findMany({
-      where: status === 'all' ? {} : { status: status as OrgStatus },
-      include: {
-        members: {
-          where: { role: 'ADMIN' },
-          include: { user: { select: { id: true, name: true, email: true } } },
-        },
-        _count: { select: { members: true, projects: true, activities: true } },
-      },
-      // Oldest submission first — same queue discipline as the reports above.
-      orderBy: { createdAt: 'asc' },
-      take: 100,
-    })
-    return orgs
-  })
-
-  // POST /admin/orgs/:slug/decision — approve or deny a group left over from
-  // the old self-serve flow. "Request more info" went with that flow: there is
-  // no longer a way for the group to answer.
-  app.post<{ Params: { slug: string }; Body: { decision?: string; note?: string } }>(
-    '/orgs/:slug/decision',
-    adminOnly,
-    async (request, reply) => {
-      const decision = request.body?.decision
-      if (decision !== 'APPROVE' && decision !== 'DENY') {
-        return reply.code(400).send({ error: 'Decision must be APPROVE or DENY' })
-      }
-      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
-
-      const org = await db.organization.findUnique({ where: { slug: request.params.slug } })
-      if (!org) return reply.code(404).send({ error: 'Not found' })
-      if (org.status === 'VERIFIED') {
-        return reply.code(409).send({ error: 'This group is already verified' })
-      }
-
-      if (decision === 'DENY') {
-        // Denial deletes the group and everything hanging off it — reserved
-        // for spam and clear-cut cases, per docs/student-groups.md. The email
-        // goes out before the row disappears, since it reads from it.
-        await emailContactOfDecision(org, 'DENY', note)
-        await db.organization.delete({ where: { id: org.id } })
-        return { ok: true, deleted: true }
-      }
-
-      const verifiedAt = new Date()
-      const updated = await db.organization.update({
-        where: { id: org.id },
-        data: { status: 'VERIFIED', verifiedAt, reviewNote: note, verificationDeadline: null },
-      })
-      await emailContactOfDecision(updated, 'APPROVE', note)
-      return updated
-    }
-  )
-
   // ── WEEKLY SPOTLIGHT ────────────────────────────────────────────────────────
 
   // GET /admin/spotlight — recent and upcoming picks
@@ -352,7 +500,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (!isListed(project)) {
         return reply
           .code(400)
-          .send({ error: 'Only public or U of T-visible projects that are showing can be spotlighted' })
+          .send({
+            error: 'Only public or U of T-visible projects that are showing can be spotlighted',
+          })
       }
 
       const when = weekOf ? new Date(weekOf) : new Date()

@@ -18,7 +18,10 @@ describe('section headings', () => {
 
   it('use the title the author or a template gave', () => {
     expect(
-      sectionLabel({ id: 'm', kind: 'motivation', title: 'Task & motivation', body: 'x' }, 'RESEARCH')
+      sectionLabel(
+        { id: 'm', kind: 'motivation', title: 'Task & motivation', body: 'x' },
+        'RESEARCH'
+      )
     ).toBe('Task & motivation')
     expect(sectionLabel({ id: 'c', kind: 'custom', title: 'Thanks', body: 'x' })).toBe('Thanks')
   })

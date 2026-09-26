@@ -45,5 +45,7 @@ EXPOSE 3001
 
 # Migrations are applied before the server accepts a request — the same order
 # the local `predev` script uses, so a deploy can never serve traffic against a
-# schema it doesn't match.
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/index.js"]
+# schema it doesn't match. `exec` hands the shell's place to Node, so the
+# SIGTERM a deploy sends reaches the API's shutdown handler (src/index.ts)
+# instead of stopping at a shell that ignores it.
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && exec node dist/index.js"]

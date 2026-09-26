@@ -19,7 +19,7 @@ import { startOfUtcDay } from './dates.js'
 export const TRENDING_WINDOW_DAYS = 7
 const WEIGHT = { view: 1, comment: 2, reaction: 3 }
 
-/** Candidates are scored in memory; beyond this many, the newest win entry. */
+/** Active projects are scored in memory; beyond this many, the newest win entry. */
 const CANDIDATE_CAP = 5000
 
 export type TrendingScore = { id: string; score: number }
@@ -58,22 +58,50 @@ export async function trendingScores(ids: string[]): Promise<Map<string, number>
 /**
  * The ids matching `where`, ranked by this week's score, then paged. Callers
  * load the page's rows themselves (see `inOrder` in projectShape.ts).
+ *
+ * Only projects with some activity this week are scored — every other one
+ * scores 0, and among those the order is simply newest first, which the
+ * database can page without loading them. So the work grows with how much
+ * happened this week, not with how many projects exist.
  */
 export async function trendingIds(
   where: Prisma.ProjectWhereInput,
   page: { skip: number; take: number }
 ): Promise<string[]> {
-  const candidates = await db.project.findMany({
-    where,
+  const since = startOfUtcDay(TRENDING_WINDOW_DAYS)
+  const active = await db.project.findMany({
+    where: {
+      AND: [
+        where,
+        {
+          OR: [
+            { dailyViews: { some: { date: { gte: since }, count: { gt: 0 } } } },
+            { comments: { some: { createdAt: { gte: since } } } },
+            { reactions: { some: { createdAt: { gte: since } } } },
+          ],
+        },
+      ],
+    },
     select: { id: true, publishedAt: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
     take: CANDIDATE_CAP,
   })
-  const scores = await trendingScores(candidates.map((c) => c.id))
-  const when = (c: (typeof candidates)[number]) => (c.publishedAt ?? c.createdAt).getTime()
-
-  return candidates
+  const scores = await trendingScores(active.map((c) => c.id))
+  const when = (c: (typeof active)[number]) => (c.publishedAt ?? c.createdAt).getTime()
+  const ranked = active
     .sort((a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) || when(b) - when(a))
-    .slice(page.skip, page.skip + page.take)
     .map((c) => c.id)
+
+  const end = page.skip + page.take
+  if (end <= ranked.length) return ranked.slice(page.skip, end)
+
+  // The quiet ones, newest first, after every project with activity.
+  const quiet = await db.project.findMany({
+    where: { AND: [where, ...(ranked.length ? [{ id: { notIn: ranked } }] : [])] },
+    select: { id: true },
+    orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+    skip: Math.max(0, page.skip - ranked.length),
+    take: end - Math.max(ranked.length, page.skip),
+  })
+  return [...ranked.slice(page.skip), ...quiet.map((q) => q.id)]
 }

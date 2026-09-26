@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useLiveUpdates } from '../../lib/live'
+import { BARE_PAGES, rememberPath } from '../../lib/returnTo'
 import { cx } from '../ui'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
 import { CommandPalette } from './CommandPalette'
@@ -15,10 +16,10 @@ const RAIL = '(width >= 75rem)'
 
 /**
  * The chrome around every page: the desktop header, or on a phone the compact
- * header and the bottom bar. /session is drawn bare.
+ * header and the bottom bar. /session, /verify and /reset are drawn bare.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { pathname, hash } = useLocation()
+  const { pathname, hash, search } = useLocation()
   const { user, maybeSignedIn } = useAuth()
   const phone = useMediaQuery(PHONE)
   const wide = useMediaQuery(RAIL)
@@ -31,7 +32,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!hash) window.scrollTo({ top: 0, behavior: 'instant' })
   }, [pathname, hash])
 
-  if (pathname === '/session')
+  // Where to come back to after signing in — see lib/returnTo.ts.
+  useEffect(() => rememberPath(pathname + search), [pathname, search])
+
+  if (BARE_PAGES.has(pathname))
     return (
       <>
         {children}

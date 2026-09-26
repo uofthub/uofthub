@@ -1,0 +1,14 @@
+# Public projects, profiles and group pages are for everyone to find. The
+# rest is a signed-in student's own and has nothing to index.
+User-agent: *
+Disallow: /admin
+Disallow: /settings
+Disallow: /messages
+Disallow: /saved
+Disallow: /session
+Disallow: /verify
+Disallow: /reset
+Disallow: /projects/new
+Disallow: /*/edit
+
+Sitemap: https://uofthub.com/sitemap.xml

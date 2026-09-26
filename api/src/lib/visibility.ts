@@ -1,6 +1,7 @@
 import type { FastifyRequest } from 'fastify'
 import type { Prisma, Visibility } from '@prisma/client'
 import { db } from '../db/client.js'
+import { sessionAccount } from './session.js'
 
 /**
  * Project visibility rules, in one place so every read route agrees:
@@ -23,12 +24,7 @@ import { db } from '../db/client.js'
  * Returns null instead of throwing when there is no valid session.
  */
 export async function getOptionalUserId(request: FastifyRequest): Promise<string | null> {
-  try {
-    await request.jwtVerify()
-    return request.user.sub
-  } catch {
-    return null
-  }
+  return (await sessionAccount(request))?.id ?? null
 }
 
 /** A project whose show-from date, if it has one, has passed. */
@@ -137,10 +133,33 @@ export const VIEW_CHECK_SELECT = {
  * Returns true only if the project exists and the caller may see it — callers
  * should 404 on false rather than 403, so private ids are not confirmed.
  */
-export async function canViewProjectId(projectId: string, callerId: string | null): Promise<boolean> {
+export async function canViewProjectId(
+  projectId: string,
+  callerId: string | null
+): Promise<boolean> {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: VIEW_CHECK_SELECT,
   })
   return project ? canViewProject(project, callerId) : false
+}
+
+/**
+ * Whether a caller may change a project's content: its owner, or an accepted
+ * collaborator. A VIEWER (a TA's access grant) may read but not edit.
+ *
+ * Editing is the work itself — text, files, links, outputs, updates. What a
+ * project is to the world stays the owner's alone: who can see it, whether it
+ * exists, who is credited on it, where it is pinned and what it is linked to.
+ */
+export async function canEditProject(
+  project: { id: string; ownerId: string },
+  callerId: string
+): Promise<boolean> {
+  if (project.ownerId === callerId) return true
+  const row = await db.projectCollaborator.findUnique({
+    where: { projectId_userId: { projectId: project.id, userId: callerId } },
+    select: { accepted: true, role: true },
+  })
+  return !!row?.accepted && row.role === 'COLLABORATOR'
 }

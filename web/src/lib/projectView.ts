@@ -16,7 +16,10 @@ import { safeUrl } from './api'
  * A U of T course code: three letters, three digits, optionally the credit
  * weight and campus suffix — CSC309, MAT102, CSC309H1, ENG100Y5.
  */
-const COURSE_CODE = /^[a-z]{3}\d{3}(?:[hy]\d)?$/i
+// Three letters, then three digits (St. George and UTM: CSC343, MAT137Y1) or
+// a level letter and two digits (UTSC: CSCA08, MATA31H3), then an optional
+// weight and campus suffix.
+const COURSE_CODE = /^[a-z]{3}(?:\d{3}|[a-d]\d{2})(?:[hy]\d)?$/i
 
 export const isCourseCode = (tag: string) => COURSE_CODE.test(tag.trim())
 

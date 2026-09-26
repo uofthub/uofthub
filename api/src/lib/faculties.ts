@@ -38,7 +38,10 @@ export const isFaculty = (value: string): value is Faculty =>
   (FACULTIES as readonly string[]).includes(value)
 
 /** A U of T course code — mirrors isCourseCode in web/src/lib/projectView.ts. */
-const COURSE_CODE = /^[a-z]{3}\d{3}(?:[hy]\d)?$/i
+// Three letters, then three digits (St. George and UTM: CSC343, MAT137Y1) or
+// a level letter and two digits (UTSC: CSCA08, MATA31H3), then an optional
+// weight and campus suffix.
+const COURSE_CODE = /^[a-z]{3}(?:\d{3}|[a-d]\d{2})(?:[hy]\d)?$/i
 export const isCourseCode = (tag: string) => COURSE_CODE.test(tag.trim())
 
 /** A course code as stored: trimmed and upper-cased. Null if it is not one. */

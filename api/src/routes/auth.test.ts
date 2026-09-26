@@ -1,8 +1,35 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.js'
+import { hashPassword } from '../lib/password.js'
 import { cookieFor, createUser, getApp, resetDb, uniqueIp } from '../test/helpers.js'
 
-beforeEach(resetDb)
+/**
+ * The emails carry the only copy of each token, so they are captured here
+ * rather than sent: a test follows the link exactly as a student would.
+ */
+const sent = vi.hoisted(() => ({
+  verify: [] as { to: string; token: string }[],
+  reset: [] as { to: string; token: string; reason: string }[],
+  already: [] as string[],
+}))
+vi.mock('../lib/authEmails.js', () => ({
+  sendVerificationEmail: async (to: string, _name: string, token: string) => {
+    sent.verify.push({ to, token })
+  },
+  sendPasswordResetEmail: async (to: string, token: string, reason: string) => {
+    sent.reset.push({ to, token, reason })
+  },
+  sendAlreadyRegisteredEmail: async (to: string) => {
+    sent.already.push(to)
+  },
+}))
+
+beforeEach(async () => {
+  await resetDb()
+  sent.verify.length = 0
+  sent.reset.length = 0
+  sent.already.length = 0
+})
 
 /**
  * Email + password sign-up and sign-in. The Microsoft OAuth flow is not
@@ -13,21 +40,35 @@ beforeEach(resetDb)
 const GOOD_PASSWORD = 'correct horse battery'
 
 // Each call gets its own source address — see uniqueIp() for why.
-const register = async (payload: Record<string, unknown>) =>
-  (await getApp()).inject({ method: 'POST', url: '/auth/register', payload, remoteAddress: uniqueIp() })
+const post = async (url: string, payload: Record<string, unknown>, cookies?: { token: string }) =>
+  (await getApp()).inject({ method: 'POST', url, payload, cookies, remoteAddress: uniqueIp() })
 
-const login = async (payload: Record<string, unknown>) =>
-  (await getApp()).inject({ method: 'POST', url: '/auth/login', payload, remoteAddress: uniqueIp() })
+const register = (payload: Record<string, unknown>) => post('/auth/register', payload)
+const login = (payload: Record<string, unknown>) => post('/auth/login', payload)
+
+/** Sign up and follow the emailed link, as a student would. Returns the verify response. */
+async function signUp(email: string, password = GOOD_PASSWORD) {
+  await register({ name: 'Ada', email, password })
+  const token = sent.verify.filter((m) => m.to === email).at(-1)!.token
+  return post('/auth/verify', { token })
+}
+
+const tokenCookie = (res: Awaited<ReturnType<typeof post>>) =>
+  res.cookies.find((c) => c.name === 'token')
 
 describe('POST /auth/register', () => {
-  it('creates an account and issues an httpOnly session cookie', async () => {
-    const res = await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+  it('creates an unconfirmed account and emails a link, without signing in', async () => {
+    const res = await register({
+      name: 'Ada',
+      email: 'ada@mail.utoronto.ca',
+      password: GOOD_PASSWORD,
+    })
 
-    expect(res.statusCode).toBe(201)
-    const cookie = res.cookies.find((c) => c.name === 'token')
-    expect(cookie).toBeDefined()
-    expect(cookie!.httpOnly).toBe(true)
-    expect(cookie!.sameSite?.toLowerCase()).toBe('lax')
+    expect(res.statusCode).toBe(202)
+    expect(tokenCookie(res)).toBeUndefined()
+    expect(sent.verify).toHaveLength(1)
+    const user = await db.user.findUniqueOrThrow({ where: { email: 'ada@mail.utoronto.ca' } })
+    expect(user.emailVerifiedAt).toBeNull()
   })
 
   it('never stores the password itself', async () => {
@@ -38,26 +79,28 @@ describe('POST /auth/register', () => {
     expect(user.passwordHash).toMatch(/^scrypt\$/)
   })
 
-  it.each([
-    'someone@gmail.com',
-    'someone@utoronto.ca.evil.com',
-    'someone@notutoronto.ca',
-  ])('refuses a non-U of T address: %s', async (email) => {
-    const res = await register({ name: 'Nope', email, password: GOOD_PASSWORD })
-    expect(res.statusCode).toBe(403)
-    expect(await db.user.count()).toBe(0)
-  })
+  it.each(['someone@gmail.com', 'someone@utoronto.ca.evil.com', 'someone@notutoronto.ca'])(
+    'refuses a non-U of T address: %s',
+    async (email) => {
+      const res = await register({ name: 'Nope', email, password: GOOD_PASSWORD })
+      expect(res.statusCode).toBe(403)
+      expect(await db.user.count()).toBe(0)
+    }
+  )
 
   it('accepts both U of T domains', async () => {
-    expect((await register({ name: 'S', email: 's@mail.utoronto.ca', password: GOOD_PASSWORD })).statusCode).toBe(201)
-    expect((await register({ name: 'F', email: 'f@utoronto.ca', password: GOOD_PASSWORD })).statusCode).toBe(201)
+    expect(
+      (await register({ name: 'S', email: 's@mail.utoronto.ca', password: GOOD_PASSWORD }))
+        .statusCode
+    ).toBe(202)
+    expect(
+      (await register({ name: 'F', email: 'f@utoronto.ca', password: GOOD_PASSWORD })).statusCode
+    ).toBe(202)
   })
 
   it('normalises the address, so casing cannot create a second account', async () => {
     await register({ name: 'Ada', email: 'Ada@Mail.UToronto.CA', password: GOOD_PASSWORD })
-    const res = await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
-
-    expect(res.statusCode).toBe(409)
+    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
     expect(await db.user.count()).toBe(1)
   })
 
@@ -67,43 +110,215 @@ describe('POST /auth/register', () => {
   })
 
   it('rejects an unbounded password rather than hashing it', async () => {
-    const res = await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: 'a'.repeat(5000) })
+    const res = await register({
+      name: 'Ada',
+      email: 'ada@mail.utoronto.ca',
+      password: 'a'.repeat(5000),
+    })
     expect(res.statusCode).toBe(400)
   })
 
   it('requires all three fields', async () => {
-    expect((await register({ email: 'a@mail.utoronto.ca', password: GOOD_PASSWORD })).statusCode).toBe(400)
+    expect(
+      (await register({ email: 'a@mail.utoronto.ca', password: GOOD_PASSWORD })).statusCode
+    ).toBe(400)
     expect((await register({ name: 'A', password: GOOD_PASSWORD })).statusCode).toBe(400)
     expect((await register({ name: 'A', email: 'a@mail.utoronto.ca' })).statusCode).toBe(400)
   })
 
-  it('links a password onto an existing Microsoft-only account instead of colliding', async () => {
+  it('never sets a password on an existing Microsoft account — it emails the owner instead', async () => {
     const existing = await createUser({ email: 'oauth@mail.utoronto.ca' })
-    expect(existing.passwordHash).toBeNull()
 
-    const res = await register({ name: 'OAuth', email: 'oauth@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const res = await register({
+      name: 'Mallory',
+      email: 'oauth@mail.utoronto.ca',
+      password: GOOD_PASSWORD,
+    })
 
-    expect(res.statusCode).toBe(201)
-    expect(await db.user.count()).toBe(1)
-    expect((await db.user.findUniqueOrThrow({ where: { id: existing.id } })).passwordHash).not.toBeNull()
+    expect(res.statusCode).toBe(202)
+    expect(tokenCookie(res)).toBeUndefined()
+    const after = await db.user.findUniqueOrThrow({ where: { id: existing.id } })
+    expect(after.passwordHash).toBeNull()
+    expect(after.name).toBe(existing.name)
+    // The link to add a password goes to the address, i.e. to its real owner.
+    expect(sent.reset).toEqual([
+      expect.objectContaining({ to: 'oauth@mail.utoronto.ca', reason: 'set' }),
+    ])
+  })
+
+  it('answers an address that already has a password exactly like a new one', async () => {
+    await signUp('ada@mail.utoronto.ca')
+    const again = await register({
+      name: 'Ada',
+      email: 'ada@mail.utoronto.ca',
+      password: 'another good one',
+    })
+    const fresh = await register({
+      name: 'Bo',
+      email: 'bo@mail.utoronto.ca',
+      password: GOOD_PASSWORD,
+    })
+
+    expect(again.statusCode).toBe(fresh.statusCode)
+    expect(again.json()).toEqual(fresh.json())
+    expect(sent.already).toEqual(['ada@mail.utoronto.ca'])
+    // And the existing password is untouched.
+    expect(
+      (await login({ email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })).statusCode
+    ).toBe(200)
+  })
+})
+
+describe('POST /auth/verify', () => {
+  it('confirms the account and signs in with an httpOnly session cookie', async () => {
+    const res = await signUp('ada@mail.utoronto.ca')
+
+    expect(res.statusCode).toBe(200)
+    const cookie = tokenCookie(res)
+    expect(cookie).toBeDefined()
+    expect(cookie!.httpOnly).toBe(true)
+    expect(cookie!.sameSite?.toLowerCase()).toBe('lax')
+    const user = await db.user.findUniqueOrThrow({ where: { email: 'ada@mail.utoronto.ca' } })
+    expect(user.emailVerifiedAt).not.toBeNull()
+  })
+
+  it('works once', async () => {
+    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const { token } = sent.verify[0]
+    expect((await post('/auth/verify', { token })).statusCode).toBe(200)
+    expect((await post('/auth/verify', { token })).statusCode).toBe(400)
+  })
+
+  it('refuses a made-up token', async () => {
+    expect((await post('/auth/verify', { token: 'nope' })).statusCode).toBe(400)
+  })
+
+  it('stops an older link working once a newer one is sent', async () => {
+    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    await post('/auth/resend-verification', { email: 'ada@mail.utoronto.ca' })
+    expect(sent.verify).toHaveLength(2)
+    expect((await post('/auth/verify', { token: sent.verify[0].token })).statusCode).toBe(400)
+    expect((await post('/auth/verify', { token: sent.verify[1].token })).statusCode).toBe(200)
+  })
+})
+
+describe('password reset', () => {
+  it('sets a new password, confirms the address and ends other sessions', async () => {
+    const user = await createUser({ email: 'ada@mail.utoronto.ca' })
+    const old = await cookieFor(user)
+
+    expect(
+      (await post('/auth/forgot-password', { email: 'ada@mail.utoronto.ca' })).statusCode
+    ).toBe(202)
+    const res = await post('/auth/reset-password', {
+      token: sent.reset[0].token,
+      password: 'a new good password',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(tokenCookie(res)).toBeDefined()
+    expect(
+      (await login({ email: 'ada@mail.utoronto.ca', password: 'a new good password' })).statusCode
+    ).toBe(200)
+    const app = await getApp()
+    expect((await app.inject({ method: 'GET', url: '/auth/me', cookies: old })).statusCode).toBe(
+      401
+    )
+  })
+
+  it('says the same for an unknown address', async () => {
+    const res = await post('/auth/forgot-password', { email: 'nobody@mail.utoronto.ca' })
+    expect(res.statusCode).toBe(202)
+    expect(sent.reset).toHaveLength(0)
+  })
+
+  it('refuses a used or unknown token', async () => {
+    await createUser({ email: 'ada@mail.utoronto.ca' })
+    await post('/auth/forgot-password', { email: 'ada@mail.utoronto.ca' })
+    const { token } = sent.reset[0]
+    expect(
+      (await post('/auth/reset-password', { token, password: 'a new good password' })).statusCode
+    ).toBe(200)
+    expect(
+      (await post('/auth/reset-password', { token, password: 'another new one' })).statusCode
+    ).toBe(400)
+    expect(
+      (await post('/auth/reset-password', { token: 'x', password: 'another new one' })).statusCode
+    ).toBe(400)
+  })
+})
+
+describe('POST /auth/password', () => {
+  it('needs the current password and ends other sessions', async () => {
+    const user = await createUser({ email: 'ada@mail.utoronto.ca' })
+    await db.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(GOOD_PASSWORD) },
+    })
+    const session = await cookieFor(user)
+
+    const wrong = await post(
+      '/auth/password',
+      { currentPassword: 'wrong wrong wrong', newPassword: 'a new good password' },
+      session
+    )
+    expect(wrong.statusCode).toBe(403)
+
+    const ok = await post(
+      '/auth/password',
+      { currentPassword: GOOD_PASSWORD, newPassword: 'a new good password' },
+      session
+    )
+    expect(ok.statusCode).toBe(200)
+    const app = await getApp()
+    expect(
+      (await app.inject({ method: 'GET', url: '/auth/me', cookies: session })).statusCode
+    ).toBe(401)
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/auth/me',
+          cookies: { token: tokenCookie(ok)!.value },
+        })
+      ).statusCode
+    ).toBe(200)
+  })
+
+  it('lets a Microsoft-only account add a first password without one', async () => {
+    const user = await createUser({ email: 'oauth@mail.utoronto.ca' })
+    const res = await post(
+      '/auth/password',
+      { newPassword: 'a new good password' },
+      await cookieFor(user)
+    )
+    expect(res.statusCode).toBe(200)
   })
 })
 
 describe('POST /auth/login', () => {
   beforeEach(async () => {
-    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    await signUp('ada@mail.utoronto.ca')
   })
 
   it('signs in with the right password', async () => {
     const res = await login({ email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
     expect(res.statusCode).toBe(200)
-    expect(res.cookies.find((c) => c.name === 'token')).toBeDefined()
+    expect(tokenCookie(res)).toBeDefined()
+  })
+
+  it('refuses an unconfirmed account even with the right password', async () => {
+    await register({ name: 'Bo', email: 'bo@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const res = await login({ email: 'bo@mail.utoronto.ca', password: GOOD_PASSWORD })
+    expect(res.statusCode).toBe(403)
+    expect(res.json().code).toBe('UNVERIFIED')
+    expect(tokenCookie(res)).toBeUndefined()
   })
 
   it('rejects the wrong password without issuing a session', async () => {
     const res = await login({ email: 'ada@mail.utoronto.ca', password: 'wrong horse battery' })
     expect(res.statusCode).toBe(401)
-    expect(res.cookies.find((c) => c.name === 'token')).toBeUndefined()
+    expect(tokenCookie(res)).toBeUndefined()
   })
 
   it('gives the same answer for an unknown account as for a wrong password', async () => {
@@ -150,8 +365,16 @@ describe('GET /auth/me', () => {
     const student = await createUser({ email: 'stu@mail.utoronto.ca' })
     const staff = await createUser({ email: 'prof@utoronto.ca' })
 
-    const asStudent = await app.inject({ method: 'GET', url: '/auth/me', cookies: await cookieFor(student) })
-    const asStaff = await app.inject({ method: 'GET', url: '/auth/me', cookies: await cookieFor(staff) })
+    const asStudent = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      cookies: await cookieFor(student),
+    })
+    const asStaff = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      cookies: await cookieFor(staff),
+    })
 
     expect(asStudent.json().role).toBe('STUDENT')
     expect(asStaff.json().role).toBe('FACULTY')
@@ -160,8 +383,8 @@ describe('GET /auth/me', () => {
 
 describe('POST /auth/logout', () => {
   it('clears the session cookie', async () => {
-    const res = await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
-    const token = res.cookies.find((c) => c.name === 'token')!.value
+    const res = await signUp('ada@mail.utoronto.ca')
+    const token = tokenCookie(res)!.value
 
     const app = await getApp()
     const out = await app.inject({ method: 'POST', url: '/auth/logout', cookies: { token } })
@@ -172,9 +395,42 @@ describe('POST /auth/logout', () => {
   })
 })
 
+describe('POST /auth/logout-everywhere', () => {
+  it('ends every session on the account', async () => {
+    const user = await createUser()
+    const a = await cookieFor(user)
+    const b = await cookieFor(user)
+    expect((await post('/auth/logout-everywhere', {}, a)).statusCode).toBe(200)
+    const app = await getApp()
+    expect((await app.inject({ method: 'GET', url: '/auth/me', cookies: b })).statusCode).toBe(401)
+  })
+})
+
+describe('suspended accounts', () => {
+  it('can read and sign out, but not write', async () => {
+    const user = await createUser()
+    await db.user.update({ where: { id: user.id }, data: { suspendedAt: new Date() } })
+    const session = await cookieFor(user)
+    const app = await getApp()
+
+    expect(
+      (await app.inject({ method: 'GET', url: '/auth/me', cookies: session })).statusCode
+    ).toBe(200)
+    const write = await app.inject({
+      method: 'POST',
+      url: '/projects',
+      cookies: session,
+      payload: { title: 'x' },
+    })
+    expect(write.statusCode).toBe(403)
+    expect(write.json().code).toBe('SUSPENDED')
+    expect((await post('/auth/logout', {}, session)).statusCode).toBe(200)
+  })
+})
+
 describe('credential rate limiting', () => {
   it('cuts off repeated password guesses from one address', async () => {
-    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    await signUp('ada@mail.utoronto.ca')
 
     const app = await getApp()
     const attacker = uniqueIp()
@@ -194,8 +450,8 @@ describe('credential rate limiting', () => {
     expect(codes.filter((c) => c === 429)).toHaveLength(2)
   })
 
-  it('does not let one address exhaust another\'s budget', async () => {
-    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+  it("does not let one address exhaust another's budget", async () => {
+    await signUp('ada@mail.utoronto.ca')
 
     const app = await getApp()
     const attacker = uniqueIp()

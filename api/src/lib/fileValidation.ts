@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { fileTypeFromBuffer } from 'file-type'
 
 /**
@@ -14,8 +15,16 @@ export interface FileCategory {
 const MB = 1024 * 1024
 
 export const FILE_CATEGORIES: FileCategory[] = [
-  { name: 'docs', extensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'md'], maxSizeBytes: 25 * MB },
-  { name: 'images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'], maxSizeBytes: 25 * MB },
+  {
+    name: 'docs',
+    extensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'md'],
+    maxSizeBytes: 25 * MB,
+  },
+  {
+    name: 'images',
+    extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
+    maxSizeBytes: 25 * MB,
+  },
   { name: 'video', extensions: ['mp4', 'webm'], maxSizeBytes: 250 * MB },
   // ARCHITECTURE.md doesn't give audio its own limit — treated like docs/images
   // (25MB) as the conservative default until that's decided explicitly.
@@ -32,8 +41,10 @@ export const PROJECT_FILE_COUNT_CAP = 20
  */
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'text'
 
+// No SVG: it can carry script, so it is download-only — never shown inline,
+// never a cover, never an avatar.
 const PREVIEW_KINDS: Record<PreviewKind, string[]> = {
-  image: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
+  image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
   pdf: ['pdf'],
   video: ['mp4', 'webm'],
   audio: ['mp3', 'wav'],
@@ -41,7 +52,9 @@ const PREVIEW_KINDS: Record<PreviewKind, string[]> = {
 }
 
 export function previewKindFor(ext: string): PreviewKind | undefined {
-  return (Object.keys(PREVIEW_KINDS) as PreviewKind[]).find(kind => PREVIEW_KINDS[kind].includes(ext))
+  return (Object.keys(PREVIEW_KINDS) as PreviewKind[]).find((kind) =>
+    PREVIEW_KINDS[kind].includes(ext)
+  )
 }
 
 /**
@@ -51,12 +64,49 @@ export function previewKindFor(ext: string): PreviewKind | undefined {
  */
 export const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
 
+/**
+ * The Content-Type each allowed extension is stored and served with. Decided
+ * here, from the extension the bytes were checked against, never from what
+ * the uploading browser claimed — a PNG uploaded as `text/html` would
+ * otherwise be served as a web page from our storage domain.
+ */
+const CONTENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv; charset=utf-8',
+  txt: 'text/plain; charset=utf-8',
+  md: 'text/plain; charset=utf-8',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  zip: 'application/zip',
+}
+
+export const contentTypeFor = (ext: string): string =>
+  CONTENT_TYPES[ext] ?? 'application/octet-stream'
+
+/** Avatars: raster images only, and small. */
+export const AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
+export const AVATAR_MAX_BYTES = 5 * MB
+
 export function extOf(filename: string): string {
   return (filename.split('.').pop() ?? '').toLowerCase()
 }
 
 export function categoryFor(ext: string): FileCategory | undefined {
-  return FILE_CATEGORIES.find(c => c.extensions.includes(ext))
+  return FILE_CATEGORIES.find((c) => c.extensions.includes(ext))
 }
 
 // file-type can't produce a magic-byte signature for these — plain text has
@@ -96,4 +146,92 @@ export async function matchesDeclaredType(buffer: Buffer, ext: string): Promise<
   const detected = await fileTypeFromBuffer(buffer)
   if (!detected) return false
   return (DETECTED_MATCH[ext] ?? [ext]).includes(detected.ext)
+}
+
+// ── Streaming uploads ─────────────────────────────────────────────────────────
+
+/** Why an upload was refused, with the status to refuse it with. */
+export class UploadError extends Error {
+  constructor(
+    message: string,
+    public readonly status: 400 | 413
+  ) {
+    super(message)
+  }
+}
+
+/** Enough of the head of a file for file-type to recognise any format we allow. */
+const HEAD_BYTES = 4100
+
+/**
+ * Check an upload against its declared type and size while streaming it to
+ * storage, without ever holding the whole file in memory.
+ *
+ * The head is read first and checked by its bytes; nothing reaches storage
+ * unless it passes. The rest is counted as it flows, and the upload is
+ * aborted the moment it passes the category's cap. Returns the size stored.
+ */
+export async function streamValidated(
+  source: AsyncIterable<Buffer> & { truncated?: boolean; resume?: () => void },
+  ext: string,
+  category: FileCategory,
+  store: (body: Readable, contentType: string) => Promise<void>
+): Promise<number> {
+  const iterator = source[Symbol.asyncIterator]()
+  const head: Buffer[] = []
+  let size = 0
+  let ended = false
+  while (size < HEAD_BYTES) {
+    const next = await iterator.next()
+    if (next.done) {
+      ended = true
+      break
+    }
+    head.push(next.value)
+    size += next.value.length
+  }
+
+  const tooBig = () =>
+    new UploadError(
+      `File exceeds the ${category.name} size limit (${category.maxSizeBytes / MB}MB)`,
+      413
+    )
+  const headBuffer = Buffer.concat(head)
+  const refuse = (err: UploadError) => {
+    // Let the rest of the request body drain rather than stall the socket.
+    source.resume?.()
+    return err
+  }
+  if (size > category.maxSizeBytes) throw refuse(tooBig())
+  if (!(await matchesDeclaredType(headBuffer, ext)))
+    throw refuse(new UploadError('File content does not match its extension', 400))
+
+  let overflow = false
+  const body = Readable.from(
+    (async function* () {
+      yield headBuffer
+      if (ended) return
+      for (;;) {
+        const next = await iterator.next()
+        if (next.done) return
+        size += next.value.length
+        if (size > category.maxSizeBytes) {
+          overflow = true
+          throw tooBig()
+        }
+        yield next.value
+      }
+    })()
+  )
+
+  try {
+    await store(body, contentTypeFor(ext))
+  } catch (err) {
+    if (overflow) throw refuse(tooBig())
+    throw err
+  }
+  // The multipart parser stops at the global cap and marks the stream rather
+  // than failing it.
+  if (source.truncated) throw tooBig()
+  return size
 }

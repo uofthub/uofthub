@@ -21,6 +21,14 @@ export const HEARTBEAT_MS = 25_000
 export const MAX_STREAM_MS = 30 * 60 * 1000
 
 export const eventRoutes: FastifyPluginAsync = async (app) => {
+  // Streams are hijacked, so the server would wait on them forever when it
+  // closes. Ending them lets a shutdown finish; the browser reconnects to
+  // whichever instance takes over.
+  const open = new Set<() => void>()
+  app.addHook('onClose', async () => {
+    for (const end of open) end()
+  })
+
   app.get('/', { onRequest: [app.authenticate] }, async (request, reply) => {
     const res = reply.raw
     let closed = false
@@ -57,10 +65,16 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     const close = () => {
       if (closed) return
       closed = true
+      open.delete(end)
       clearInterval(heartbeat)
       clearTimeout(lifetime)
       unsubscribe()
     }
+    const end = () => {
+      close()
+      res.end()
+    }
+    open.add(end)
     res.on('close', close)
     request.raw.on('close', close)
   })

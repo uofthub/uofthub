@@ -80,8 +80,7 @@ export const primaryOutput = (outputs: ResolvedOutput[]) => outputs.find((o) => 
 
 /** A card's main button: a link out, or a page in the app. */
 export type CardAction = { label: string; icon: IconName } & (
-  | { href: string; to?: never }
-  | { to: string; href?: never }
+  { href: string; to?: never } | { to: string; href?: never }
 )
 
 /**

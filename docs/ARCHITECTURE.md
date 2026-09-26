@@ -123,7 +123,10 @@ One direct message (sender, recipient, body, read_at). A conversation is just th
 | project_id | uuid | |
 | user_id | uuid | |
 | role | enum | `owner`, `collaborator`, `viewer` |
-| accepted | bool | collaborators must accept invite |
+| title | string? | what they did, as the owner put it ("Designer") |
+| accepted | bool | false while an invitation or a TA's access request waits; a no deletes the row |
+
+An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited. An invitation to an address with no account waits in `ProjectEmailInvite` and becomes a pending row once that address is proven (`lib/accounts.ts`).
 
 ### ProjectFile
 | Field | Type | Notes |
@@ -145,7 +148,7 @@ One direct message (sender, recipient, body, read_at). A conversation is just th
 | url | string | |
 
 ### Organization
-Clubs and research labs. Full verification/storage/activity policy in [student-groups.md](student-groups.md).
+Clubs and research labs, created by moderators. Every group page is public. Policy in [student-groups.md](student-groups.md).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -156,13 +159,8 @@ Clubs and research labs. Full verification/storage/activity policy in [student-g
 | description | string | |
 | website_url | string | |
 | discord_url | string? | invite link; restricted to discord.gg / discord.com hosts, not just any http(s) URL |
-| status | enum | `PENDING_VERIFICATION`, `IN_REVIEW`, `INFO_REQUESTED`, `VERIFIED` |
-| contact_email | string? | where the verification decision is sent; required at creation |
-| contact_role | string? | the role the creator claims to hold, e.g. "president" |
-| verification_deadline | timestamp? | dormant — from the retired self-serve verification flow; always null for groups created now |
-| verification_note | text? | the group's most recent verification submission |
-| review_note | text? | the admin's note back — what was missing, or why it was denied |
-| verified_at | timestamp? | when it was approved |
+| contact_email | string? | how moderators reach the exec; members only |
+| contact_role | string? | the exec's role, e.g. "president" |
 | created_at | timestamp | |
 
 ### OrgActivity
@@ -198,16 +196,24 @@ The bell's feed, pushed to open tabs as it is written — see [Live updates](#li
 |---|---|---|
 | org_id | uuid | |
 | user_id | uuid | |
-| role | string | e.g. `ADMIN`, `MEMBER` |
+| role | string | `ADMIN` or `MEMBER` |
+| status | enum | `ACTIVE`, `INVITED` (waiting on the person), `REQUESTED` (waiting on an admin) — only `ACTIVE` is a member |
+| joined_at | timestamp | |
+
+Admins invite (`POST /orgs/:slug/members`), students ask (`POST /orgs/:slug/join`), and each side's answer makes the other `ACTIVE`. A group always keeps an admin while it has other members.
 
 ### Report
-One row per person per project per open complaint. See [Moderation](#moderation).
+One row per person per target per open complaint. See [Moderation](#moderation).
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | |
 | reporter_id | uuid | FK → User |
-| project_id | uuid | FK → Project |
+| target_type | enum | `PROJECT`, `COMMENT`, `COLLECTION`, `USER`, `ORG_ACTIVITY` |
+| project_id | uuid? | the project reported, or the one a reported comment is on |
+| comment_id / collection_id / activity_id | uuid? | the thing reported; set null if it is deleted |
+| subject_user_id | uuid? | whoever posted it — who a warning or suspension is for |
+| excerpt | text? | what it said when it was reported |
 | reason | enum | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `OTHER` |
 | details | text? | reporter's free text, capped at 1000 chars |
 | status | enum | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself |
@@ -228,7 +234,11 @@ Two ways in, both at `/session`:
 - **Microsoft OAuth**, restricted to `@mail.utoronto.ca` / `@utoronto.ca` accounts. A brand-new account's Graph photo becomes its avatar.
 - **Email + password** (`passwordHash`, scrypt), also restricted to U of T addresses. This is the one that works in local development, since OAuth needs real credentials.
 
-The session is a JWT in an HTTP-only, `SameSite=Lax` cookie, valid for 7 days. Visitors without an account can browse public projects, and a public project, profile or collection can be opened by anyone with the link.
+**Every account proves it owns its address** (`User.emailVerifiedAt`). Microsoft sign-in proves it; a password sign-up gets a link by email (`POST /auth/verify`) and cannot sign in until it is followed. Until then the account is nobody's: signing up again with the address starts it over, and a Microsoft sign-in to it discards any password set on it. Signing up with an address that already has an account never touches that account — the address gets an email instead, and every "check your email" route answers the same whatever happened, so none of them reveals which addresses are registered. `POST /auth/forgot-password` and `/auth/reset-password` reset (or first set) a password; `POST /auth/password` changes it when signed in. The links are single-use tokens stored only as SHA-256 hashes (`AuthToken`, `lib/authTokens.ts`). Without `RESEND_API_KEY`, outside production, the links are printed to the API's console instead of emailed.
+
+The session is a JWT in an HTTP-only, `SameSite=Lax` cookie, valid for 7 days, and checked against the database on every use (`lib/session.ts`): each token carries the account's `sessionVersion`, and a password change, a reset, **Sign out everywhere** or deleting the account bumps it, ending every other session at once. The same check refuses writes from a suspended account (`User.suspendedAt`), except the few routes marked `allowSuspended` — signing out, blocking, and deleting or exporting its own data. Visitors without an account can browse public projects, and a public project, profile or collection can be opened by anyone with the link.
+
+**Accounts** — `/settings` changes the password, signs out everywhere, turns off email notifications, downloads everything the student put here as JSON (`GET /users/me/export`) and deletes the account (`DELETE /users/me`, confirmed by typing the email). Deleting cascades to everything the account owns and then removes its storage objects.
 
 ---
 
@@ -277,31 +287,35 @@ SSE rather than WebSockets because the traffic only goes one way, it rides the s
 
 ## Error monitoring
 
-None for now. Errors go to the API's own logs (Railway keeps them); the web app has no error reporting. Clueline was wired into both halves and has been removed until it is needed again — its setup is in git history (`lib/monitoring.ts`, `lib/monitoring.tsx`). Adding any error reporter back means adding it to the third-party list on `/privacy` in the same commit.
+None for now — a decision still to make before launch. Errors go to the API's own logs (Railway keeps them); the web app has no error reporting. Clueline was wired into both halves and has been removed until it is needed again — its setup is in git history (`lib/monitoring.ts`, `lib/monitoring.tsx`). Adding any error reporter back means adding it to the third-party list on `/privacy` in the same commit.
 
 ---
 
 ## Moderation
 
-Anyone signed in can report a project whose visibility is `uoft` or `public`. A `private` project is unreportable — nobody outside the owner and its accepted collaborators can see it, so there is nothing for a moderator to act on. Self-reports are rejected, as is a second open report on a project the same person has already reported.
+Anyone signed in can report a project whose visibility is `uoft` or `public`, a comment, a collection, a profile or a group event (`lib/reports.ts` files them all). A `private` project is unreportable — nobody outside the owner and its accepted collaborators can see it, so there is nothing for a moderator to act on. Self-reports are rejected, as is a second open report on something the same person has already reported. A report keeps an excerpt of what it was about, since a comment can be edited or deleted before a moderator gets to it.
 
 `POST /projects/:id/report` is rate-limited to 5 per hour, **keyed by session cookie rather than by IP**. This is the one place that deviates from the IP-keyed default the upload routes use: campus wifi puts thousands of students behind a handful of NAT addresses, and an IP budget would let one abuser exhaust reporting for everyone on the same network. The limiter runs in `onRequest`, before `authenticate` has verified the JWT, so the raw cookie — not `request.user` — is what's available as a key.
 
 Moderators are `User.is_admin` accounts. The flag is checked against the database on every admin request (`lib/admin.ts`), not read from the JWT: sessions last 7 days, so a token minted while the flag was set would otherwise keep moderator powers until it expired. It is granted only from the database — `pnpm --filter @uofthub/api grant-admin <email>` — because the first moderator has to come from outside the app and no route should be able to hand out the flag. Every admin route sits behind this one gate.
 
-The `/admin` page (Moderation, in the account menu for moderators only) has four tabs: **Project reports**, **Message reports**, **Groups** (create a group, decide any left over from the old verification flow) and **Spotlight** (pick the week's project).
+The `/admin` page (Moderation, in the account menu for moderators only) has five tabs: **Reports**, **Messages**, **Users** (find an account; suspend it or lift a suspension, including a messaging-only one), **Groups** (create a group) and **Spotlight** (pick the week's project).
 
 `GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide). `POST /admin/reports/:id/decision` takes one of three decisions:
 
 | Decision | Effect | Owner told? |
 |---|---|---|
-| `DISMISS` | Closes the report. | No — the owner never learns a dismissed report existed |
-| `WARN` | Project stays up. | Yes, with the moderator's note |
-| `TAKE_DOWN` | Visibility forced to `private`, `taken_down_at` stamped. | Yes, with the moderator's note |
+| `DISMISS` | Closes the report. | No — nobody learns a dismissed report existed |
+| `WARN` | It stays up. | Yes, with the moderator's note |
+| `TAKE_DOWN` | A project: visibility forced to `private`, `taken_down_at` stamped. A comment, collection or event: removed. A profile: bio, links and photo cleared. | Yes, with the moderator's note |
 
-A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, and `POST /projects/:id/fork` refuses to copy the project at all — a fork would otherwise come back with a clean `taken_down_at` and be one click from public again. Only a moderator can clear it.
+Any decision can also suspend the account of whoever posted it (`suspend: true`).
 
-Deciding a take-down also closes every other open report on the same project with the same decision. A project that drew one report usually drew several, and without this the owner is notified once per duplicate.
+A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, and `POST /projects/:id/fork` refuses to copy the project at all — a fork would otherwise come back with a clean `taken_down_at` and be one click from public again. Only a moderator can clear it, with **Restore project** on the decided report (`POST /admin/projects/:id/restore`) — the appeal path.
+
+A warning or a take-down also closes every other open report about the same thing with the same decision. Something that drew one report usually drew several, and without this its author is notified once per duplicate.
+
+Comments can be edited by their author and deleted by their author, the project's owner or a moderator; one with replies stays as an empty "deleted" placeholder so the thread survives. Blocking (`lib/blocks.ts`) reaches past messages: neither student can comment on, reply to, react to or follow the other, and existing follows end.
 
 Message reports work the same way, about a person rather than a project: `GET /admin/message-reports`, and a decision of dismiss, warn, or suspend messaging (`User.messaging_suspended_at`), which sends `MESSAGING_MODERATED`. See [MessageReport](#messagereport).
 
@@ -371,11 +385,13 @@ Two consequences worth knowing: matching is by whole stemmed word plus prefix, s
 
 ## Scheduled jobs
 
-One, in process: the **announcement sweep** (`lib/announcements.ts`). A project published with a future show-from date is announced to its owner's followers when that date passes, not when it was saved. The sweep runs at boot and every five minutes, registered in `index.ts` rather than `buildApp()` so tests never start a timer. It claims and marks due projects in one `UPDATE … RETURNING`, so several instances, or overlapping runs, cannot announce a project twice.
+Two, in process. The **maintenance sweep** (`lib/maintenance.ts`) runs hourly and deletes read notifications older than six months, spent or expired auth tokens, and viewer keys older than a day. The **announcement sweep** (`lib/announcements.ts`): A project published with a future show-from date is announced to its owner's followers when that date passes, not when it was saved. The sweep runs at boot and every five minutes, registered in `index.ts` rather than `buildApp()` so tests never start a timer. It claims and marks due projects in one `UPDATE … RETURNING`, so several instances, or overlapping runs, cannot announce a project twice.
 
 The two that existed before — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Other housekeeping that would need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
-`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. See [Moderation](#moderation).
+`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, so there it is `pnpm grant-admin:prod <email>` from `/repo/api` (Railway: the service shell or `railway run`). See [Moderation](#moderation).
+
+On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update streams, closes the `LISTEN` connection and the query pool, and exits — or exits anyway after ten seconds.
 
 ---
 
@@ -412,7 +428,7 @@ Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck`
 |---|---|---|
 | API | Railway service | Builds `api/Dockerfile` (repo root as context, per `railway.json`), healthcheck on `/health` |
 | Database | Railway Postgres | `DATABASE_URL` is injected by Railway; nothing else references the credentials |
-| Web | Cloudflare Pages | Build `pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`, output directory `web/dist` |
+| Web | Cloudflare Pages | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
 
 **Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the deploy and Railway keeps the previous container serving.
 
@@ -430,6 +446,12 @@ Environment variables in production — see `api/.env.example` for the full list
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
+
+`TRUST_PROXY_HOPS` — how many proxies sit in front of the API; defaults to 1 in production (Railway's), 0 otherwise. Without it every request appears to come from the proxy, and every IP-keyed rate limit — sign-in above all — becomes one budget for the whole site.
+
+On Cloudflare Pages, set `VITE_API_URL` (the build reads it, and so do the Functions). `web/public/_headers` sets the Content-Security-Policy and the other response headers; the API sets its own in an `onSend` hook in `app.ts`.
+
+**Link previews** — the app is a single page, so a shared link would otherwise show the site's generic title. `web/functions/projects/[id].js`, a Pages Function, fetches `GET /projects/:id/share` (public projects only) and writes the project's title, pitch and cover into the page's head; `web/functions/sitemap.xml.js` lists every public project from `GET /projects/sitemap`. Nothing else is server-rendered.
 
 Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Railway may buffer them.
 

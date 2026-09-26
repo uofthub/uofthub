@@ -6,7 +6,7 @@ import {
   cookieFor,
   createProject,
   createUser,
-  createVerifiedOrg,
+  createOrg,
   getApp,
   resetDb,
   uniqueIp,
@@ -555,19 +555,15 @@ describe('facets', () => {
 })
 
 describe('upcoming events', () => {
-  it('lists future events from verified groups only, soonest first', async () => {
+  it('lists future events only, soonest first', async () => {
     const me = await createUser()
-    const org = await createVerifiedOrg(me.id)
-    const pending = await db.organization.create({
-      data: { name: 'Unverified', slug: 'unverified' },
-    })
+    const org = await createOrg(me.id)
     const inDays = (n: number) => new Date(Date.now() + n * 86_400_000)
     await db.orgActivity.createMany({
       data: [
         { orgId: org.id, createdById: me.id, title: 'later', date: inDays(10) },
         { orgId: org.id, createdById: me.id, title: 'sooner', date: inDays(2) },
         { orgId: org.id, createdById: me.id, title: 'past', date: inDays(-5) },
-        { orgId: pending.id, createdById: me.id, title: 'hidden', date: inDays(1) },
       ],
     })
 

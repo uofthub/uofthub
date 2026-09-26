@@ -13,7 +13,7 @@
 @import 'tailwindcss';
 
 /* The theme is chosen by index.html before first paint and kept by
-   lib/theme.tsx, so dark: follows data-theme rather than the OS. */
+   lib/ThemeProvider.tsx, so dark: follows data-theme rather than the OS. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @theme {
@@ -295,12 +295,6 @@
     @variant max-md {
       scroll-margin-top: calc(var(--spacing-header-mobile) + 12px);
     }
-  }
-
-  /* Anything the design shows that the API cannot do yet — see ui/soon.ts. */
-  [data-soon] {
-    opacity: 0.5;
-    cursor: not-allowed !important;
   }
 }
 

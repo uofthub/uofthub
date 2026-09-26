@@ -1,7 +1,6 @@
 import type { ButtonHTMLAttributes, CSSProperties, ElementType, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
-import { soonProps } from './soon'
 import { buttonClass, type ButtonSize, type ButtonVariant } from './buttonClass'
 import { cx } from './cx'
 import type { AsProps } from './polymorphic'
@@ -14,8 +13,6 @@ type Common = {
   /** Square, icon only. Needs an aria-label. */
   iconOnly?: boolean
   block?: boolean
-  /** Designed but not backed by the API yet — see soon.ts. */
-  soon?: boolean | string
   className?: string
   style?: CSSProperties
   children?: ReactNode
@@ -56,7 +53,6 @@ export function Button(props: ButtonProps) {
     iconSize,
     iconOnly,
     block,
-    soon,
     className,
     style,
     children,
@@ -68,20 +64,6 @@ export function Button(props: ButtonProps) {
       {children}
     </>
   )
-
-  if (soon) {
-    return (
-      <button
-        type="button"
-        className={classes}
-        style={style}
-        aria-label={(props as AsButton)['aria-label']}
-        {...soonProps(typeof soon === 'string' ? soon : undefined)}
-      >
-        {content}
-      </button>
-    )
-  }
 
   if ('to' in props && props.to !== undefined) {
     return (
@@ -124,7 +106,6 @@ export function Button(props: ButtonProps) {
     'iconSize',
     'iconOnly',
     'block',
-    'soon',
     'className',
     'style',
     'children',

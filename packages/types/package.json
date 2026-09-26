@@ -2,6 +2,7 @@
   "name": "@uofthub/types",
   "version": "0.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

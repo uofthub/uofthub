@@ -4,6 +4,11 @@
  *   pnpm --filter @uofthub/api grant-admin someone@utoronto.ca
  *   pnpm --filter @uofthub/api grant-admin someone@utoronto.ca --revoke
  *
+ * In the production image, where only the compiled output exists (Railway:
+ * the service's shell, or `railway run`):
+ *
+ *   pnpm grant-admin:prod someone@utoronto.ca
+ *
  * There is deliberately no API route for this: the first moderator has to come
  * from outside the app, and every one after that is a decision someone makes
  * with database access, not a button an account can be tricked into pressing.

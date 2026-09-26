@@ -32,20 +32,49 @@ describe('GET /users/:id', () => {
 
   it('404s on an unknown id', async () => {
     const app = await getApp()
-    const res = await app.inject({ method: 'GET', url: '/users/00000000-0000-0000-0000-000000000000' })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/users/00000000-0000-0000-0000-000000000000',
+    })
     expect(res.statusCode).toBe(404)
   })
 
-  it('counts owned projects, followers and following', async () => {
+  it('counts the projects this viewer can see, followers and following', async () => {
     const user = await createUser()
     const other = await createUser()
-    await createProject(user.id)
+    await createProject(user.id, { visibility: 'PUBLIC' })
+    await createProject(user.id, { visibility: 'UOFT' })
+    await createProject(user.id) // a draft
     await db.follow.create({ data: { followerId: other.id, followingId: user.id } })
 
     const app = await getApp()
-    const body = (await app.inject({ method: 'GET', url: `/users/${user.id}` })).json()
+    const get = async (as?: { id: string; email: string }) =>
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/users/${user.id}`,
+          ...(as && { cookies: await cookieFor(as) }),
+        })
+      ).json()
 
-    expect(body._count).toMatchObject({ ownedProjects: 1, followers: 1, following: 0 })
+    expect((await get())._count).toMatchObject({ ownedProjects: 1, followers: 1, following: 0 })
+    expect((await get(other))._count.ownedProjects).toBe(2)
+    expect((await get(user))._count.ownedProjects).toBe(3)
+  })
+
+  it('lists followers and following', async () => {
+    const user = await createUser({ name: 'Centre' })
+    const fan = await createUser({ name: 'Fan' })
+    await db.follow.create({ data: { followerId: fan.id, followingId: user.id } })
+    const app = await getApp()
+    const followers = (
+      await app.inject({ method: 'GET', url: `/users/${user.id}/followers` })
+    ).json()
+    const following = (
+      await app.inject({ method: 'GET', url: `/users/${fan.id}/following` })
+    ).json()
+    expect(followers.map((p: { name: string }) => p.name)).toEqual(['Fan'])
+    expect(following.map((p: { name: string }) => p.name)).toEqual(['Centre'])
   })
 })
 
@@ -126,7 +155,9 @@ describe('PATCH /users/me', () => {
       payload: { email: 'someone.else@mail.utoronto.ca' },
     })
 
-    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).email).toBe('real@mail.utoronto.ca')
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).email).toBe(
+      'real@mail.utoronto.ca'
+    )
   })
 })
 
@@ -164,5 +195,86 @@ describe('POST /users/:id/follow', () => {
       cookies: await cookieFor(me),
     })
     expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('PATCH /users/me — limits', () => {
+  it('clears a bio with an empty string and refuses one that is too long', async () => {
+    const me = await createUser()
+    await db.user.update({ where: { id: me.id }, data: { bio: 'Hello' } })
+    const app = await getApp()
+    const cookies = await cookieFor(me)
+    const patch = (payload: Record<string, unknown>) =>
+      app.inject({ method: 'PATCH', url: '/users/me', cookies, payload })
+
+    expect((await patch({ bio: '' })).json().bio).toBeNull()
+    expect((await patch({ bio: 'x'.repeat(501) })).statusCode).toBe(400)
+    expect((await patch({ name: 'x'.repeat(81) })).statusCode).toBe(400)
+    expect((await patch({ classYear: 'soon' })).statusCode).toBe(400)
+    expect((await patch({ classYear: null })).json().classYear).toBeNull()
+  })
+
+  it('does not accept an avatar URL — avatars are uploaded', async () => {
+    const me = await createUser()
+    const app = await getApp()
+    await app.inject({
+      method: 'PATCH',
+      url: '/users/me',
+      cookies: await cookieFor(me),
+      payload: { avatarUrl: 'https://tracker.example/pixel.gif' },
+    })
+    expect((await db.user.findUniqueOrThrow({ where: { id: me.id } })).avatarUrl).toBeNull()
+  })
+})
+
+describe('DELETE /users/me', () => {
+  it('needs the email typed back, then deletes the account and what it owns', async () => {
+    const me = await createUser()
+    const other = await createUser()
+    const mine = await createProject(me.id, { visibility: 'PUBLIC' })
+    const theirs = await createProject(other.id, { visibility: 'PUBLIC' })
+    await db.comment.create({ data: { projectId: theirs.id, userId: me.id, body: 'hi' } })
+    const app = await getApp()
+    const cookies = await cookieFor(me)
+
+    const wrong = await app.inject({
+      method: 'DELETE',
+      url: '/users/me',
+      cookies,
+      payload: { confirmEmail: 'nope' },
+    })
+    expect(wrong.statusCode).toBe(400)
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/users/me',
+      cookies,
+      payload: { confirmEmail: me.email.toUpperCase() },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(await db.user.findUnique({ where: { id: me.id } })).toBeNull()
+    expect(await db.project.findUnique({ where: { id: mine.id } })).toBeNull()
+    expect(await db.comment.count()).toBe(0)
+    expect(await db.project.findUnique({ where: { id: theirs.id } })).not.toBeNull()
+    // The old session is worthless now.
+    expect((await app.inject({ method: 'GET', url: '/auth/me', cookies })).statusCode).toBe(401)
+  })
+})
+
+describe('GET /users/me/export', () => {
+  it('downloads the caller’s own data, without the password hash', async () => {
+    const me = await createUser()
+    await createProject(me.id, { title: 'Mine' })
+    const app = await getApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/users/me/export',
+      cookies: await cookieFor(me),
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-disposition']).toContain('attachment')
+    expect(res.json().projects.map((p: { title: string }) => p.title)).toEqual(['Mine'])
+    expect(JSON.stringify(res.json())).not.toContain('passwordHash')
   })
 })

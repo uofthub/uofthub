@@ -175,6 +175,11 @@ export type NotificationType =
   | 'COMMENT_REPLIED'
   | 'PROJECT_UPDATED'
   | 'MESSAGING_MODERATED'
+  | 'CONTENT_MODERATED'
+  | 'ACCOUNT_MODERATED'
+  | 'ORG_INVITED'
+  | 'ORG_JOIN_REQUESTED'
+  | 'ORG_MEMBERSHIP_DECIDED'
 
 export interface Notification {
   id: string
@@ -191,9 +196,6 @@ export interface Notification {
  * but who made it is only ever shown to the owner.
  */
 export type ReactionKind = 'USEFUL' | 'IMPRESSIVE' | 'COLLAB'
-
-/** Verification lifecycle of a student group — see docs/student-groups.md. */
-export type OrgStatus = 'PENDING_VERIFICATION' | 'IN_REVIEW' | 'INFO_REQUESTED' | 'VERIFIED'
 
 export interface OrgActivity {
   id: string
@@ -227,12 +229,17 @@ export interface Report {
 export interface Comment {
   id: string
   projectId: string
-  userId: string
+  /** Null on a deleted comment kept as a placeholder for its replies. */
+  userId: string | null
   /** Set on a reply; replies are one level deep. */
   parentId?: string | null
   body: string
   createdAt: string
-  user?: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
+  /** Set when its author edited it. */
+  editedAt?: string | null
+  /** Deleted, but kept so its replies still read as a thread. Empty and anonymous. */
+  deleted?: boolean
+  user?: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'> | null
   helpfulCount: number
   helpfulByMe: boolean
 }

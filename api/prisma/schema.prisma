@@ -61,13 +61,12 @@ enum OrgType {
   LAB
 }
 
-/// Verification lifecycle for a student group — see docs/student-groups.md.
-/// A group is invisible to everyone but its own members until VERIFIED.
-enum OrgStatus {
-  PENDING_VERIFICATION
-  IN_REVIEW
-  INFO_REQUESTED
-  VERIFIED
+/// Where a person stands with a group. Only ACTIVE members are members:
+/// INVITED is waiting on the person, REQUESTED on the group's admins.
+enum OrgMemberStatus {
+  ACTIVE
+  INVITED
+  REQUESTED
 }
 
 /// The first five are administrative — something happened that the student has
@@ -97,6 +96,26 @@ enum NotificationType {
   MESSAGING_MODERATED
   /// A project you follow posted an update (a version with a note).
   PROJECT_UPDATED
+  /// A moderator warned you about, or removed, something you posted that is
+  /// not a project — a comment, a collection, a group event, your profile.
+  CONTENT_MODERATED
+  /// A moderator suspended your account, or lifted the suspension.
+  ACCOUNT_MODERATED
+  /// A group's admin invited you to join it.
+  ORG_INVITED
+  /// Somebody asked to join a group you run.
+  ORG_JOIN_REQUESTED
+  /// Your request to join a group was approved, or your invitation answered.
+  ORG_MEMBERSHIP_DECIDED
+}
+
+/// What a report is about.
+enum ReportTarget {
+  PROJECT
+  COMMENT
+  COLLECTION
+  USER
+  ORG_ACTIVITY
 }
 
 /// The three reactions on a project — the app's only public engagement
@@ -158,6 +177,14 @@ model User {
   name                 String
   /// scrypt hash; null for accounts that only ever signed in with Microsoft.
   passwordHash         String?
+  /// When the student proved they own `email` — by signing in with Microsoft
+  /// or by following the link we emailed. Null for an email + password
+  /// sign-up nobody has confirmed yet: such an account cannot sign in, and is
+  /// nobody's until it is confirmed (see routes/auth.ts).
+  emailVerifiedAt      DateTime?
+  /// Carried in every session token as `sv`. Bumping it signs the account out
+  /// everywhere — a password change or reset, or "sign out everywhere".
+  sessionVersion       Int       @default(0)
   faculty              String?
   campus               Campus?
   program              String?
@@ -186,9 +213,17 @@ model User {
   /// Whether other students may start a conversation with them. Replies in an
   /// existing conversation are unaffected by turning this off.
   allowMessages        Boolean   @default(true)
+  /// Whether things that need an answer (invitations, access requests,
+  /// moderation decisions, a new conversation) are also emailed. Off leaves
+  /// the in-app bell as the only channel.
+  emailNotifications   Boolean   @default(true)
   /// Set by a moderator deciding a message report; while set, the student can
   /// read their conversations but not send. Cleared to lift it.
   messagingSuspendedAt DateTime?
+  /// Set by a moderator to suspend the whole account: the student can still
+  /// sign in, read, and delete or export their own things, but can't post,
+  /// comment, react, follow or message. Cleared to lift it. See lib/session.ts.
+  suspendedAt          DateTime?
   /// Platform moderator. Set directly in the database (see
   /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
   /// grants it, so it can't be escalated to through the API.
@@ -209,6 +244,7 @@ model User {
   notifications          Notification[]
   reportsFiled           Report[]              @relation("Reporter")
   reportsReviewed        Report[]              @relation("Reviewer")
+  reportsAbout           Report[]              @relation("ReportSubject")
   orgActivities          OrgActivity[]
   projectFollows         ProjectFollow[]
   collections            Collection[]
@@ -219,6 +255,30 @@ model User {
   messageReportsFiled    MessageReport[]       @relation("MessageReporter")
   messageReportsAgainst  MessageReport[]       @relation("MessageReported")
   messageReportsReviewed MessageReport[]       @relation("MessageReviewer")
+  authTokens             AuthToken[]
+  emailInvitesSent       ProjectEmailInvite[]  @relation("EmailInvitesSent")
+}
+
+enum AuthTokenKind {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+/// A single-use link we emailed: confirming an address, or setting a new
+/// password. Only a SHA-256 of the token is stored, so a copy of this table
+/// cannot be turned into working links.
+model AuthToken {
+  id        String        @id @default(uuid())
+  userId    String
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }
 
 model Project {
@@ -285,7 +345,8 @@ model Project {
   /// through the client, only `lib/search.ts` via raw SQL.
   searchVector Unsupported("tsvector")?
 
-  owner           User                  @relation("ProjectOwner", fields: [ownerId], references: [id])
+  /// Deleting an account deletes the projects it owns (see DELETE /users/me).
+  owner           User                  @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   collaborators   ProjectCollaborator[]
   files           ProjectFile[]
   links           ProjectLink[]
@@ -302,6 +363,7 @@ model Project {
   reports         Report[]
   followers       ProjectFollow[]
   collectionItems CollectionItem[]
+  emailInvites    ProjectEmailInvite[]
   forkedFrom      Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
   forks           Project[]             @relation("ProjectForks")
 
@@ -328,7 +390,18 @@ model Project {
 model Report {
   id           String       @id @default(uuid())
   reporterId   String
-  projectId    String
+  targetType   ReportTarget @default(PROJECT)
+  /// The project reported, or the project a reported comment is on.
+  projectId    String?
+  commentId    String?
+  collectionId String?
+  activityId   String?
+  /// Whoever posted what is reported — the one a warning or a suspension is
+  /// for. For a reported profile, that person.
+  subjectUserId String?
+  /// What was reported, as it read when it was reported — a comment or an
+  /// event can be edited or deleted before a moderator gets to it.
+  excerpt      String?
   reason       ReportReason
   /// Optional free text from the reporter — the reason enum is what the queue
   /// sorts on, this is the context a moderator actually needs to decide.
@@ -340,11 +413,16 @@ model Report {
   reviewedById String?
   reviewNote   String?
 
-  reporter   User    @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  reviewedBy User?   @relation("Reviewer", fields: [reviewedById], references: [id])
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter   User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy User?        @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  project    Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  comment    Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  collection Collection?  @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  activity   OrgActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  subject    User?        @relation("ReportSubject", fields: [subjectUserId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+  @@index([targetType, status])
 }
 
 model ProjectVersion {
@@ -417,6 +495,12 @@ model ProjectCollaborator {
   projectId String
   userId    String
   role      CollaboratorRole @default(COLLABORATOR)
+  /// What they did, as the owner put it when inviting them: "Designer",
+  /// "Data analysis". Shown beside their name. Null for plain "Collaborator".
+  title     String?
+  /// False while an invitation (or a TA's access request) is waiting for an
+  /// answer. A declined invitation or a denied request is deleted, never left
+  /// behind as `false`.
   accepted  Boolean          @default(false)
   invitedAt DateTime         @default(now())
 
@@ -427,6 +511,24 @@ model ProjectCollaborator {
   /// visibleProjectWhere runs `collaborators.some({ userId })` on every list
   /// query; the @@id above leads with projectId and cannot serve it.
   @@index([userId])
+}
+
+/// An invitation to collaborate sent to an address with no account yet. It
+/// becomes an ordinary pending collaborator invitation the moment an account
+/// with that address is confirmed (lib/accounts.ts).
+model ProjectEmailInvite {
+  projectId   String
+  /// Lower-cased, and always a U of T address.
+  email       String
+  title       String?
+  invitedById String
+  invitedAt   DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation("EmailInvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@id([projectId, email])
+  @@index([email])
 }
 
 model ProjectFile {
@@ -559,12 +661,19 @@ model Comment {
   parentId  String?
   body      String
   createdAt DateTime @default(now())
+  /// Set when its author edits it; the thread says "edited".
+  editedAt  DateTime?
+  /// Set when a comment that has replies is deleted: its text is cleared and
+  /// it stays as "deleted" so the replies keep their thread. A comment with
+  /// no replies is deleted outright.
+  deletedAt DateTime?
 
   project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent  Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[]        @relation("CommentReplies")
   helpful CommentHelpful[]
+  reports Report[]
 
   @@index([projectId, createdAt])
   @@index([parentId])
@@ -610,23 +719,11 @@ model Organization {
   discordUrl           String?
   /// Share link to the group's GroupMe. Same treatment as discordUrl.
   groupMeUrl           String?
-  status               OrgStatus @default(PENDING_VERIFICATION)
-  /// Where the verification decision is sent. Required at creation — the
-  /// roadmap scoped this as one freeform `contactInfo` field, but a decision
-  /// email needs a real address, so the address and the claimed role are
-  /// separate columns. Nullable because groups created before verification
-  /// existed have neither.
+  /// How moderators reach the group's exec — set when a moderator creates the
+  /// page, and shown only to the group's own members.
   contactEmail         String?
-  /// The role the creator claims to hold, e.g. "president", "lab manager".
+  /// The exec's role, e.g. "president", "lab manager".
   contactRole          String?
-  /// Auto-delete date while PENDING_VERIFICATION or INFO_REQUESTED; cleared
-  /// once material is submitted, since review has no deadline on the student.
-  verificationDeadline DateTime?
-  /// The creator's most recent verification submission.
-  verificationNote     String?
-  /// The admin's note back — what was missing, or why it was denied.
-  reviewNote           String?
-  verifiedAt           DateTime?
   createdAt            DateTime  @default(now())
 
   members    OrgMember[]
@@ -649,14 +746,18 @@ model OrgActivity {
 
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdBy User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  reports   Report[]
 
   @@index([orgId, date])
 }
 
 model OrgMember {
-  orgId  String
-  userId String
-  role   String @default("MEMBER")
+  orgId    String
+  userId   String
+  /// MEMBER or ADMIN. Admins edit the page and manage its members.
+  role     String          @default("MEMBER")
+  status   OrgMemberStatus @default(ACTIVE)
+  joinedAt DateTime        @default(now())
 
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -723,8 +824,9 @@ model Collection {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  items CollectionItem[]
+  owner   User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items   CollectionItem[]
+  reports Report[]
 
   @@index([ownerId, updatedAt])
   @@index([updatedAt])
@@ -798,7 +900,7 @@ model MessageReport {
 
   reporter   User  @relation("MessageReporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reported   User  @relation("MessageReported", fields: [reportedId], references: [id], onDelete: Cascade)
-  reviewedBy User? @relation("MessageReviewer", fields: [reviewedById], references: [id])
+  reviewedBy User? @relation("MessageReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([reportedId, status])

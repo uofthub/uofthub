@@ -21,7 +21,11 @@ async function seed() {
   return { owner, stranger, collaborator, publicProject, uoftProject, privateProject }
 }
 
-const titles = (res: { json: () => { title: string }[] }) => res.json().map((p) => p.title).sort()
+const titles = (res: { json: () => { title: string }[] }) =>
+  res
+    .json()
+    .map((p) => p.title)
+    .sort()
 
 describe('GET /projects', () => {
   it('shows a signed-out visitor public projects only', async () => {
@@ -34,21 +38,33 @@ describe('GET /projects', () => {
   it('shows any signed-in student both public and U of T projects', async () => {
     const { stranger } = await seed()
     const app = await getApp()
-    const res = await app.inject({ method: 'GET', url: '/projects', cookies: await cookieFor(stranger) })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects',
+      cookies: await cookieFor(stranger),
+    })
     expect(titles(res)).toEqual(['public', 'uoft'])
   })
 
   it('shows the owner their own private project too', async () => {
     const { owner } = await seed()
     const app = await getApp()
-    const res = await app.inject({ method: 'GET', url: '/projects', cookies: await cookieFor(owner) })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects',
+      cookies: await cookieFor(owner),
+    })
     expect(titles(res)).toEqual(['private', 'public', 'uoft'])
   })
 
   it('shows an accepted collaborator the private project they were added to', async () => {
     const { collaborator } = await seed()
     const app = await getApp()
-    const res = await app.inject({ method: 'GET', url: '/projects', cookies: await cookieFor(collaborator) })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects',
+      cookies: await cookieFor(collaborator),
+    })
     expect(titles(res)).toEqual(['private', 'public', 'uoft'])
   })
 
@@ -60,7 +76,11 @@ describe('GET /projects', () => {
     })
 
     const app = await getApp()
-    const res = await app.inject({ method: 'GET', url: '/projects', cookies: await cookieFor(invitee) })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects',
+      cookies: await cookieFor(invitee),
+    })
     expect(titles(res)).toEqual(['public', 'uoft'])
   })
 
@@ -112,10 +132,41 @@ describe('GET /projects/:id', () => {
     const { publicProject, owner, stranger } = await seed()
     const app = await getApp()
 
-    await app.inject({ method: 'GET', url: `/projects/${publicProject.id}`, cookies: await cookieFor(owner) })
+    await app.inject({
+      method: 'GET',
+      url: `/projects/${publicProject.id}`,
+      cookies: await cookieFor(owner),
+    })
     expect((await db.project.findUnique({ where: { id: publicProject.id } }))?.viewCount).toBe(0)
 
-    await app.inject({ method: 'GET', url: `/projects/${publicProject.id}`, cookies: await cookieFor(stranger) })
+    await app.inject({
+      method: 'GET',
+      url: `/projects/${publicProject.id}`,
+      cookies: await cookieFor(stranger),
+    })
     expect((await db.project.findUnique({ where: { id: publicProject.id } }))?.viewCount).toBe(1)
+  })
+})
+
+describe('link previews and the sitemap', () => {
+  it('describe public projects only', async () => {
+    const { createProject, createUser, getApp } = await import('../test/helpers.js')
+    const owner = await createUser()
+    const open = await createProject(owner.id, {
+      title: 'Open',
+      visibility: 'PUBLIC',
+      pitch: 'A pitch',
+    })
+    const campus = await createProject(owner.id, { title: 'Campus', visibility: 'UOFT' })
+    const app = await getApp()
+
+    const card = await app.inject({ method: 'GET', url: `/projects/${open.id}/share` })
+    expect(card.json()).toMatchObject({ title: 'Open', pitch: 'A pitch', image: null })
+    expect(
+      (await app.inject({ method: 'GET', url: `/projects/${campus.id}/share` })).statusCode
+    ).toBe(404)
+
+    const sitemap = (await app.inject({ method: 'GET', url: '/projects/sitemap' })).json()
+    expect(sitemap.map((p: { id: string }) => p.id)).toEqual([open.id])
   })
 })

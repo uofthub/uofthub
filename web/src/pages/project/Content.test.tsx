@@ -24,6 +24,7 @@ const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   myReactions: [],
   saved: false,
   orgProjects: [],
+  canEdit: false,
   ...overrides,
 })
 
@@ -98,7 +99,10 @@ describe('a project’s content', () => {
         ],
       })
     )
-    const links = [...c.querySelectorAll('nav a')].map((a) => [a.textContent, a.getAttribute('href')])
+    const links = [...c.querySelectorAll('nav a')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ])
     expect(links).toEqual([
       ['Overview', '#overview'],
       ['Motivation', '#section-why'],
@@ -127,13 +131,23 @@ describe('a project’s references', () => {
   it('links each to its source and names who else used it', async () => {
     const other = { ...project(), id: 'p2', title: 'Bike lanes study' } as ProjectSummary
     const shared = vi.spyOn(api.projects, 'sharedReferences').mockResolvedValue([
-      { reference: { id: 'r1', key: 'doi:10.1000/census', title: 'Census', kind: 'DATASET' }, projects: [other] },
+      {
+        reference: { id: 'r1', key: 'doi:10.1000/census', title: 'Census', kind: 'DATASET' },
+        projects: [other],
+      },
     ])
     const c = withQueries(
       project({
         description: 'What it is.',
         references: [
-          { id: 'r1', kind: 'DATASET', title: 'Census', doi: '10.1000/census', key: 'doi:10.1000/census', year: 2021 },
+          {
+            id: 'r1',
+            kind: 'DATASET',
+            title: 'Census',
+            doi: '10.1000/census',
+            key: 'doi:10.1000/census',
+            year: 2021,
+          },
           { id: 'r2', kind: 'PAPER', title: 'Unlinked note', key: null },
         ],
       })

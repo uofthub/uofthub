@@ -1,34 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, type MeUser } from './api'
-
-interface AuthCtx {
-  user: MeUser | null
-  loading: boolean
-  /**
-   * What this browser believes about itself, answerable before `/auth/me` has
-   * replied. Seeded from whether the last check on this browser succeeded, and
-   * overwritten by the real answer the moment there is one.
-   *
-   * Only ever used to choose what to paint — the chrome on `/`, and whether it
-   * shows a spinner or the marketing page. Never as authorization: it is a
-   * flag this browser wrote about itself, and every protected read is still
-   * the API's decision. Without it, `/` paints the landing header and tall
-   * footer for a beat on every single visit by a signed-in student before
-   * snapping to the app, which is exactly the kind of jank the feed exists to
-   * remove.
-   */
-  maybeSignedIn: boolean
-  logout: () => Promise<void>
-  refetch: () => void
-}
-
-const AuthContext = createContext<AuthCtx>({
-  user: null,
-  loading: true,
-  maybeSignedIn: false,
-  logout: async () => {},
-  refetch: () => {},
-})
+import { AuthContext } from './auth'
 
 const SIGNED_IN_HINT = 'signed-in'
 
@@ -64,11 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeHint(signedIn)
   }
 
-  const fetchMe = () => {
-    setLoading(true)
+  // The first check needs no `setLoading(true)` — loading starts true — so
+  // the mount effect only starts the request; a later refetch says it is busy.
+  const load = () => {
     api.auth
       .me()
-      .then(me => {
+      .then((me) => {
         setUser(me)
         remember(true)
       })
@@ -79,19 +53,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(fetchMe, [])
+  const refetch = () => {
+    setLoading(true)
+    load()
+  }
 
+  useEffect(load, [])
+
+  const qc = useQueryClient()
   const logout = async () => {
     await api.auth.logout()
     setUser(null)
     remember(false)
+    // Everything cached was fetched as this student — saved projects, their
+    // messages, drafts. None of it may be shown to whoever uses the tab next.
+    qc.clear()
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, maybeSignedIn, logout, refetch: fetchMe }}>
+    <AuthContext.Provider value={{ user, loading, maybeSignedIn, logout, refetch }}>
       {children}
     </AuthContext.Provider>
   )
 }
-
-export const useAuth = () => useContext(AuthContext)

@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useState, type ReactNode } from 'react'
+import type { OrgActivity } from '@uofthub/types'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, safeUrl, type OrgDetail } from '../../lib/api'
+import { api, safeUrl, type OrgDetail, type OrgMember, type OrgRole } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { CAMPUS_OPTIONS, campusShort } from '../../lib/campus'
 import { useDocumentTitle } from '../../lib/hooks'
-import { CONTACT_EMAIL } from '../../lib/site'
-import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
+import { ReportDialog } from '../../components/project'
 import {
   Avatar,
   Button,
@@ -15,14 +15,15 @@ import {
   Dialog,
   EmptyState,
   ErrorText,
+  Eyebrow,
   Field,
   Icon,
   Input,
-  Notice,
+  Menu,
+  MenuItem,
   Page,
   PageTitle,
   Panel,
-  Pill,
   Select,
   Spinner,
   Stat,
@@ -31,7 +32,9 @@ import {
 
 function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [form, setForm] = useState({
+    name: org.name,
     description: org.description ?? '',
     campus: org.campus ?? '',
     websiteUrl: org.websiteUrl ?? '',
@@ -45,6 +48,13 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
       onClose()
     },
   })
+  const remove = useMutation({
+    mutationFn: () => api.orgs.delete(org.slug),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orgs'] })
+      navigate('/orgs', { replace: true })
+    },
+  })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
   return (
@@ -53,15 +63,39 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
       onClose={onClose}
       footer={
         <>
+          <Button
+            variant="danger"
+            className="mr-auto"
+            disabled={remove.isPending}
+            onClick={() =>
+              confirm(
+                `Delete ${org.name}? Its page, events and member list go for good. Linked projects stay with their owners.`
+              ) && remove.mutate()
+            }
+          >
+            Delete group
+          </Button>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button
+            variant="primary"
+            onClick={() => save.mutate()}
+            disabled={!form.name.trim() || save.isPending}
+          >
             {save.isPending ? 'Saving…' : 'Save'}
           </Button>
         </>
       }
     >
+      <Field label="Name">
+        <Input value={form.name} onChange={set('name')} maxLength={100} />
+      </Field>
       <Field label="Description">
-        <TextArea rows={4} value={form.description} onChange={set('description')} />
+        <TextArea
+          rows={4}
+          maxLength={2000}
+          value={form.description}
+          onChange={set('description')}
+        />
       </Field>
       <Field label="Campus">
         <Select value={form.campus} onChange={set('campus')}>
@@ -90,29 +124,49 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
           placeholder="https://groupme.com/join_group/…"
         />
       </Field>
-      {save.isError && <ErrorText>{(save.error as Error).message}</ErrorText>}
+      {(save.isError || remove.isError) && (
+        <ErrorText>{(save.error ?? remove.error)!.message}</ErrorText>
+      )}
     </Dialog>
   )
 }
 
-function ActivityDialog({ slug, onClose }: { slug: string; onClose: () => void }) {
+/** Posting an event, or editing one (`activity` given). */
+function ActivityDialog({
+  slug,
+  activity,
+  onClose,
+}: {
+  slug: string
+  activity?: OrgActivity
+  onClose: () => void
+}) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
-    title: '',
-    description: '',
-    date: new Date().toISOString().slice(0, 10),
-    link: '',
-    imageUrl: '',
+    title: activity?.title ?? '',
+    description: activity?.description ?? '',
+    date: (activity?.date ?? new Date().toISOString()).slice(0, 10),
+    link: activity?.link ?? '',
+    imageUrl: activity?.imageUrl ?? '',
   })
   const post = useMutation({
-    mutationFn: () =>
-      api.orgs.addActivity(slug, {
+    mutationFn: () => {
+      const body = {
         title: form.title,
-        description: form.description || undefined,
+        description: form.description,
         date: form.date || undefined,
-        link: form.link || undefined,
-        imageUrl: form.imageUrl || undefined,
-      }),
+        link: form.link,
+        imageUrl: form.imageUrl,
+      }
+      return activity
+        ? api.orgs.updateActivity(slug, activity.id, body)
+        : api.orgs.addActivity(slug, {
+            ...body,
+            description: body.description || undefined,
+            link: body.link || undefined,
+            imageUrl: body.imageUrl || undefined,
+          })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org', slug] })
       onClose()
@@ -122,7 +176,7 @@ function ActivityDialog({ slug, onClose }: { slug: string; onClose: () => void }
     setForm((f) => ({ ...f, [k]: e.target.value }))
   return (
     <Dialog
-      title="Post an event"
+      title={activity ? 'Edit event' : 'Post an event'}
       onClose={onClose}
       footer={
         <>
@@ -132,13 +186,18 @@ function ActivityDialog({ slug, onClose }: { slug: string; onClose: () => void }
             onClick={() => post.mutate()}
             disabled={!form.title.trim() || post.isPending}
           >
-            {post.isPending ? 'Posting…' : 'Post'}
+            {post.isPending ? 'Saving…' : activity ? 'Save' : 'Post'}
           </Button>
         </>
       }
     >
       <Field label="Title">
-        <Input value={form.title} onChange={set('title')} placeholder="Intro to CAD workshop" />
+        <Input
+          value={form.title}
+          onChange={set('title')}
+          placeholder="Intro to CAD workshop"
+          maxLength={120}
+        />
       </Field>
       <Field label="Description">
         <TextArea rows={3} value={form.description} onChange={set('description')} />
@@ -157,7 +216,273 @@ function ActivityDialog({ slug, onClose }: { slug: string; onClose: () => void }
   )
 }
 
-type Open = 'edit' | 'activity' | null
+type Open =
+  | { kind: 'edit' }
+  | { kind: 'activity'; activity?: OrgActivity }
+  | { kind: 'report'; activityId: string }
+  | null
+
+/** One person in the Members panel, with what an admin can do about them. */
+function MemberRow({
+  member,
+  note,
+  children,
+}: {
+  member: OrgMember
+  note?: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Link to={`/u/${member.userId}`} className="flex min-w-0 grow items-center gap-2.5 text-ink">
+        <Avatar
+          person={{ id: member.userId, name: member.user.name, avatarUrl: member.user.avatarUrl }}
+          size={36}
+        />
+        <span className="min-w-0 grow">
+          <b className="block text-15 font-semibold">{member.user.name}</b>
+          <span className="text-13 text-muted">
+            {note ?? (member.role === 'ADMIN' ? 'Admin' : (member.user.faculty ?? 'Member'))}
+          </span>
+        </span>
+      </Link>
+      {children}
+    </div>
+  )
+}
+
+/** The Members panel: who is in, and for admins, inviting and deciding. */
+function MembersPanel({ org }: { org: OrgDetail }) {
+  const { user: me } = useAuth()
+  const qc = useQueryClient()
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<OrgRole>('MEMBER')
+  const isAdmin = org.myRole === 'ADMIN'
+  const refresh = () => qc.invalidateQueries({ queryKey: ['org', org.slug] })
+  const invite = useMutation({
+    mutationFn: () => api.orgs.addMember(org.slug, email.trim(), role),
+    onSuccess: () => {
+      setEmail('')
+      refresh()
+    },
+  })
+  const update = useMutation({
+    mutationFn: (v: { userId: string; role?: OrgRole; approve?: boolean }) =>
+      api.orgs.updateMember(org.slug, v.userId, { role: v.role, approve: v.approve }),
+    onSuccess: refresh,
+  })
+  const remove = useMutation({
+    mutationFn: (userId: string) => api.orgs.removeMember(org.slug, userId),
+    onSuccess: refresh,
+  })
+  const busy = update.isPending || remove.isPending
+  const error = [invite, update, remove].find((m) => m.isError)?.error
+
+  return (
+    <Panel title="Members">
+      {org.members.map((m) => (
+        <MemberRow key={m.userId} member={m}>
+          {isAdmin && m.userId !== me?.id && (
+            <Menu
+              width={200}
+              trigger={({ toggle, open }) => (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  iconOnly
+                  icon="more"
+                  aria-label={`Manage ${m.user.name}`}
+                  aria-expanded={open}
+                  onClick={toggle}
+                />
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuItem
+                    icon="shieldCheck"
+                    onSelect={() =>
+                      update.mutate({
+                        userId: m.userId,
+                        role: m.role === 'ADMIN' ? 'MEMBER' : 'ADMIN',
+                      })
+                    }
+                    close={close}
+                  >
+                    {m.role === 'ADMIN' ? 'Make a member' : 'Make an admin'}
+                  </MenuItem>
+                  <MenuItem
+                    icon="trash"
+                    danger
+                    onSelect={() => confirm(`Remove ${m.user.name}?`) && remove.mutate(m.userId)}
+                    close={close}
+                  >
+                    Remove
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          )}
+        </MemberRow>
+      ))}
+
+      {isAdmin && (org.requests?.length ?? 0) > 0 && (
+        <>
+          <Eyebrow as="h3">Asking to join</Eyebrow>
+          {org.requests!.map((m) => (
+            <MemberRow key={m.userId} member={m} note="Wants to join">
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={busy}
+                onClick={() => update.mutate({ userId: m.userId, approve: true })}
+              >
+                Approve
+              </Button>
+              <Button size="sm" disabled={busy} onClick={() => remove.mutate(m.userId)}>
+                Deny
+              </Button>
+            </MemberRow>
+          ))}
+        </>
+      )}
+
+      {isAdmin && (org.invited?.length ?? 0) > 0 && (
+        <>
+          <Eyebrow as="h3">Invited</Eyebrow>
+          {org.invited!.map((m) => (
+            <MemberRow key={m.userId} member={m} note={`Invited as ${m.role.toLowerCase()}`}>
+              <Button size="sm" disabled={busy} onClick={() => remove.mutate(m.userId)}>
+                Withdraw
+              </Button>
+            </MemberRow>
+          ))}
+        </>
+      )}
+
+      {isAdmin && (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (email.trim()) invite.mutate()
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Invite by email"
+              aria-label="Invite by email"
+            />
+            <Select
+              value={role}
+              onChange={(e) => setRole(e.target.value as OrgRole)}
+              aria-label="As"
+              className="w-30"
+            >
+              <option value="MEMBER">Member</option>
+              <option value="ADMIN">Admin</option>
+            </Select>
+            <Button
+              type="submit"
+              iconOnly
+              icon="plus"
+              aria-label="Invite"
+              disabled={!email.trim() || invite.isPending}
+            />
+          </div>
+          <span className="text-13 text-muted">They join once they accept.</span>
+        </form>
+      )}
+      {error && <ErrorText>{error.message}</ErrorText>}
+    </Panel>
+  )
+}
+
+/** Join, ask to join, answer an invitation, or leave — whichever applies. */
+function MembershipButton({ org }: { org: OrgDetail }) {
+  const { user } = useAuth()
+  const qc = useQueryClient()
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['org', org.slug] })
+    qc.invalidateQueries({ queryKey: ['notifications'] })
+  }
+  const join = useMutation({ mutationFn: () => api.orgs.join(org.slug), onSuccess: refresh })
+  const answer = useMutation({
+    mutationFn: (accepted: boolean) => api.orgs.answerInvite(org.slug, accepted),
+    onSuccess: refresh,
+  })
+  const leave = useMutation({
+    mutationFn: () => api.orgs.removeMember(org.slug, user!.id),
+    onSuccess: refresh,
+  })
+  const error = [join, answer, leave].find((m) => m.isError)?.error
+
+  if (!user)
+    return (
+      <Button size="md" to="/session">
+        Log in to join
+      </Button>
+    )
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {org.myStatus === null && (
+        <Button
+          size="md"
+          variant="primary"
+          icon="userPlus"
+          onClick={() => join.mutate()}
+          disabled={join.isPending}
+        >
+          Ask to join
+        </Button>
+      )}
+      {org.myStatus === 'REQUESTED' && (
+        <>
+          <Chip size="sm">Request sent</Chip>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => leave.mutate()}
+            disabled={leave.isPending}
+          >
+            Cancel
+          </Button>
+        </>
+      )}
+      {org.myStatus === 'INVITED' && (
+        <>
+          <span className="text-14">You’re invited.</span>
+          <Button
+            size="md"
+            variant="primary"
+            onClick={() => answer.mutate(true)}
+            disabled={answer.isPending}
+          >
+            Accept
+          </Button>
+          <Button size="md" onClick={() => answer.mutate(false)} disabled={answer.isPending}>
+            Decline
+          </Button>
+        </>
+      )}
+      {org.myStatus === 'ACTIVE' && (
+        <Button
+          size="md"
+          variant="ghost"
+          icon="logout"
+          onClick={() => confirm(`Leave ${org.name}?`) && leave.mutate()}
+          disabled={leave.isPending}
+        >
+          Leave group
+        </Button>
+      )}
+      {error && <ErrorText>{error.message}</ErrorText>}
+    </span>
+  )
+}
 
 /** One group's page. */
 export default function OrgPage() {
@@ -165,7 +490,6 @@ export default function OrgPage() {
   const { user: me } = useAuth()
   const qc = useQueryClient()
   const [open, setOpen] = useState<Open>(null)
-  const [email, setEmail] = useState('')
 
   const { data: org, isLoading } = useQuery({
     queryKey: ['org', slug],
@@ -174,13 +498,6 @@ export default function OrgPage() {
   })
   useDocumentTitle(org?.name)
 
-  const addMember = useMutation({
-    mutationFn: () => api.orgs.addMember(slug!, email.trim()),
-    onSuccess: () => {
-      setEmail('')
-      qc.invalidateQueries({ queryKey: ['org', slug] })
-    },
-  })
   const removeActivity = useMutation({
     mutationFn: (id: string) => api.orgs.deleteActivity(slug!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org', slug] }),
@@ -199,9 +516,8 @@ export default function OrgPage() {
     )
   }
 
-  const membership = org.members.find((m) => m.userId === me?.id)
-  const isMember = !!membership
-  const isAdmin = membership?.role === 'ADMIN'
+  const isMember = org.myStatus === 'ACTIVE'
+  const isAdmin = org.myRole === 'ADMIN'
   const lab = org.type === 'LAB'
   const website = safeUrl(org.websiteUrl)
   const discord = safeUrl(org.discordUrl)
@@ -209,16 +525,15 @@ export default function OrgPage() {
 
   return (
     <Page width="wide" className="flex flex-col gap-7">
-      {open === 'edit' && <EditOrgDialog org={org} onClose={() => setOpen(null)} />}
-      {open === 'activity' && <ActivityDialog slug={org.slug} onClose={() => setOpen(null)} />}
-
-      {/* Only a group left over from the old self-serve flow can be here
-          unverified — and only its members can see it. */}
-      {org.status !== 'VERIFIED' && (
-        <Notice tone="gold" icon="shieldCheck" title="Waiting for a moderator">
-          Only members can see this page until a moderator approves it. Questions? Email{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
-        </Notice>
+      {open?.kind === 'edit' && <EditOrgDialog org={org} onClose={() => setOpen(null)} />}
+      {open?.kind === 'activity' && (
+        <ActivityDialog slug={org.slug} activity={open.activity} onClose={() => setOpen(null)} />
+      )}
+      {open?.kind === 'report' && (
+        <ReportDialog
+          target={{ kind: 'activity', slug: org.slug, activityId: open.activityId }}
+          onClose={() => setOpen(null)}
+        />
       )}
 
       <Card as="section" className="flex flex-col gap-3.5 p-7">
@@ -229,18 +544,25 @@ export default function OrgPage() {
           <Chip size="sm" icon="mapPin">
             {campusShort(org.campus) ?? 'All three campuses'}
           </Chip>
-          <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
-          {isAdmin && (
-            <Button size="sm" icon="pen" className="ml-auto" onClick={() => setOpen('edit')}>
+          {(isAdmin || me?.isAdmin) && (
+            <Button
+              size="sm"
+              icon="pen"
+              className="ml-auto"
+              onClick={() => setOpen({ kind: 'edit' })}
+            >
               Edit
             </Button>
           )}
         </div>
         <PageTitle>{org.name}</PageTitle>
         {org.description && (
-          <p className="max-w-190 text-17 leading-[1.55] text-ink-3">{org.description}</p>
+          <p className="max-w-190 text-17 leading-[1.55] whitespace-pre-wrap text-ink-3">
+            {org.description}
+          </p>
         )}
         <div className="flex flex-wrap items-center gap-2.5">
+          <MembershipButton org={org} />
           {website && (
             <Button size="md" icon="globe" href={website}>
               Website
@@ -275,7 +597,7 @@ export default function OrgPage() {
             size="main"
             action={
               isMember && (
-                <Button size="sm" icon="plus" onClick={() => setOpen('activity')}>
+                <Button size="sm" icon="plus" onClick={() => setOpen({ kind: 'activity' })}>
                   Post an event
                 </Button>
               )
@@ -287,6 +609,7 @@ export default function OrgPage() {
               org.activities.map((a) => {
                 const href = safeUrl(a.link)
                 const img = safeUrl(a.imageUrl)
+                const canManage = isAdmin || a.createdById === me?.id
                 return (
                   <div key={a.id} className="flex items-start gap-4">
                     {img ? (
@@ -306,16 +629,41 @@ export default function OrgPage() {
                             day: 'numeric',
                           })}
                         </span>
-                        {(isAdmin || a.createdById === me?.id) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            iconOnly
-                            icon="trash"
-                            className="ml-auto"
-                            aria-label={`Delete ${a.title}`}
-                            onClick={() => removeActivity.mutate(a.id)}
-                          />
+                        {me && (
+                          <span className="ml-auto flex gap-1">
+                            {canManage && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconOnly
+                                icon="pen"
+                                aria-label={`Edit ${a.title}`}
+                                onClick={() => setOpen({ kind: 'activity', activity: a })}
+                              />
+                            )}
+                            {(canManage || me.isAdmin) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconOnly
+                                icon="trash"
+                                aria-label={`Delete ${a.title}`}
+                                onClick={() =>
+                                  confirm(`Delete ${a.title}?`) && removeActivity.mutate(a.id)
+                                }
+                              />
+                            )}
+                            {a.createdById !== me.id && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconOnly
+                                icon="flag"
+                                aria-label={`Report ${a.title}`}
+                                onClick={() => setOpen({ kind: 'report', activityId: a.id })}
+                              />
+                            )}
+                          </span>
                         )}
                       </div>
                       {a.description && (
@@ -363,49 +711,7 @@ export default function OrgPage() {
         </div>
 
         <aside className="flex flex-col gap-5">
-          <Panel title="Members">
-            {org.members.map((m) => (
-              <Link
-                key={m.userId}
-                to={`/u/${m.userId}`}
-                className="flex items-center gap-2.5 text-ink"
-              >
-                <Avatar
-                  person={{ id: m.userId, name: m.user.name, avatarUrl: m.user.avatarUrl }}
-                  size={36}
-                />
-                <span className="min-w-0 grow">
-                  <b className="block text-15 font-semibold">{m.user.name}</b>
-                  {m.user.faculty && <span className="text-13 text-muted">{m.user.faculty}</span>}
-                </span>
-                <span className="text-13 text-muted capitalize">{m.role.toLowerCase()}</span>
-              </Link>
-            ))}
-            {isAdmin && (
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (email.trim()) addMember.mutate()
-                }}
-              >
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Add by email"
-                />
-                <Button
-                  type="submit"
-                  iconOnly
-                  icon="plus"
-                  aria-label="Add member"
-                  disabled={!email.trim() || addMember.isPending}
-                />
-              </form>
-            )}
-            {addMember.isError && <ErrorText>{(addMember.error as Error).message}</ErrorText>}
-          </Panel>
+          <MembersPanel org={org} />
         </aside>
       </div>
     </Page>

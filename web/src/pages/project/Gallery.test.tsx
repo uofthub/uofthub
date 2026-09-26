@@ -23,6 +23,7 @@ const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   myReactions: [],
   saved: false,
   orgProjects: [],
+  canEdit: false,
   ...overrides,
 })
 
@@ -48,7 +49,13 @@ describe('the gallery', () => {
       project({
         files: [file('f1', 'poster.pdf'), file('f2', 'photo.jpg')],
         outputs: [
-          { id: 'o1', kind: 'POSTER', fileId: 'f1', primary: true, thumbnailUrl: 'https://s/thumb.webp' },
+          {
+            id: 'o1',
+            kind: 'POSTER',
+            fileId: 'f1',
+            primary: true,
+            thumbnailUrl: 'https://s/thumb.webp',
+          },
         ],
       })
     )
