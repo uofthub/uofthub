@@ -5,8 +5,20 @@ import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { useDocumentTitle } from '../../lib/hooks'
 import { ProjectCollection } from '../../components/project'
-import { Button, Chip, EmptyState, ErrorText, Icon, Input, Spinner } from '../../components/ui'
-import '../explore/explore.css'
+import {
+  Button,
+  Chip,
+  cx,
+  EmptyState,
+  ErrorText,
+  Icon,
+  Page,
+  PageLede,
+  PageTitle,
+  searchFrame,
+  searchInput,
+  Spinner,
+} from '../../components/ui'
 
 const EXAMPLES = [
   'machine learning projects from Engineering',
@@ -29,8 +41,8 @@ function Understood({ filters }: { filters: DiscoverFilters }) {
   ].filter(Boolean) as string[]
   if (shown.length === 0) return null
   return (
-    <div className="row wrap" style={{ gap: 6 }}>
-      <span className="muted row" style={{ gap: 6, fontSize: 14 }}>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="flex items-center gap-1.5 text-14 text-muted">
         <Icon name="filter" size={16} /> Searched for
       </span>
       {shown.map((s) => (
@@ -66,15 +78,15 @@ export default function DiscoverPage() {
   }
 
   return (
-    <div className="page page--wide stack" style={{ gap: 28 }}>
+    <Page width="wide" className="flex flex-col gap-7">
       <div>
-        <h1 className="page-title">
+        <PageTitle>
           Ask discovery{' '}
-          <Chip size="sm" tone="green" style={{ verticalAlign: 'middle' }}>
+          <Chip size="sm" tone="green" className="align-middle">
             Beta
           </Chip>
-        </h1>
-        <p className="page-lede">Describe what you’re looking for and it’s turned into a search.</p>
+        </PageTitle>
+        <PageLede>Describe what you’re looking for and it’s turned into a search.</PageLede>
       </div>
 
       {!loading && !user ? (
@@ -90,34 +102,34 @@ export default function DiscoverPage() {
       ) : (
         <>
           <form
-            className="stack"
-            style={{ gap: 14 }}
+            className="flex flex-col gap-3.5"
             onSubmit={(e) => {
               e.preventDefault()
               if (query.trim()) setAsked(query.trim())
             }}
           >
-            <div className="row" style={{ gap: 10 }}>
-              <label className="big-search grow">
+            <div className="flex items-center gap-2.5">
+              <label className={cx(searchFrame, 'h-15 grow gap-3 rounded-2xl px-5')}>
                 <Icon name="sparkle" size={22} />
-                <Input
+                <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   maxLength={300}
                   placeholder="What are you looking for?"
                   aria-label="Describe what you are looking for"
+                  className={cx(searchInput, 'h-full text-18')}
                 />
               </label>
               <Button
                 type="submit"
                 variant="primary"
                 disabled={!query.trim() || isFetching}
-                style={{ height: 60 }}
+                className="h-15"
               >
                 {isFetching ? 'Searching…' : 'Search'}
               </Button>
             </div>
-            <div className="row wrap" style={{ gap: 8 }}>
+            <div className="flex flex-wrap items-center gap-2">
               {EXAMPLES.map((ex) => (
                 <Chip key={ex} tone="outline" onClick={() => ask(ex)}>
                   {ex}
@@ -128,10 +140,10 @@ export default function DiscoverPage() {
           {isError && <ErrorText>{(error as Error).message}</ErrorText>}
           {isFetching && <Spinner label="Reading your question…" />}
           {data && !isFetching && (
-            <section className="stack" style={{ gap: 16 }}>
+            <section className="flex flex-col gap-4">
               <Understood filters={data.filters} />
               {!data.interpreted && (
-                <p className="muted row" style={{ gap: 6, fontSize: 14 }}>
+                <p className="flex items-center gap-1.5 text-14 text-muted">
                   <Icon name="info" size={15} /> Interpretation is unavailable right now, so this
                   ran as a keyword search.
                 </p>
@@ -145,6 +157,6 @@ export default function DiscoverPage() {
           )}
         </>
       )}
-    </div>
+    </Page>
   )
 }

@@ -10,8 +10,11 @@ export function useDocumentTitle(title?: string) {
   }, [title])
 }
 
-/** The phone breakpoint the Mobile feed board is drawn at. */
-export const PHONE = '(max-width: 720px)'
+/**
+ * The phone breakpoint the Mobile feed board is drawn at: below Tailwind's
+ * `md` (index.css), so `max-md:` and this always agree.
+ */
+export const PHONE = '(width < 45rem)'
 
 /** Whether a media query matches, kept current as the window resizes. */
 export function useMediaQuery(query: string): boolean {

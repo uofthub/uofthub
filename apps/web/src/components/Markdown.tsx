@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { safeUrl } from '../lib/api'
+import { cx } from './ui'
 
 /**
  * A small CommonMark-ish renderer for uploaded .md files.
@@ -14,6 +15,45 @@ import { safeUrl } from '../lib/api'
  * Covers what a README actually uses: headings, emphasis, code, links, lists,
  * quotes, rules and pipe tables. Anything unrecognised falls through as text.
  */
+
+/* ---------------------------------- styles --------------------------------- */
+
+const block = 'mb-3.5 last:mb-0'
+
+/** Preformatted text in the document's grey well — code blocks and plain-text previews. */
+export const docPre =
+  'mb-3.5 overflow-x-auto rounded-btn bg-fill px-4 py-3.5 font-mono text-13 leading-[1.55] [tab-size:2] last:mb-0'
+
+/** A ruled table that scrolls sideways rather than squeezing — pipe tables and CSV previews. */
+export function DocTable({ header, rows }: { header: ReactNode[]; rows: ReactNode[][] }) {
+  const cell = 'border border-line px-3 py-1.75 text-left align-top'
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-14">
+        <thead>
+          <tr>
+            {header.map((c, n) => (
+              <th key={n} className={cx(cell, 'bg-fill font-semibold whitespace-nowrap')}>
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, r) => (
+            <tr key={r}>
+              {header.map((_, n) => (
+                <td key={n} className={cell}>
+                  {row[n] ?? ''}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 /* ---------------------------------- inline --------------------------------- */
 
@@ -43,7 +83,11 @@ function renderInline(text: string, key: string): ReactNode[] {
     const k = `${key}-${i++}`
 
     if (code !== undefined) {
-      out.push(<code key={k} className="md-code">{code}</code>)
+      out.push(
+        <code key={k} className="rounded-sm bg-fill px-1.25 py-px font-mono text-[0.875em]">
+          {code}
+        </code>
+      )
     } else if (bold !== undefined) {
       out.push(<strong key={k}>{renderInline(bold, k)}</strong>)
     } else if (star !== undefined || underscore !== undefined) {
@@ -95,7 +139,7 @@ const cells = (line: string) =>
     .replace(/^\s*\|/, '')
     .replace(/\|\s*$/, '')
     .split('|')
-    .map(c => c.trim())
+    .map((c) => c.trim())
 
 export default function Markdown({ source }: { source: string }) {
   const lines = source.split(/\r?\n/)
@@ -121,7 +165,7 @@ export default function Markdown({ source }: { source: string }) {
       while (i < lines.length && !lines[i].trimStart().startsWith(marker)) body.push(lines[i++])
       i += 1 // closing fence, or the end of the file
       blocks.push(
-        <pre key={key()} className="md-pre">
+        <pre key={key()} className={docPre}>
           <code>{body.join('\n')}</code>
         </pre>
       )
@@ -133,7 +177,11 @@ export default function Markdown({ source }: { source: string }) {
       const level = Math.min(heading[1].length, 6)
       const Tag = `h${level}` as 'h1'
       blocks.push(
-        <Tag key={key()} className="md-heading" style={{ fontSize: `${1.5 - (level - 1) * 0.11}rem` }}>
+        <Tag
+          key={key()}
+          className="mt-5.5 mb-1.5 font-display leading-[1.25] font-bold text-ink first:mt-0"
+          style={{ fontSize: `${1.5 - (level - 1) * 0.11}rem` }}
+        >
           {renderInline(heading[2], key())}
         </Tag>
       )
@@ -142,7 +190,7 @@ export default function Markdown({ source }: { source: string }) {
     }
 
     if (RULE.test(line)) {
-      blocks.push(<hr key={key()} className="md-rule" />)
+      blocks.push(<hr key={key()} className="my-4.5" />)
       i += 1
       continue
     }
@@ -151,28 +199,17 @@ export default function Markdown({ source }: { source: string }) {
       const header = cells(line)
       i += 2
       const rows: string[][] = []
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(cells(lines[i++]))
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim())
+        rows.push(cells(lines[i++]))
+      const k = key()
       blocks.push(
-        <div key={key()} style={{ overflowX: 'auto' }}>
-          <table className="md-table">
-            <thead>
-              <tr>
-                {header.map((c, n) => (
-                  <th key={n}>{renderInline(c, `${key()}-h${n}`)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, r) => (
-                <tr key={r}>
-                  {header.map((_, n) => (
-                    <td key={n}>{renderInline(row[n] ?? '', `${key()}-${r}-${n}`)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DocTable
+          key={k}
+          header={header.map((c, n) => renderInline(c, `${k}-h${n}`))}
+          rows={rows.map((row, r) =>
+            header.map((_, n) => renderInline(row[n] ?? '', `${k}-${r}-${n}`))
+          )}
+        />
       )
       continue
     }
@@ -187,7 +224,10 @@ export default function Markdown({ source }: { source: string }) {
         i += 1
       }
       blocks.push(
-        <blockquote key={key()} className="md-quote">
+        <blockquote
+          key={key()}
+          className={cx(block, 'border-l-3 border-line py-1 pl-4 text-ink-3')}
+        >
           {renderInline(body.join(' '), key())}
         </blockquote>
       )
@@ -205,9 +245,14 @@ export default function Markdown({ source }: { source: string }) {
       }
       const Tag = listPattern === BULLET ? 'ul' : 'ol'
       blocks.push(
-        <Tag key={key()} className="md-list">
+        <Tag
+          key={key()}
+          className={cx(block, 'pl-5.5', Tag === 'ul' ? 'list-disc' : 'list-decimal')}
+        >
           {items.map((item, n) => (
-            <li key={n}>{renderInline(item, `${key()}-${n}`)}</li>
+            <li key={n} className="mb-1">
+              {renderInline(item, `${key()}-${n}`)}
+            </li>
           ))}
         </Tag>
       )
@@ -221,11 +266,11 @@ export default function Markdown({ source }: { source: string }) {
     const paragraph: string[] = [lines[i++]]
     while (i < lines.length && lines[i].trim() && !startsBlock(lines[i])) paragraph.push(lines[i++])
     blocks.push(
-      <p key={key()} className="md-paragraph">
+      <p key={key()} className={block}>
         {renderInline(paragraph.join(' '), key())}
       </p>
     )
   }
 
-  return <div className="md">{blocks}</div>
+  return <div className="text-16 leading-[1.65] text-ink-2">{blocks}</div>
 }

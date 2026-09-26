@@ -1,7 +1,17 @@
 import { useDocumentTitle } from '../../lib/hooks'
 import { CONTACT_EMAIL, GITHUB_URL } from '../../lib/site'
-import { Button, Icon, type IconName } from '../../components/ui'
-import './info.css'
+import {
+  Banner,
+  BannerKicker,
+  Button,
+  Card,
+  Heading,
+  Icon,
+  Page,
+  PageLede,
+  PageTitle,
+  type IconName,
+} from '../../components/ui'
 
 const PRINCIPLES: { icon: IconName; title: string; text: string }[] = [
   {
@@ -29,59 +39,49 @@ const PRINCIPLES: { icon: IconName; title: string; text: string }[] = [
 export default function AboutPage() {
   useDocumentTitle('About')
   return (
-    <div className="page page--narrow stack" style={{ gap: 32, paddingTop: 40 }}>
+    <Page width="narrow" className="flex flex-col gap-8 pt-10 md:pt-10 lg:pt-10">
       <div>
-        <h1 className="page-title">About uofthub</h1>
-        <p className="page-lede">Why this exists and who it’s for.</p>
+        <PageTitle>About uofthub</PageTitle>
+        <PageLede>Why this exists and who it’s for.</PageLede>
       </div>
 
-      <section className="spotlight" style={{ padding: 28 }}>
-        <div className="stack" style={{ gap: 12 }}>
-          <span className="spotlight__kicker">
-            <Icon name="star" size={15} />
-            Made by U of T students, for U of T students
-          </span>
-          <p style={{ fontSize: 17, lineHeight: 1.6 }}>
+      <Banner className="p-7">
+        <div className="flex flex-col gap-3">
+          <BannerKicker icon="star">Made by U of T students, for U of T students</BannerKicker>
+          <p className="text-17 leading-[1.6]">
             Student work at U of T is scattered across GitHub, Drive, Discord, Quercus and personal
             sites. There’s no one place to share and discover what students actually make here —
             especially for anyone outside computer science, who doesn’t naturally reach for GitHub.
           </p>
-          <p className="spotlight__text" style={{ fontSize: 16 }}>
+          <p className="text-16 leading-normal text-navy-text">
             uofthub is that place: post a project, link the live demo or the repo, credit your
             collaborators, and show it to as much of the world as you want.
           </p>
         </div>
-      </section>
+      </Banner>
 
-      <section className="stack" style={{ gap: 16 }}>
-        <h2 className="h2">What we care about</h2>
-        <div
-          className="promises"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
-        >
+      <section className="flex flex-col gap-4">
+        <Heading>What we care about</Heading>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-5">
           {PRINCIPLES.map((p) => (
-            <div key={p.title} className="card promise">
-              <span className="promise__icon">
+            <Card key={p.title} className="flex flex-col gap-2.5 p-5.5">
+              <span className="flex size-10 items-center justify-center rounded-btn bg-navy-tint text-navy-ink">
                 <Icon name={p.icon} size={20} />
               </span>
-              <h3 className="disp" style={{ fontSize: 19 }}>
-                {p.title}
-              </h3>
-              <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-                {p.text}
-              </p>
-            </div>
+              <h3 className="font-display text-19 font-bold">{p.title}</h3>
+              <p className="text-14 leading-normal text-muted">{p.text}</p>
+            </Card>
           ))}
         </div>
       </section>
 
-      <section className="stack" style={{ gap: 12 }}>
-        <h2 className="h2">Get in touch</h2>
-        <p className="muted" style={{ fontSize: 15 }}>
+      <section className="flex flex-col gap-3">
+        <Heading>Get in touch</Heading>
+        <p className="text-15 text-muted">
           Found a bug, want a feature, or want to help build it? A GitHub issue is the fastest
           route.
         </p>
-        <div className="row wrap" style={{ gap: 10 }}>
+        <div className="flex flex-wrap items-center gap-2.5">
           <Button variant="primary" icon="branch" href={`${GITHUB_URL}/issues`}>
             Open an issue
           </Button>
@@ -91,10 +91,10 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <p className="muted" style={{ fontSize: 13 }}>
+      <p className="text-13 text-muted">
         uofthub is a student project and is not officially affiliated with the University of
         Toronto.
       </p>
-    </div>
+    </Page>
   )
 }

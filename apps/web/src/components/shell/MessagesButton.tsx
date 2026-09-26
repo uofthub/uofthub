@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { Button, Icon } from '../ui'
+import { UnreadDot } from './UnreadDot'
 
 /** The header's way into Messages, with a dot while something is unread. */
 export function MessagesButton({ bare = false }: { bare?: boolean }) {
@@ -21,10 +22,10 @@ export function MessagesButton({ bare = false }: { bare?: boolean }) {
       variant={bare ? 'ghost' : 'default'}
       to="/messages"
       aria-label={unread > 0 ? `Messages (${unread} unread)` : 'Messages'}
-      style={{ position: 'relative' }}
+      className="relative"
     >
       <Icon name="inbox" size={20} />
-      {unread > 0 && <span className="bell__dot" aria-hidden="true" />}
+      {unread > 0 && <UnreadDot />}
     </Button>
   )
 }

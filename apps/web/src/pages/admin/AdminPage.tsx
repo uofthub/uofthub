@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { OrgStatus, ReportStatus } from '@uofthub/types'
@@ -17,16 +17,23 @@ import { STATUS_LABELS, reasonShort } from '../../lib/moderation'
 import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import {
   Button,
+  Card,
   Chip,
   EmptyState,
   ErrorText,
   Field,
+  Heading,
   Input,
+  Notice,
+  Page,
+  PageLede,
+  PageTitle,
+  Pill,
   SegmentedTabs,
   Spinner,
   TextArea,
-  Pill,
 } from '../../components/ui'
+import { Decisions, QueueCard, Quote } from './QueueCard'
 
 const REPORT_DOTS: Record<ReportStatus, string> = {
   OPEN: '#C07A00',
@@ -70,30 +77,28 @@ function ReportRow({ report }: { report: AdminReport }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-reports'] }),
   })
   return (
-    <article className="card stack" style={{ padding: 22, gap: 12 }}>
-      <div className="row wrap" style={{ gap: 10 }}>
-        <Link
-          to={`/projects/${report.project.id}`}
-          className="disp"
-          style={{ fontSize: 19, fontWeight: 700 }}
-        >
-          {report.project.title}
-        </Link>
-        <Chip size="sm" tone="navy">
-          {reasonShort(report.reason)}
-        </Chip>
-        <Pill dot={REPORT_DOTS[report.status]}>{STATUS_LABELS[report.status]}</Pill>
-        <span className="muted push" style={{ fontSize: 13 }}>
-          {new Date(report.createdAt).toLocaleString()}
-        </span>
-      </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Owner <Link to={`/u/${report.project.owner.id}`}>{report.project.owner.name}</Link> (
-        {report.project.owner.email}) · reported by{' '}
-        <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> ({report.reporter.email}
-        ) · {report.project.visibility}
-      </div>
-      {report.details && <p style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>“{report.details}”</p>}
+    <QueueCard
+      to={`/projects/${report.project.id}`}
+      title={report.project.title}
+      tags={
+        <>
+          <Chip size="sm" tone="navy">
+            {reasonShort(report.reason)}
+          </Chip>
+          <Pill dot={REPORT_DOTS[report.status]}>{STATUS_LABELS[report.status]}</Pill>
+        </>
+      }
+      when={new Date(report.createdAt).toLocaleString()}
+      meta={
+        <>
+          Owner <Link to={`/u/${report.project.owner.id}`}>{report.project.owner.name}</Link> (
+          {report.project.owner.email}) · reported by{' '}
+          <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> (
+          {report.reporter.email}) · {report.project.visibility}
+        </>
+      }
+    >
+      {report.details && <Quote>{report.details}</Quote>}
       {report.status === 'OPEN' ? (
         <>
           <TextArea
@@ -104,7 +109,7 @@ function ReportRow({ report }: { report: AdminReport }) {
             placeholder="Note to the owner (sent with a warning or take-down)…"
           />
           {decide.isError && <ErrorText>{(decide.error as Error).message}</ErrorText>}
-          <div className="row wrap" style={{ gap: 8 }}>
+          <Decisions>
             {DECISIONS.map((d) => (
               <Button
                 key={d.value}
@@ -117,16 +122,16 @@ function ReportRow({ report }: { report: AdminReport }) {
                 {d.label}
               </Button>
             ))}
-          </div>
+          </Decisions>
         </>
       ) : (
-        <div className="muted" style={{ fontSize: 13 }}>
+        <div className="text-13 text-muted">
           {report.reviewedBy ? `Decided by ${report.reviewedBy.name}` : 'Decided'}
           {report.reviewedAt && ` on ${new Date(report.reviewedAt).toLocaleDateString()}`}
           {report.reviewNote && ` — “${report.reviewNote}”`}
         </div>
       )}
-    </article>
+    </QueueCard>
   )
 }
 
@@ -144,42 +149,39 @@ function OrgRow({ org }: { org: AdminOrg }) {
   })
   const creator = org.members[0]?.user
   return (
-    <article className="card stack" style={{ padding: 22, gap: 12 }}>
-      <div className="row wrap" style={{ gap: 10 }}>
-        <Link to={`/orgs/${org.slug}`} className="disp" style={{ fontSize: 19, fontWeight: 700 }}>
-          {org.name}
-        </Link>
-        <Chip size="sm" tone="navy">
-          {org.type === 'LAB' ? 'Lab' : 'Club'}
-        </Chip>
-        <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
-        <span className="muted push" style={{ fontSize: 13 }}>
-          created {new Date(org.createdAt).toLocaleDateString()}
-        </span>
-      </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Claimed role <b>{org.contactRole ?? '—'}</b> · contact {org.contactEmail ?? '—'}
-        {creator && (
-          <>
-            {' '}
-            · created by <Link to={`/u/${creator.id}`}>{creator.name}</Link> ({creator.email})
-          </>
-        )}{' '}
-        · {org._count.members} members, {org._count.projects} projects, {org._count.activities}{' '}
-        events
-      </div>
-      {org.description && <p style={{ fontSize: 15 }}>{org.description}</p>}
+    <QueueCard
+      to={`/orgs/${org.slug}`}
+      title={org.name}
+      tags={
+        <>
+          <Chip size="sm" tone="navy">
+            {org.type === 'LAB' ? 'Lab' : 'Club'}
+          </Chip>
+          <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
+        </>
+      }
+      when={`created ${new Date(org.createdAt).toLocaleDateString()}`}
+      meta={
+        <>
+          Claimed role <b>{org.contactRole ?? '—'}</b> · contact {org.contactEmail ?? '—'}
+          {creator && (
+            <>
+              {' '}
+              · created by <Link to={`/u/${creator.id}`}>{creator.name}</Link> ({creator.email})
+            </>
+          )}{' '}
+          · {org._count.members} members, {org._count.projects} projects, {org._count.activities}{' '}
+          events
+        </>
+      }
+    >
+      {org.description && <p className="text-15">{org.description}</p>}
       {org.verificationNote ? (
-        <div className="notice notice--navy" style={{ margin: 0 }}>
-          <div>
-            <b>Evidence submitted</b>
-            <p style={{ whiteSpace: 'pre-wrap' }}>{org.verificationNote}</p>
-          </div>
-        </div>
+        <Notice tone="navy" title="Evidence submitted">
+          <p className="whitespace-pre-wrap">{org.verificationNote}</p>
+        </Notice>
       ) : (
-        <p className="muted" style={{ fontSize: 14 }}>
-          Nothing submitted yet.
-        </p>
+        <p className="text-14 text-muted">Nothing submitted yet.</p>
       )}
       {org.status !== 'VERIFIED' && (
         <>
@@ -191,7 +193,7 @@ function OrgRow({ org }: { org: AdminOrg }) {
             placeholder="Note to the group contact (sent with every decision)…"
           />
           {decide.isError && <ErrorText>{(decide.error as Error).message}</ErrorText>}
-          <div className="row wrap" style={{ gap: 8 }}>
+          <Decisions>
             {ORG_DECISIONS.map((d) => (
               <Button
                 key={d.value}
@@ -212,10 +214,10 @@ function OrgRow({ org }: { org: AdminOrg }) {
                 Cancel
               </Button>
             )}
-          </div>
+          </Decisions>
         </>
       )}
-    </article>
+    </QueueCard>
   )
 }
 
@@ -258,19 +260,17 @@ function SpotlightAdmin() {
   })
 
   return (
-    <div className="stack" style={{ gap: 20 }}>
-      <form
-        className="card stack"
-        style={{ padding: 22, gap: 14 }}
-        onSubmit={(e) => {
+    <div className="flex flex-col gap-5">
+      <Card
+        as="form"
+        className="flex flex-col gap-3.5 p-5.5"
+        onSubmit={(e: FormEvent) => {
           e.preventDefault()
           if (project.trim()) pick.mutate()
         }}
       >
-        <h2 className="h2" style={{ fontSize: 18 }}>
-          Pick a week’s spotlight
-        </h2>
-        <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+        <Heading className="text-18">Pick a week’s spotlight</Heading>
+        <p className="text-14 leading-normal text-muted">
           Shown at the top of every student’s home feed for the week (Monday to Sunday). Without a
           pick, the banner shows the week’s most active project and says so.
         </p>
@@ -294,7 +294,7 @@ function SpotlightAdmin() {
             type="date"
             value={week}
             onChange={(e) => setWeek(e.target.value)}
-            style={{ maxWidth: 220 }}
+            className="max-w-55"
           />
         </Field>
         {pick.isError && <ErrorText>{(pick.error as Error).message}</ErrorText>}
@@ -308,15 +308,15 @@ function SpotlightAdmin() {
             {pick.isPending ? 'Saving…' : 'Set spotlight'}
           </Button>
         </div>
-      </form>
+      </Card>
 
       {isLoading ? (
         <Spinner />
       ) : picks?.length ? (
         picks.map((p) => (
-          <article key={p.id} className="card row" style={{ padding: 18, gap: 14 }}>
-            <div className="grow">
-              <div className="muted" style={{ fontSize: 13 }}>
+          <Card as="article" key={p.id} className="flex items-center gap-3.5 p-4.5">
+            <div className="min-w-0 grow">
+              <div className="text-13 text-muted">
                 Week of{' '}
                 {new Date(p.weekOf).toLocaleDateString(undefined, {
                   timeZone: 'UTC',
@@ -325,14 +325,10 @@ function SpotlightAdmin() {
                   year: 'numeric',
                 })}
               </div>
-              <Link
-                to={`/projects/${p.project.id}`}
-                className="disp"
-                style={{ fontSize: 18, fontWeight: 700 }}
-              >
+              <Link to={`/projects/${p.project.id}`} className="font-display text-18 font-bold">
                 {p.project.title}
               </Link>
-              <div className="muted" style={{ fontSize: 13 }}>
+              <div className="text-13 text-muted">
                 by {p.project.owner.name}
                 {p.pickedBy && ` · picked by ${p.pickedBy.name}`}
                 {p.note && ` · “${p.note}”`}
@@ -347,7 +343,7 @@ function SpotlightAdmin() {
             >
               Clear
             </Button>
-          </article>
+          </Card>
         ))
       ) : (
         <EmptyState icon="star" title="No spotlights picked yet" compact />
@@ -384,19 +380,19 @@ export default function AdminPage() {
   // The API gate is the real one; this only avoids an empty page.
   if (!user?.isAdmin) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState icon="lock" title="Moderators only" />
-      </div>
+      </Page>
     )
   }
 
   const list = section === 'reports' ? reports : section === 'messages' ? messageReports : orgs
 
   return (
-    <div className="page page--narrow stack" style={{ gap: 24 }}>
+    <Page width="narrow" className="flex flex-col gap-6">
       <div>
-        <h1 className="page-title">Moderation</h1>
-        <p className="page-lede">
+        <PageTitle>Moderation</PageTitle>
+        <PageLede>
           {section === 'reports'
             ? 'Reports on U of T-visible and public projects, oldest first.'
             : section === 'messages'
@@ -404,9 +400,9 @@ export default function AdminPage() {
               : section === 'groups'
                 ? 'Create group pages, and approve or deny groups left from the old self-serve flow.'
                 : 'The project at the top of everyone’s home feed this week.'}
-        </p>
+        </PageLede>
       </div>
-      <div className="row wrap" style={{ justifyContent: 'space-between', gap: 12 }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedTabs
           label="Queue"
           value={section}
@@ -442,23 +438,19 @@ export default function AdminPage() {
       </div>
       {creatingOrg && <CreateOrgDialog onClose={() => setCreatingOrg(false)} />}
       {section === 'groups' && (
-        <div
-          className="card row wrap"
-          style={{ padding: 18, gap: 12, justifyContent: 'space-between' }}
-        >
-          <span className="muted" style={{ fontSize: 14 }}>
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4.5">
+          <span className="text-14 text-muted">
             Groups are set up here, published at once, and handed to their exec.
           </span>
           <Button variant="primary" icon="plus" onClick={() => setCreatingOrg(true)}>
             New group
           </Button>
-        </div>
+        </Card>
       )}
       {/* Keyed on the queue too, so switching Open / All fades like a tab. */}
       <div
         key={`${section}:${section === 'groups' ? orgTab : reportTab}`}
-        className="stack tab-in"
-        style={{ gap: 24 }}
+        className="flex flex-col gap-6 motion-safe:animate-tab-in"
       >
         {section === 'spotlight' ? (
           <SpotlightAdmin />
@@ -491,6 +483,6 @@ export default function AdminPage() {
           />
         )}
       </div>
-    </div>
+    </Page>
   )
 }

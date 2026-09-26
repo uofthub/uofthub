@@ -1,16 +1,14 @@
-import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, CSSProperties, ElementType, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
 import { soonProps } from './soon'
+import { buttonClass, type ButtonSize, type ButtonVariant } from './buttonClass'
 import { cx } from './cx'
-
-type Variant = 'default' | 'primary' | 'gold' | 'ghost' | 'danger'
-/** lg is the design's 44px default; md is the 40px in-card size; sm is 36px. */
-type Size = 'lg' | 'md' | 'sm'
+import type { AsProps } from './polymorphic'
 
 type Common = {
-  variant?: Variant
-  size?: Size
+  variant?: ButtonVariant
+  size?: ButtonSize
   icon?: IconName
   iconSize?: number
   /** Square, icon only. Needs an aria-label. */
@@ -31,6 +29,7 @@ type AsButton = Common &
 type AsRoute = Common & {
   to: string
   href?: never
+  state?: unknown
   'aria-label'?: string
   title?: string
   onClick?: () => void
@@ -45,16 +44,8 @@ type AsAnchor = Common & {
 
 export type ButtonProps = AsButton | AsRoute | AsAnchor
 
-const VARIANT: Record<Variant, string | undefined> = {
-  default: undefined,
-  primary: 'btn-p',
-  gold: 'btn--gold',
-  ghost: 'btn--ghost',
-  danger: 'btn--danger',
-}
-
 /**
- * The design's `.btn` in its three shapes: a button, an in-app link, or an
+ * The design's button in its three shapes: a button, an in-app link, or an
  * external link (which always opens safely in a new tab).
  */
 export function Button(props: ButtonProps) {
@@ -70,14 +61,7 @@ export function Button(props: ButtonProps) {
     style,
     children,
   } = props
-  const classes = cx(
-    'btn',
-    VARIANT[variant],
-    size !== 'lg' && `btn--${size}`,
-    iconOnly && 'btn--icon',
-    block && 'btn--block',
-    className
-  )
+  const classes = buttonClass({ variant, size, iconOnly, block, className })
   const content = (
     <>
       {icon && <Icon name={icon} size={iconSize ?? (size === 'lg' ? 18 : 16)} />}
@@ -103,6 +87,7 @@ export function Button(props: ButtonProps) {
     return (
       <Link
         to={props.to}
+        state={props.state}
         className={classes}
         style={style}
         aria-label={props['aria-label']}
@@ -150,5 +135,28 @@ export function Button(props: ButtonProps) {
     <button type="button" {...rest} className={classes} style={style}>
       {content}
     </button>
+  )
+}
+
+/**
+ * A button that reads as a link — "Reply", "Edit", "Clear filters". A
+ * <button type="button"> unless `as` says otherwise (a <label> for a file
+ * picker).
+ */
+export function LinkButton<T extends ElementType = 'button'>({
+  as,
+  className,
+  ...rest
+}: AsProps<T>) {
+  const Tag: ElementType = as ?? 'button'
+  return (
+    <Tag
+      {...(Tag === 'button' && { type: 'button' })}
+      className={cx(
+        'inline-flex items-center gap-1 text-left text-14 font-semibold text-navy-ink hover:text-navy-deep disabled:cursor-default disabled:opacity-70',
+        className
+      )}
+      {...rest}
+    />
   )
 }

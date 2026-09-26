@@ -1,11 +1,11 @@
 import { useId, type CSSProperties } from 'react'
+import { cx } from '../ui'
 
 /**
  * The uofthub mark, inline so its fills can be varied per placement.
  *
  * `brand` is the original navy artwork: the default, and what the light theme
- * shows. The dark theme switches to the white variant automatically via the
- * `.mark` class.
+ * shows. The dark theme switches it to the white variant automatically.
  *
  * `tone="white"` forces the white variant regardless of theme, for surfaces
  * that are navy in both — the drawer is #002554 against the artwork's #002658,
@@ -14,6 +14,14 @@ import { useId, type CSSProperties } from 'react'
  * Kept in sync with src/assets/uofthub-mark.svg, which is still the source for
  * the favicons.
  */
+/** The artwork's four fills, set as variables the paths below read. */
+const TONE = {
+  brand:
+    '[--mark-accent:#0090f9] [--mark-body:#002658] [--mark-clock-face:#aab7c9] [--mark-clock-hand:#002658] dark:[--mark-body:#ffffff] dark:[--mark-clock-face:#7f93ad]',
+  white:
+    '[--mark-accent:#0090f9] [--mark-body:#ffffff] [--mark-clock-face:#7f93ad] [--mark-clock-hand:#002658]',
+}
+
 export default function Mark({
   size = 34,
   tone = 'brand',
@@ -25,7 +33,7 @@ export default function Mark({
   /** `white` for navy or dark surfaces; `brand` (navy) everywhere else. */
   tone?: 'brand' | 'white'
   className?: string
-  /** The mark renders as a block, so centring needs `margin: '0 auto'`. */
+  /** The mark renders as a block, so centring needs `mx-auto`. */
   style?: CSSProperties
   /** Give the mark an accessible name; omit it when the mark is decorative. */
   title?: string
@@ -44,10 +52,10 @@ export default function Mark({
       width={size}
       height={(size * 540) / 508}
       fill="none"
-      className={['mark', tone === 'white' && 'mark--white', className].filter(Boolean).join(' ')}
+      className={cx('block shrink-0', TONE[tone], className)}
       role={title ? 'img' : 'presentation'}
       aria-hidden={title ? undefined : true}
-      style={{ display: 'block', flexShrink: 0, ...style }}
+      style={style}
     >
       {title && <title>{title}</title>}
 

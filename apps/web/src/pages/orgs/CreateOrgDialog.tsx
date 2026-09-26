@@ -3,7 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { CAMPUS_OPTIONS } from '../../lib/campus'
-import { Button, Dialog, ErrorText, Field, Input, Select, TextArea } from '../../components/ui'
+import {
+  Button,
+  Dialog,
+  ErrorText,
+  Field,
+  FieldRow,
+  Input,
+  Select,
+  TextArea,
+} from '../../components/ui'
 
 const slugify = (s: string) =>
   s
@@ -87,14 +96,14 @@ export function CreateOrgDialog({ onClose }: { onClose: () => void }) {
           placeholder={slugify(form.name) || 'uoft-robotics'}
         />
       </Field>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="Type" className="grow">
+      <FieldRow>
+        <Field label="Type">
           <Select value={form.type} onChange={set('type')}>
             <option value="CLUB">Club or design team</option>
             <option value="LAB">Research lab</option>
           </Select>
         </Field>
-        <Field label="Campus" className="grow">
+        <Field label="Campus">
           <Select value={form.campus} onChange={set('campus')}>
             <option value="">All three campuses</option>
             {CAMPUS_OPTIONS.map((c) => (
@@ -104,7 +113,7 @@ export function CreateOrgDialog({ onClose }: { onClose: () => void }) {
             ))}
           </Select>
         </Field>
-      </div>
+      </FieldRow>
       <Field
         label="Exec who runs the page"
         hint="Their uofthub email. They become the group’s admin; leave blank to keep it yourself."
@@ -127,24 +136,24 @@ export function CreateOrgDialog({ onClose }: { onClose: () => void }) {
       <Field label="Website">
         <Input value={form.websiteUrl} onChange={set('websiteUrl')} placeholder="https://" />
       </Field>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="Discord invite" hint="Optional" className="grow">
+      <FieldRow>
+        <Field label="Discord invite" hint="Optional">
           <Input
             value={form.discordUrl}
             onChange={set('discordUrl')}
             placeholder="https://discord.gg/…"
           />
         </Field>
-        <Field label="GroupMe" hint="Optional" className="grow">
+        <Field label="GroupMe" hint="Optional">
           <Input
             value={form.groupMeUrl}
             onChange={set('groupMeUrl')}
             placeholder="https://groupme.com/join_group/…"
           />
         </Field>
-      </div>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="Contact email" hint="Optional — kept to members." className="grow">
+      </FieldRow>
+      <FieldRow>
+        <Field label="Contact email" hint="Optional — kept to members.">
           <Input
             type="email"
             value={form.contactEmail}
@@ -152,10 +161,10 @@ export function CreateOrgDialog({ onClose }: { onClose: () => void }) {
             placeholder="exec@mail.utoronto.ca"
           />
         </Field>
-        <Field label="Their role" hint="Optional" className="grow">
+        <Field label="Their role" hint="Optional">
           <Input value={form.contactRole} onChange={set('contactRole')} placeholder="President" />
         </Field>
-      </div>
+      </FieldRow>
       {create.isError && <ErrorText>{(create.error as Error).message}</ErrorText>}
     </Dialog>
   )

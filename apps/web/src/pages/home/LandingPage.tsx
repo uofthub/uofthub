@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
@@ -7,11 +7,18 @@ import { GITHUB_URL } from '../../lib/site'
 import Logo from '../../components/brand/Logo'
 import Mark from '../../components/brand/Mark'
 import { ProjectCard } from '../../components/project'
-import { Button, Icon, type IconName } from '../../components/ui'
-import './landing.css'
-import './shapes.css'
-
-const SHAPES = ['purple', 'blue', 'light-blue', 'red', 'orange', 'cyan'] as const
+import {
+  Button,
+  Card,
+  CardGrid,
+  cx,
+  Heading,
+  Icon,
+  searchFrame,
+  searchInput,
+  type IconName,
+} from '../../components/ui'
+import { HeroShapes } from './HeroShapes'
 
 const FEATURES: { title: string; text: string; icon: IconName; colour: string; page: string }[] = [
   {
@@ -81,6 +88,22 @@ const STEPS: { icon: IconName; title: string; text: string }[] = [
   },
 ]
 
+/** One band of the page, centred at the site's 1200px. */
+function Section({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <section className={cx('relative z-1 mx-auto w-full max-w-300 px-6', className)}>
+      {children}
+    </section>
+  )
+}
+
+const commitment = 'mb-3.5 text-16 leading-[1.65] text-ink-2'
+
+/** A section title on this page — larger than the app's. */
+function Title({ className, children }: { className?: string; children: ReactNode }) {
+  return <Heading className={cx('text-30 tracking-tighter', className)}>{children}</Heading>
+}
+
 function Hero() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
@@ -106,21 +129,27 @@ function Hero() {
   }
 
   return (
-    <section className="hero">
-      <div className="animatedShapes" aria-hidden="true">
-        {SHAPES.map((s) => (
-          <span key={s} className={`shape-${s}`} />
-        ))}
-      </div>
+    <section className="relative flex min-h-120 items-center justify-center px-4 py-12 md:h-[65vh] md:min-h-[650px] md:px-6 md:py-0">
+      <HeroShapes />
 
-      <div className="hero__inner">
-        <Logo width="clamp(240px, 30vw, 380px)" className="floating" style={{ margin: '0 auto' }} />
-        <h1 className="disp hero__title">
+      <div className="relative z-2 w-full max-w-300 text-center">
+        <Logo
+          width="clamp(240px, 30vw, 380px)"
+          className="mx-auto [filter:drop-shadow(0_15px_5px_rgba(0,0,0,0.1))_drop-shadow(10px_20px_5px_rgba(0,0,0,0.05))]"
+        />
+        <h1 className="mt-6 font-display text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] font-extrabold tracking-tightest">
           Everything students build
           <br />
           at U of T, in one place
         </h1>
-        <form onSubmit={submit} className="hero__search" role="search">
+        <form
+          onSubmit={submit}
+          className={cx(
+            searchFrame,
+            'mx-auto mt-12 h-13 max-w-[850px] gap-3 rounded-full pr-2 pl-4 shadow-[0_8px_24px_rgba(21,23,28,0.06)] md:h-15 md:pl-5.5'
+          )}
+          role="search"
+        >
           <Icon name="search" size={22} />
           <input
             ref={input}
@@ -128,22 +157,23 @@ function Hero() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Project, course code, or keyword ( Press ' / ' )"
             aria-label="Search projects"
+            className={cx(searchInput, 'px-0.5 text-17')}
           />
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="primary" className="rounded-full">
             Search
           </Button>
         </form>
         {/* The header has no Explore link — the sidebar carries it, and the
             landing page has no sidebar — so this is how a visitor looks around. */}
-        <div className="hero__ctas">
-          <Button variant="primary" size="lg" icon="compass" to="/explore">
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <Button variant="primary" icon="compass" to="/explore" className="rounded-full">
             Explore projects
           </Button>
-          <Button size="lg" icon="megaphone" to="/help-wanted">
+          <Button icon="megaphone" to="/help-wanted" className="rounded-full">
             See who’s looking for help
           </Button>
         </div>
-        <p className="hero__note">No account needed to look around.</p>
+        <p className="mt-3 text-14 text-muted">No account needed to look around.</p>
       </div>
     </section>
   )
@@ -164,119 +194,120 @@ export default function LandingPage() {
   })
 
   return (
-    <div className="landing">
+    <div className="w-full overflow-x-hidden">
       <Hero />
 
-      <section className="landing__section">
+      <Section>
         {trending.length > 0 && (
-          <div className="card landing__preview">
-            <div
-              className="row"
-              style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
-            >
-              <h2 className="h2">Being read right now</h2>
-              <Link to="/explore" style={{ fontSize: 14, fontWeight: 600 }}>
+          <Card className="flex flex-col gap-4.5 p-6 shadow-pop">
+            <div className="flex items-baseline justify-between">
+              <Heading>Being read right now</Heading>
+              <Link to="/explore" className="text-14 font-semibold">
                 Explore everything →
               </Link>
             </div>
-            <div className="card-grid">
+            <CardGrid>
               {trending.map((p) => (
                 <ProjectCard key={p.id} project={p} coverHeight={160} />
               ))}
-            </div>
-          </div>
+            </CardGrid>
+          </Card>
         )}
 
-        <div className="landing__intro">
-          <h2 className="h2 landing__h">One place with all of the work</h2>
-          <p className="landing__lede">
+        <div className="mx-auto my-16 max-w-175 text-center">
+          <Title>One place with all of the work</Title>
+          <p className="mt-3 text-17 leading-[1.6] text-ink-3">
             Student work at U of T lives scattered across GitHub, Drive, Discord, Quercus and
             personal sites. uofthub pulls it into a single searchable home — a living portfolio
             built out of what you actually did while you were here.
           </p>
         </div>
 
-        <hr className="landing__rule" />
+        <hr className="mx-auto mb-16 max-w-200 border-line" />
 
-        <h2 className="h2 landing__h" style={{ marginBottom: 32 }}>
-          Features to Explore
-        </h2>
-        <div className="features">
+        <Title className="mb-8">Features to Explore</Title>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-8">
           {FEATURES.map((f) => (
-            <div key={f.title} className="feature">
-              <span className="feature__icon" style={{ background: f.colour }}>
+            <div key={f.title} className="px-2 py-4">
+              <span
+                className="flex size-14 items-center justify-center rounded-xl text-white"
+                style={{ background: f.colour }}
+              >
                 <Icon name={f.icon} size={28} />
               </span>
-              <h3 className="disp feature__title">{f.title}</h3>
-              <p className="muted feature__text">{f.text}</p>
-              <Link to={f.page} className="feature__link">
+              <h3 className="mt-4 font-display text-22 font-bold">{f.title}</h3>
+              <p className="mt-2 text-15 leading-[1.55] text-muted">{f.text}</p>
+              <Link
+                to={f.page}
+                className="mt-2.5 inline-flex items-center gap-0.5 font-semibold text-navy-ink hover:text-navy-deep"
+              >
                 Get started
                 <Icon name="chevronRight" size={16} />
               </Link>
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      <section className="steps">
-        <div className="landing__section" style={{ textAlign: 'center' }}>
-          <h2 className="h2 landing__h">Every Step of the Way</h2>
-          <p className="muted" style={{ fontSize: 16, paddingBottom: 32 }}>
+      <div className="my-20 bg-fill-soft py-16">
+        <Section className="text-center">
+          <Title>Every Step of the Way</Title>
+          <p className="pb-8 text-16 text-muted">
             From the first idea to the thing you show a recruiter.
           </p>
-          <div className="steps__grid">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-8">
             {STEPS.map((s) => (
               <div key={s.title}>
-                <span className="steps__icon">
+                <span className="inline-flex text-navy-ink">
                   <Icon name={s.icon} size={44} />
                 </span>
-                <h3 className="disp" style={{ fontSize: 20, marginTop: 16 }}>
-                  {s.title}
-                </h3>
-                <p className="muted" style={{ fontSize: 15, marginTop: 6, lineHeight: 1.5 }}>
-                  {s.text}
-                </p>
+                <h3 className="mt-4 font-display text-20 font-bold">{s.title}</h3>
+                <p className="mt-1.5 text-15 leading-normal text-muted">{s.text}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </Section>
+      </div>
 
-      <section className="landing__section commitment">
-        <Mark size={122} style={{ margin: '0 auto 40px' }} />
-        <h2 className="h2 landing__h" style={{ marginBottom: 16 }}>
-          Our Commitment
-        </h2>
-        <p>
+      <Section className="max-w-[750px] text-center">
+        <Mark size={122} className="mx-auto mb-10" />
+        <Title className="mb-4">Our Commitment</Title>
+        <p className={commitment}>
           uofthub is open source and built by students, for students. It is not officially
           affiliated with the University of Toronto. What we promise is an ad-free, clean place to
           keep your work, where you decide exactly how much of it the world gets to see — a private
           draft, U of T only, or fully public.
         </p>
-        <p>
+        <p className={commitment}>
           Anyone with a U of T email can sign in and publish. Everything else — the code, the
           roadmap, the open issues — is on GitHub, and contributions are welcome.
         </p>
-        <p style={{ margin: '32px 0', fontWeight: 600 }}>~ The uofthub team</p>
-      </section>
+        <p className={cx(commitment, 'my-8 font-semibold')}>~ The uofthub team</p>
+      </Section>
 
-      <section className="landing__section" style={{ paddingBottom: 64 }}>
-        <div className="cta">
-          <h2 className="disp cta__title">Missing something?</h2>
-          <p className="cta__text">
+      <Section className="pb-16">
+        <div className="rounded-[20px] bg-panel px-6 py-12 text-center text-white">
+          <h2 className="pb-4 font-display text-32 font-bold tracking-tighter">
+            Missing something?
+          </h2>
+          <p className="mx-auto max-w-175 text-16 leading-[1.6] text-navy-text">
             uofthub is early and shaped by the people using it. If something you need is missing — a
             file type, an integration, a way to show your work — open an issue and tell us.
           </p>
-          <div className="row wrap" style={{ gap: 12, justifyContent: 'center', marginTop: 32 }}>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button variant="gold" icon="sparkle" href={`${GITHUB_URL}/issues/new`}>
               Request a feature
             </Button>
-            <Link to="/session" state={{ mode: 'signup' }} className="btn cta__start">
+            <Button
+              to="/session"
+              state={{ mode: 'signup' }}
+              className="border-white bg-white text-[#1e3765] hover:bg-[#f3f1eb] hover:text-[#1e3765]"
+            >
               Get started
-            </Link>
+            </Button>
           </div>
         </div>
-      </section>
+      </Section>
     </div>
   )
 }

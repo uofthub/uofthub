@@ -6,7 +6,18 @@ import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { courseOf, postedAt, timeAgo, timeShort, topicTags } from '../../lib/projectView'
 import { MiniRow } from '../../components/project'
-import { Avatar, Badge, Button, ErrorText, Icon, Input, Panel } from '../../components/ui'
+import {
+  Avatar,
+  Badge,
+  Button,
+  cx,
+  ErrorText,
+  Heading,
+  Icon,
+  Input,
+  LinkButton,
+  Panel,
+} from '../../components/ui'
 
 /* --------------------------------- updates --------------------------------- */
 
@@ -22,16 +33,14 @@ function Node({
   last?: boolean
 }) {
   return (
-    <div className="tl-node">
-      <span className="tl-node__dot" />
-      {!last && <span className="tl-node__line" />}
-      <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-        <b style={{ fontSize: 15 }}>{title}</b>
-        <span className="muted" style={{ fontSize: 13 }}>
-          {when}
-        </span>
+    <div className="relative pl-8">
+      <span className="absolute top-1 left-0 size-4 rounded-full border-3 border-navy-ink bg-surface" />
+      {!last && <span className="absolute top-5.5 -bottom-4.5 left-1.75 w-0.5 bg-line" />}
+      <div className="flex items-baseline gap-2.5">
+        <b className="text-15">{title}</b>
+        <span className="text-13 text-muted">{when}</span>
       </div>
-      {children && <div className="tl-node__text">{children}</div>}
+      {children && <div className="mt-0.5 text-15 text-ink-3">{children}</div>}
     </div>
   )
 }
@@ -115,6 +124,9 @@ function FollowUpdatesButton({ project }: { project: ProjectDetail }) {
 
 type ThreadComment = CommentThread | CommentThread['replies'][number]
 
+/** Helpful and Reply under a comment: quieter than the app's other text buttons. */
+const commentAction = 'text-13 text-muted hover:text-muted'
+
 function CommentItem({
   project,
   comment,
@@ -138,41 +150,34 @@ function CommentItem({
   })
 
   return (
-    <div className="row" style={{ gap: 12, alignItems: 'flex-start', marginLeft: small ? 56 : 0 }}>
+    <div className={cx('flex items-start gap-3', small && 'ml-14')}>
       <Link to={`/u/${comment.userId}`} tabIndex={-1} aria-hidden="true">
         <Avatar
           person={{ id: comment.userId, name, avatarUrl: comment.user?.avatarUrl }}
           size={small ? 32 : 40}
         />
       </Link>
-      <div className="stack grow" style={{ gap: 4 }}>
-        <div style={{ fontSize: 14 }}>
-          <Link to={`/u/${comment.userId}`} style={{ fontWeight: 600, color: 'var(--ink)' }}>
+      <div className="flex min-w-0 grow flex-col gap-1">
+        <div className="text-14">
+          <Link to={`/u/${comment.userId}`} className="font-semibold text-ink">
             {name}
           </Link>
           {author && (
-            <Badge bg="#E6EBF4" ink="#1E3765" style={{ marginLeft: 6 }}>
+            <Badge bg="#E6EBF4" ink="#1E3765" className="ml-1.5">
               Author
             </Badge>
           )}{' '}
-          <span className="muted">
+          <span className="text-muted">
             · {[comment.user?.faculty, timeShort(comment.createdAt)].filter(Boolean).join(' · ')}
           </span>
         </div>
-        <p
-          style={{
-            fontSize: 15,
-            lineHeight: 1.55,
-            whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {comment.body}
-        </p>
-        <div className="comment-actions">
-          <button
-            type="button"
-            className={comment.helpfulByMe ? 'link-btn link-btn--on' : 'link-btn'}
+        <p className="text-15 leading-[1.55] wrap-anywhere whitespace-pre-wrap">{comment.body}</p>
+        <div className="flex gap-4">
+          <LinkButton
+            className={cx(
+              commentAction,
+              comment.helpfulByMe && 'text-navy-ink hover:text-navy-ink'
+            )}
             aria-pressed={comment.helpfulByMe}
             disabled={!user || mine || helpful.isPending}
             title={mine ? 'Your own comment' : user ? 'Mark as helpful' : 'Sign in to vote'}
@@ -180,11 +185,11 @@ function CommentItem({
           >
             <Icon name="bulb" size={14} />
             Helpful{comment.helpfulCount > 0 && ` · ${comment.helpfulCount}`}
-          </button>
+          </LinkButton>
           {user && onReply && (
-            <button type="button" className="link-btn" onClick={onReply}>
+            <LinkButton className={commentAction} onClick={onReply}>
               Reply
-            </button>
+            </LinkButton>
           )}
         </div>
       </div>
@@ -221,13 +226,13 @@ export function Comments({ project }: { project: ProjectDetail }) {
   }
 
   return (
-    <Panel id="comments" size="main" gap={20}>
-      <h2 className="h2" style={{ fontSize: 18 }}>
+    <Panel id="comments" size="main" className="gap-5">
+      <Heading className="text-18">
         {count} {count === 1 ? 'comment' : 'comments'}
-      </h2>
+      </Heading>
 
       {threads.map((t) => (
-        <div key={t.id} className="stack" style={{ gap: 16 }}>
+        <div key={t.id} className="flex flex-col gap-4">
           <CommentItem project={project} comment={t} onReply={() => reply(t)} />
           {t.replies.map((r) => (
             <CommentItem key={r.id} project={project} comment={r} small onReply={() => reply(r)} />
@@ -237,24 +242,21 @@ export function Comments({ project }: { project: ProjectDetail }) {
 
       {user ? (
         <form
-          className="stack"
-          style={{ gap: 8 }}
+          className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             if (body.trim()) post.mutate()
           }}
         >
           {replyTo && (
-            <span className="muted row" style={{ gap: 6, fontSize: 13 }}>
+            <span className="flex items-center gap-1.5 text-13 text-muted">
               Replying to {replyTo.name}
-              <button type="button" className="link-btn" onClick={() => setReplyTo(null)}>
-                Cancel
-              </button>
+              <LinkButton onClick={() => setReplyTo(null)}>Cancel</LinkButton>
             </span>
           )}
-          <div className="row" style={{ gap: 12 }}>
+          <div className="flex items-center gap-3">
             <Avatar person={user} size={40} />
-            <label className="grow">
+            <label className="min-w-0 grow">
               <span className="sr-only">
                 {replyTo ? `Reply to ${replyTo.name}` : 'Add a comment'}
               </span>
@@ -276,7 +278,7 @@ export function Comments({ project }: { project: ProjectDetail }) {
           </div>
         </form>
       ) : (
-        <p className="muted" style={{ fontSize: 14 }}>
+        <p className="text-14 text-muted">
           <Link to="/session">Sign in</Link> to leave feedback.
         </p>
       )}
@@ -312,20 +314,20 @@ export function Related({ project }: { project: ProjectDetail }) {
   return (
     <>
       {courseRows.length > 0 && (
-        <Panel title={`More built for ${course}`} style={{ padding: '20px 22px' }}>
+        <Panel title={`More built for ${course}`} className="px-5.5 py-5">
           {courseRows.map((p) => (
             <MiniRow key={p.id} project={p} />
           ))}
           <Link
             to={`/explore?course=${encodeURIComponent(course!)}`}
-            style={{ fontSize: 14, fontWeight: 600 }}
+            className="text-14 font-semibold"
           >
             See all →
           </Link>
         </Panel>
       )}
       {similarRows.length > 0 && (
-        <Panel title="You might also like" style={{ padding: '20px 22px' }}>
+        <Panel title="You might also like" className="px-5.5 py-5">
           {similarRows.map((p) => (
             <MiniRow key={p.id} project={p} />
           ))}

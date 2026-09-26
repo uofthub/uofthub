@@ -4,7 +4,16 @@ import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { useProjectPages } from '../../lib/queries'
 import { ProjectCollection } from '../../components/project'
-import { Button, EmptyState, Spinner, type IconName } from '../../components/ui'
+import {
+  Button,
+  EmptyState,
+  LoadMore,
+  Page,
+  PageLede,
+  PageTitle,
+  Spinner,
+  type IconName,
+} from '../../components/ui'
 
 /** The saved list is paged the way the API pages profile lists. */
 const SAVED_PAGE = 24
@@ -30,10 +39,10 @@ function ListPage({
 }) {
   useDocumentTitle(title)
   return (
-    <div className="page page--wide stack" style={{ gap: 28 }}>
+    <Page width="wide" className="flex flex-col gap-7">
       <div>
-        <h1 className="page-title">{title}</h1>
-        <p className="page-lede">{lede}</p>
+        <PageTitle>{title}</PageTitle>
+        <PageLede>{lede}</PageLede>
       </div>
       {query.isLoading ? (
         <Spinner />
@@ -52,14 +61,8 @@ function ListPage({
       ) : (
         <ProjectCollection projects={query.projects} layout="card" />
       )}
-      {query.hasNextPage && (
-        <div className="row" style={{ justifyContent: 'center' }}>
-          <Button onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>
-            {query.isFetchingNextPage ? 'Loading…' : 'Show more'}
-          </Button>
-        </div>
-      )}
-    </div>
+      {query.hasNextPage && <LoadMore query={query} />}
+    </Page>
   )
 }
 
@@ -77,7 +80,7 @@ export function SavedPage() {
 
   if (!loading && !user) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState
           icon="bookmark"
           title="Sign in to see what you’ve saved"
@@ -87,7 +90,7 @@ export function SavedPage() {
             </Button>
           }
         />
-      </div>
+      </Page>
     )
   }
 

@@ -1,10 +1,11 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { cx } from './cx'
 
 /**
- * The design's stroke icon set: 24px grid, 1.8 stroke, round caps (see `.ic`
- * in index.css). Every path from the design export is copied verbatim; the handful
- * the boards never needed — close, download, trash and friends — are drawn on
- * the same grid so they sit beside the originals without looking borrowed.
+ * The design's stroke icon set: 24px grid, 1.8 stroke, round caps. Every path
+ * from the design export is copied verbatim; the handful the boards never
+ * needed — close, download, trash and friends — are drawn on the same grid so
+ * they sit beside the originals without looking borrowed.
  */
 const PATHS = {
   // From the boards
@@ -307,7 +308,12 @@ export function Icon({
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={className ? `ic ${className}` : 'ic'}
+      className={cx('shrink-0', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
       style={style}
       aria-hidden={label ? undefined : true}
       role={label ? 'img' : undefined}

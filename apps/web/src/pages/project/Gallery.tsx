@@ -5,7 +5,20 @@ import { lookFor, previewKindFor } from '../../lib/files'
 import { OUTPUT_KINDS, outputLabel, primaryOutput, resolveOutputs } from '../../lib/outputs'
 import FileViewer from '../../components/FileViewer'
 import { Cover, CoverTag } from '../../components/project'
-import { ErrorText, Icon } from '../../components/ui'
+import { cx, ErrorText, Icon } from '../../components/ui'
+
+/** A thumbnail in the strip; the one on show gets a navy frame. */
+const thumb = (on = false) =>
+  cx(
+    'h-14.5 w-24 overflow-hidden rounded-btn bg-surface md:h-19.5 md:w-33',
+    on ? 'border-2 border-navy' : 'border border-line'
+  )
+
+/** The large frame's picture or video, filling it edge to edge. */
+const fill = 'block size-full object-cover'
+
+/** The large frame's click target — a zoom-in over whatever it shows. */
+const opener = 'block size-full cursor-zoom-in'
 
 /** How many thumbnails the strip shows before "+N". */
 const STRIP = 6
@@ -46,15 +59,18 @@ function Thumb({
   return (
     <button
       type="button"
-      className={selected ? 'thumb thumb--on' : 'thumb'}
+      className={thumb(selected)}
       aria-label={`Show ${file.name}`}
       aria-pressed={selected}
       onClick={onClick}
     >
       {url ? (
-        <img src={url} alt="" />
+        <img src={url} alt="" className="size-full object-cover" />
       ) : (
-        <span className="thumb__file" style={{ background: look.bg, color: look.ink }}>
+        <span
+          className="flex size-full items-center justify-center"
+          style={{ background: look.bg, color: look.ink }}
+        >
           <Icon name={kind === 'video' ? 'play' : look.icon} size={20} />
         </span>
       )}
@@ -74,19 +90,13 @@ function LeadFrame({
   href?: string
   onOpen: () => void
 }) {
-  const image = <img src={src} alt="" className="gallery__media" style={{ objectFit: 'contain' }} />
+  const image = <img src={src} alt="" className={cx(fill, 'bg-fill object-contain')} />
   return href ? (
-    <a
-      className="gallery__open"
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={label}
-    >
+    <a className={opener} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}>
       {image}
     </a>
   ) : (
-    <button type="button" className="gallery__open" onClick={onOpen} aria-label={label}>
+    <button type="button" className={opener} onClick={onOpen} aria-label={label}>
       {image}
     </button>
   )
@@ -106,22 +116,17 @@ function MainMedia({
 
   if (kind === 'video') {
     return url ? (
-      <video src={url} controls className="gallery__media" />
+      <video src={url} controls className={cx(fill, 'bg-[#111]')} />
     ) : (
-      <div className="gallery__media gallery__media--wait" />
+      <div className={cx(fill, 'bg-fill')} />
     )
   }
   return (
-    <button
-      type="button"
-      className="gallery__open"
-      onClick={onOpen}
-      aria-label={`Open ${file.name}`}
-    >
+    <button type="button" className={opener} onClick={onOpen} aria-label={`Open ${file.name}`}>
       {url ? (
-        <img src={url} alt={file.name} className="gallery__media" />
+        <img src={url} alt={file.name} className={cx(fill, 'bg-fill')} />
       ) : (
-        <div className="gallery__media gallery__media--wait" />
+        <div className={cx(fill, 'bg-fill')} />
       )}
     </button>
   )
@@ -178,7 +183,7 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
     .join(' and ')
 
   return (
-    <div className="stack" style={{ gap: 12 }}>
+    <div className="flex flex-col gap-3">
       {viewing && (
         <FileViewer
           projectId={project.id}
@@ -189,7 +194,7 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
         />
       )}
 
-      <div className="gallery__frame">
+      <div className="h-65 overflow-hidden rounded-[18px] border border-line bg-surface md:h-130">
         {showingLead && lead ? (
           <LeadFrame
             src={lead.thumbnailUrl!}
@@ -215,16 +220,16 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
       </div>
 
       {(media.length + (lead ? 1 : 0) > 1 || isOwner) && (
-        <div className="gallery__strip">
+        <div className="flex flex-wrap gap-2.5">
           {lead && (
             <button
               type="button"
-              className={showingLead ? 'thumb thumb--on' : 'thumb'}
+              className={thumb(showingLead)}
               aria-label={`Show ${outputLabel(lead)}`}
               aria-pressed={showingLead}
               onClick={() => setSelectedId(LEAD)}
             >
-              <img src={lead.thumbnailUrl} alt="" />
+              <img src={lead.thumbnailUrl} alt="" className="size-full object-cover" />
             </button>
           )}
           {media.slice(0, STRIP - (lead ? 1 : 0)).map((f) => (
@@ -237,7 +242,13 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
             />
           ))}
           {isOwner && (
-            <label className="thumb thumb--add" aria-label="Add an image or video">
+            <label
+              className={cx(
+                thumb(),
+                'flex cursor-pointer flex-col items-center justify-center gap-1 border-[1.5px] border-dashed border-line-dashed bg-fill-warm text-12 font-semibold text-navy-ink'
+              )}
+              aria-label="Add an image or video"
+            >
               <Icon name={upload.isPending ? 'upload' : 'plus'} size={20} />
               <span>{upload.isPending ? 'Uploading…' : 'Add media'}</span>
               <input
@@ -254,7 +265,7 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
             </label>
           )}
           {media.length > 0 && selected && (
-            <span className="muted gallery__count">
+            <span className="ml-auto self-center text-13 text-muted">
               {media.indexOf(selected) + 1} of {media.length} · {summary}
             </span>
           )}

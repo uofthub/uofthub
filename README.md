@@ -43,7 +43,7 @@ A pnpm workspace with two apps and one shared package.
 
 | | |
 |---|---|
-| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` — with no UI framework dependency |
+| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. Tailwind CSS v4 for styling. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens as a Tailwind `@theme` in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` |
 | **API** (`apps/api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |

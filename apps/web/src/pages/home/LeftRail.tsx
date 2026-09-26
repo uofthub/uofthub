@@ -6,7 +6,8 @@ import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { CAMPUS_SHORT, CAMPUSES } from '../../lib/campus'
 import { countLabel, coursesOf, useFacets } from '../../lib/queries'
-import { Chip, Icon, type IconName } from '../../components/ui'
+import { Chip, cx, Eyebrow, Icon, type IconName } from '../../components/ui'
+import { Rail } from './Rail'
 import { CoursesDialog } from './CoursesDialog'
 
 type Section = { to: string; label: string; icon: IconName; badge?: number }
@@ -46,22 +47,38 @@ export function LeftRail({
   ]
 
   return (
-    <aside className="rail rail--left">
-      <nav aria-label="Feed sections" className="stack" style={{ gap: 4 }}>
+    <Rail className="hidden gap-7 lg:flex">
+      <nav aria-label="Feed sections" className="flex flex-col gap-1">
         {sections.map((s) => (
-          <NavLink key={s.label} to={s.to} end className="rail-nav">
+          <NavLink
+            key={s.label}
+            to={s.to}
+            end
+            className={({ isActive }) =>
+              cx(
+                'flex h-11 items-center gap-3 rounded-btn border px-3 text-15 font-semibold',
+                isActive
+                  ? 'border-line bg-surface text-navy-ink hover:text-navy-ink'
+                  : 'border-transparent text-ink-3 hover:bg-fill-soft hover:text-ink'
+              )
+            }
+          >
             <Icon name={s.icon} size={19} />
             {s.label}
-            {!!s.badge && <span className="rail-badge">{s.badge}</span>}
+            {!!s.badge && (
+              <span className="ml-auto rounded-full bg-navy px-2 py-0.5 text-12 font-bold text-white">
+                {s.badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="stack" style={{ gap: 10 }}>
-        <span className="lbl" style={{ padding: '0 12px' }}>
+      <div className="flex flex-col gap-2.5">
+        <Eyebrow as="span" className="px-3">
           Campus
-        </span>
-        <div className="row wrap" style={{ gap: 6, padding: '0 12px' }}>
+        </Eyebrow>
+        <div className="flex flex-wrap items-center gap-1.5 px-3">
           <Chip
             tone={campus === '' ? 'active' : 'default'}
             pressed={campus === ''}
@@ -82,35 +99,39 @@ export function LeftRail({
         </div>
       </div>
 
-      <div className="stack" style={{ gap: 4 }}>
-        <span className="lbl" style={{ padding: '0 12px 6px' }}>
+      <div className="flex flex-col gap-1">
+        <Eyebrow as="span" className="px-3 pb-1.5">
           Your courses
-        </span>
+        </Eyebrow>
         {courses.length > 0 ? (
           courses.map((code) => (
             <Link
               key={code}
               to={`/explore?course=${encodeURIComponent(code)}`}
-              className="rail-course"
+              className="flex h-9 items-center justify-between rounded-lg px-3 text-14 text-ink hover:bg-fill-soft hover:text-ink"
             >
-              <b>{code}</b>
+              <b className="font-semibold">{code}</b>
               {courseCount.has(code) && (
-                <span className="muted">{countLabel(courseCount.get(code)!)}</span>
+                <span className="text-13 text-muted">{countLabel(courseCount.get(code)!)}</span>
               )}
             </Link>
           ))
         ) : (
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, padding: '0 12px' }}>
+          <p className="px-3 text-13 leading-normal text-muted">
             Add the courses you take, or tag a project with its course code, and they show up here.
           </p>
         )}
         {user && (
-          <button type="button" className="rail-add" onClick={() => setEditingCourses(true)}>
+          <button
+            type="button"
+            className="px-3 py-2 text-left text-14 font-semibold text-navy-ink hover:underline"
+            onClick={() => setEditingCourses(true)}
+          >
             {(user.courses?.length ?? 0) > 0 ? 'Edit your courses' : '+ Add a course'}
           </button>
         )}
       </div>
       {editingCourses && <CoursesDialog onClose={() => setEditingCourses(false)} />}
-    </aside>
+    </Rail>
   )
 }

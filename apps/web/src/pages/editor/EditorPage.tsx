@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Visibility } from '@uofthub/types'
@@ -20,12 +20,22 @@ import {
   Avatar,
   Badge,
   Button,
+  Card,
+  cx,
   Dialog,
+  Dropzone,
   EmptyState,
   ErrorText,
+  Eyebrow,
   Field,
+  Heading,
   Icon,
   Input,
+  LinkButton,
+  Notice,
+  Page,
+  PageLede,
+  PageTitle,
   Pill,
   Spinner,
   TextArea,
@@ -48,13 +58,17 @@ import { OutputsEditor } from './OutputsEditor'
 import { DetailsEditor, ReferencesEditor, SectionsEditor } from './Parts'
 import { saveDraft } from './save'
 import { TagInput } from './TagInput'
-import './editor.css'
 
 const PITCH_MAX = 120
 const FILE_MAX = 8
 
 const VISIBILITY: { value: Visibility; label: string; hint: string; icon: IconName }[] = [
-  { value: 'PUBLIC', label: 'Public', hint: 'Anyone on the web, and search engines', icon: 'globe' },
+  {
+    value: 'PUBLIC',
+    label: 'Public',
+    hint: 'Anyone on the web, and search engines',
+    icon: 'globe',
+  },
   {
     value: 'UOFT',
     label: 'U of T only',
@@ -64,6 +78,73 @@ const VISIBILITY: { value: Visibility; label: string; hint: string; icon: IconNa
   { value: 'UNLISTED', label: 'Unlisted', hint: 'Only people with the link', icon: 'link' },
   { value: 'PRIVATE', label: 'Draft', hint: 'Only you and your collaborators', icon: 'eyeOff' },
 ]
+
+/**
+ * One card of the form: a heading, with an optional grey note beside it
+ * saying what the section is for.
+ */
+function EditorCard({
+  title,
+  note,
+  className,
+  children,
+}: {
+  title: ReactNode
+  note?: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Card as="section" className={cx('flex flex-col gap-4 p-4.5 md:p-6', className)}>
+      <Heading className="text-20">
+        {title}
+        {note && (
+          <>
+            {' '}
+            <span className="font-body text-14 font-medium text-ink-3">· {note}</span>
+          </>
+        )}
+      </Heading>
+      {children}
+    </Card>
+  )
+}
+
+/** A selectable card — a project type, a visibility — outlined navy when chosen. */
+const choice = (on: boolean) =>
+  cx(
+    'border border-line bg-surface',
+    on && 'border-navy-ink shadow-[inset_0_0_0_1px_var(--color-navy)]'
+  )
+
+/** A file or link already on the project or about to be uploaded, with a way to drop it. */
+function FileRow({
+  icon,
+  name,
+  size,
+  onRemove,
+}: {
+  icon: IconName
+  name: string
+  size?: string
+  onRemove: () => void
+}) {
+  return (
+    <li className="flex items-center gap-2 text-14">
+      <Icon name={icon} size={16} />
+      <span className="line-clamp-1 min-w-0 grow">{name}</span>
+      {size && <span className="text-muted">{size}</span>}
+      <Button
+        size="sm"
+        variant="ghost"
+        iconOnly
+        icon="close"
+        aria-label={`Remove ${name}`}
+        onClick={onRemove}
+      />
+    </li>
+  )
+}
 
 /**
  * The one page for making a project and for changing it: /projects/new and
@@ -92,7 +173,7 @@ export default function EditorPage() {
 
   if (!user) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState
           icon="lock"
           title="Sign in to share your work"
@@ -102,17 +183,17 @@ export default function EditorPage() {
             </Button>
           }
         />
-      </div>
+      </Page>
     )
   }
   if ((id && project.isLoading) || (!id && template.isLoading)) return <Spinner />
   if (id && (!project.data || project.data.ownerId !== user.id)) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState icon="lock" title="Only the project’s owner can edit it">
           <Link to={id ? `/projects/${id}` : '/'}>Back to the project</Link>
         </EmptyState>
-      </div>
+      </Page>
     )
   }
 
@@ -250,8 +331,12 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
   }
 
   // The project's files and links that are not outputs, to offer as ones.
-  const usedFiles = new Set(draft.outputs.flatMap((o) => (o.target.type === 'file' ? [o.target.fileId] : [])))
-  const usedLinks = new Set(draft.outputs.flatMap((o) => (o.target.type === 'link' ? [o.target.linkId] : [])))
+  const usedFiles = new Set(
+    draft.outputs.flatMap((o) => (o.target.type === 'file' ? [o.target.fileId] : []))
+  )
+  const usedLinks = new Set(
+    draft.outputs.flatMap((o) => (o.target.type === 'link' ? [o.target.linkId] : []))
+  )
   const goneFiles = new Set(draft.removedFiles.map((f) => f.id))
   const goneLinks = new Set(draft.removedLinks.map((l) => l.id))
   const keptFiles = (project?.files ?? []).filter((f) => !goneFiles.has(f.id))
@@ -266,7 +351,10 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
   const choices = editing ? VISIBILITY : VISIBILITY.filter((v) => v.value !== 'PRIVATE')
 
   return (
-    <div className="page page--wide post-grid">
+    <Page
+      width="wide"
+      className="grid grid-cols-1 items-start gap-10 pt-9 md:pt-9 lg:pt-9 xl:grid-cols-[minmax(0,1fr)_400px]"
+    >
       {leave.blocker.state === 'blocked' && (
         <Dialog
           title="Leave without saving?"
@@ -284,31 +372,28 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
           <p>What you’ve changed here hasn’t been saved, and will be lost.</p>
         </Dialog>
       )}
-      <div className="stack" style={{ gap: 22, minWidth: 0 }}>
+      <div className="flex min-w-0 flex-col gap-5.5">
         <div>
-          <h1 className="page-title">{editing ? 'Edit project' : 'Share your work'}</h1>
-          <p className="page-lede">
+          <PageTitle>{editing ? 'Edit project' : 'Share your work'}</PageTitle>
+          <PageLede>
             {editing
               ? 'Everything here is optional except the title. Anything you leave empty won’t show.'
               : 'Put in as much or as little as you like — anything left empty won’t show. It stays a private draft until you publish.'}
-          </p>
+          </PageLede>
         </div>
 
         {draft.template && (
-          <div className="notice">
-            <Icon name="info" size={20} />
-            <div>
-              <b>Started from the {draft.template.code} template</b>
-              <p>Its sections are suggestions. Fill in what fits; empty ones are left out.</p>
-            </div>
-          </div>
+          <Notice icon="info" title={`Started from the ${draft.template.code} template`}>
+            Its sections are suggestions. Fill in what fits; empty ones are left out.
+          </Notice>
         )}
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            What are you sharing?
-          </h2>
-          <div className="type-grid">
+        <EditorCard title="What are you sharing?">
+          <div
+            role="group"
+            aria-label="Project type"
+            className="grid grid-cols-2 gap-3 min-[900px]:grid-cols-4"
+          >
             {PROJECT_TYPE_KEYS.map((k) => {
               const t = PROJECT_TYPES[k]
               const on = k === draft.type
@@ -316,47 +401,45 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                 <button
                   key={k}
                   type="button"
-                  className={on ? 'type-tile type-tile--on' : 'type-tile'}
+                  className={cx(
+                    choice(on),
+                    'relative flex h-26 flex-col justify-between rounded-[14px] p-3.5 text-left text-ink hover:border-line-strong',
+                    on && 'bg-navy/4'
+                  )}
                   aria-pressed={on}
                   onClick={() => setType(k)}
                 >
                   {on && (
-                    <span className="type-tile__check">
+                    <span className="absolute top-2.5 right-2.5 flex size-5.5 items-center justify-center rounded-full bg-navy text-white">
                       <Icon name="check" size={13} />
                     </span>
                   )}
-                  <span style={{ color: 'var(--navy-ink)' }}>
+                  <span className="text-navy-ink">
                     <Icon name={t.icon} size={22} />
                   </span>
                   <span>
-                    <span className="type-tile__label">{t.label}</span>
-                    <span className="muted" style={{ fontSize: 13 }}>
-                      {t.hint}
-                    </span>
+                    <span className="block text-15 font-semibold">{t.label}</span>
+                    <span className="text-13 text-muted">{t.hint}</span>
                   </span>
                 </button>
               )
             })}
           </div>
-          <p className="muted" style={{ fontSize: 13 }}>
+          <p className="text-13 text-muted">
             Section headings and suggested details follow the type you pick.
           </p>
-        </section>
+        </EditorCard>
 
         {!editing && (
-          <section className="card post-card" style={{ gap: 12 }}>
-            <h2 className="h2" style={{ fontSize: 20 }}>
-              Start from a link <span className="post-card__optional">· optional</span>
-            </h2>
+          <EditorCard title="Start from a link" note="optional" className="gap-3">
             <form
-              className="row"
-              style={{ gap: 10 }}
+              className="flex items-center gap-2.5"
               onSubmit={(e) => {
                 e.preventDefault()
                 if (importUrl.trim()) importLink.mutate(importUrl.trim())
               }}
             >
-              <label className="grow">
+              <label className="min-w-0 grow">
                 <span className="sr-only">Link to import</span>
                 <Input
                   type="url"
@@ -365,28 +448,29 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                   placeholder="A video, a paper, a portfolio page, a repository, a Drive folder…"
                 />
               </label>
-              <Button type="submit" icon="link" disabled={!importUrl.trim() || importLink.isPending}>
+              <Button
+                type="submit"
+                icon="link"
+                disabled={!importUrl.trim() || importLink.isPending}
+              >
                 {importLink.isPending ? 'Importing…' : 'Import'}
               </Button>
             </form>
             {importLink.isError ? (
               <ErrorText>{(importLink.error as Error).message}</ErrorText>
             ) : importLink.isSuccess ? (
-              <p className="row" style={{ gap: 6, fontSize: 13, color: 'var(--green)' }}>
+              <p className="flex items-center gap-1.5 text-13 text-green">
                 <Icon name="check" size={15} /> Filled in from the link — check it over below.
               </p>
             ) : (
-              <p className="muted" style={{ fontSize: 13 }}>
+              <p className="text-13 text-muted">
                 We’ll fill in what the page says about itself, for you to edit.
               </p>
             )}
-          </section>
+          </EditorCard>
         )}
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            The basics
-          </h2>
+        <EditorCard title="The basics">
           <Field label="Title">
             <Input
               value={draft.title}
@@ -395,7 +479,10 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               maxLength={120}
             />
           </Field>
-          <Field label="One-line pitch" hint={`Up to ${PITCH_MAX} characters. This is what shows on cards.`}>
+          <Field
+            label="One-line pitch"
+            hint={`Up to ${PITCH_MAX} characters. This is what shows on cards.`}
+          >
             <Input
               value={draft.pitch}
               onChange={(e) => update({ pitch: e.target.value })}
@@ -403,11 +490,14 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               maxLength={PITCH_MAX}
             />
           </Field>
-          <div className="post-fields">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field
               label="Made for a course?"
-              hint={courseOk ? 'Files it under that course' : 'That doesn’t look like a course code — try CSC211H5'}
-              className="post-fields__half"
+              hint={
+                courseOk
+                  ? 'Files it under that course'
+                  : 'That doesn’t look like a course code — try CSC211H5'
+              }
             >
               <Input
                 value={draft.courseCode}
@@ -416,45 +506,41 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                 maxLength={8}
               />
             </Field>
-            <Field label="Tags" hint="Topics, methods, tools" className="post-fields__half">
+            <Field label="Tags" hint="Topics, methods, tools">
               <TagInput value={draft.tags} onChange={(tags) => update({ tags })} />
             </Field>
           </div>
           {offer.data && (
-            <div className="notice">
-              <Icon name="sparkle" size={20} />
-              <div className="grow">
-                <b>{offer.data.code} has a template</b>
-                <p>{offer.data.intro}</p>
-              </div>
-              <Button size="sm" onClick={() => setDraft((d) => applyTemplate(d, offer.data!))}>
-                Use it
-              </Button>
-            </div>
+            <Notice
+              icon="sparkle"
+              title={`${offer.data.code} has a template`}
+              action={
+                <Button size="sm" onClick={() => setDraft((d) => applyTemplate(d, offer.data!))}>
+                  Use it
+                </Button>
+              }
+            >
+              {offer.data.intro}
+            </Notice>
           )}
-          <div className="stack" style={{ gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Status</span>
-            <div className="row wrap" style={{ gap: 8 }}>
+          <div className="flex flex-col gap-2">
+            <span className="text-14 font-semibold">Status</span>
+            <div className="flex flex-wrap items-center gap-2">
               {PROJECT_STATUS_KEYS.map((k) => (
-                <button
+                <Pill
                   key={k}
-                  type="button"
-                  className={draft.status === k ? 'pill pill--on' : 'pill'}
-                  aria-pressed={draft.status === k}
+                  dot={PROJECT_STATUSES[k].dot}
+                  pressed={draft.status === k}
                   onClick={() => update({ status: draft.status === k ? null : k })}
                 >
-                  <i style={{ background: PROJECT_STATUSES[k].dot }} />
                   {PROJECT_STATUSES[k].label}
-                </button>
+                </Pill>
               ))}
             </div>
           </div>
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Outputs <span className="post-card__optional">· what it produced</span>
-          </h2>
+        <EditorCard title="Outputs" note="what it produced">
           <OutputsEditor
             outputs={draft.outputs}
             hint={draft.hints.output}
@@ -463,12 +549,9 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
             onChange={(outputs) => update({ outputs })}
             onUpdate={updateOutput}
           />
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Overview
-          </h2>
+        <EditorCard title="Overview">
           <Field label="What it is" hint="Markdown works. Left empty, it won’t show.">
             <TextArea
               rows={6}
@@ -477,52 +560,30 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               placeholder="A few sentences a student in another faculty could follow."
             />
           </Field>
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Sections <span className="post-card__optional">· add only what fits</span>
-          </h2>
+        <EditorCard title="Sections" note="add only what fits">
           <SectionsEditor
             sections={draft.sections}
             type={draft.type}
             onChange={(sections) => update({ sections })}
           />
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Details <span className="post-card__optional">· short facts</span>
-          </h2>
+        <EditorCard title="Details" note="short facts">
           <DetailsEditor details={draft.details} onChange={(details) => update({ details })} />
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            References <span className="post-card__optional">· what you drew on</span>
-          </h2>
+        <EditorCard title="References" note="what you drew on">
           <ReferencesEditor
             references={draft.references}
             hint={draft.hints.references}
             onChange={(references) => update({ references })}
           />
-        </section>
+        </EditorCard>
 
-        <section className="card post-card">
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Images and other files
-          </h2>
-          <label className="dropzone">
-            <span className="dropzone__icon">
-              <Icon name="image" size={20} />
-            </span>
-            <span className="grow">
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>{drop.title}</span>
-              <span className="muted" style={{ fontSize: 13 }}>
-                {drop.hint}
-              </span>
-            </span>
-            <span className="btn btn--md">Browse files</span>
+        <EditorCard title="Images and other files">
+          <Dropzone icon="image" title={drop.title} hint={drop.hint}>
             <input
               type="file"
               multiple
@@ -534,99 +595,71 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                 update({ newFiles: [...draft.newFiles, ...picked].slice(0, FILE_MAX) })
               }}
             />
-          </label>
+          </Dropzone>
           {draft.newFiles.length > 0 && (
-            <ul className="stack" style={{ gap: 6, listStyle: 'none', padding: 0 }}>
+            <ul className="flex flex-col gap-1.5">
               {draft.newFiles.map((f, i) => (
-                <li key={`${f.name}-${i}`} className="row" style={{ gap: 8, fontSize: 14 }}>
-                  <Icon name="file" size={16} />
-                  <span className="grow clamp-1">{f.name}</span>
-                  <span className="muted">{formatBytes(f.size)}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    iconOnly
-                    icon="close"
-                    aria-label={`Remove ${f.name}`}
-                    onClick={() => update({ newFiles: draft.newFiles.filter((_, j) => j !== i) })}
-                  />
-                </li>
+                <FileRow
+                  key={`${f.name}-${i}`}
+                  icon="file"
+                  name={f.name}
+                  size={formatBytes(f.size)}
+                  onRemove={() => update({ newFiles: draft.newFiles.filter((_, j) => j !== i) })}
+                />
               ))}
             </ul>
           )}
           {(keptFiles.length > 0 || keptLinks.length > 0) && (
-            <div className="stack" style={{ gap: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>On the project now</span>
-              <ul className="stack" style={{ gap: 6, listStyle: 'none', padding: 0, margin: 0 }}>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-14 font-semibold">On the project now</span>
+              <ul className="flex flex-col gap-1.5">
                 {keptFiles.map((f) => (
-                  <li key={f.id} className="row" style={{ gap: 8, fontSize: 14 }}>
-                    <Icon name="file" size={16} />
-                    <span className="grow clamp-1">{f.name}</span>
-                    <span className="muted">{formatBytes(f.sizeBytes)}</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      iconOnly
-                      icon="close"
-                      aria-label={`Remove ${f.name}`}
-                      onClick={() =>
-                        setDraft((d) => removeExisting(d, 'file', { id: f.id, name: f.name }))
-                      }
-                    />
-                  </li>
+                  <FileRow
+                    key={f.id}
+                    icon="file"
+                    name={f.name}
+                    size={formatBytes(f.sizeBytes)}
+                    onRemove={() =>
+                      setDraft((d) => removeExisting(d, 'file', { id: f.id, name: f.name }))
+                    }
+                  />
                 ))}
                 {keptLinks.map((l) => (
-                  <li key={l.id} className="row" style={{ gap: 8, fontSize: 14 }}>
-                    <Icon name="link" size={16} />
-                    <span className="grow clamp-1">{l.label || l.url}</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      iconOnly
-                      icon="close"
-                      aria-label={`Remove ${l.label || l.url}`}
-                      onClick={() =>
-                        setDraft((d) =>
-                          removeExisting(d, 'link', { id: l.id, name: l.label || l.url })
-                        )
-                      }
-                    />
-                  </li>
+                  <FileRow
+                    key={l.id}
+                    icon="link"
+                    name={l.label || l.url}
+                    onRemove={() =>
+                      setDraft((d) =>
+                        removeExisting(d, 'link', { id: l.id, name: l.label || l.url })
+                      )
+                    }
+                  />
                 ))}
               </ul>
             </div>
           )}
           {removed > 0 && (
-            <p className="row" style={{ gap: 8, fontSize: 13 }}>
-              <span className="muted">
+            <p className="flex items-center gap-2 text-13">
+              <span className="text-muted">
                 {removed === 1 ? 'One file or link' : `${removed} files and links`} will be deleted
                 when you save, along with any output made of them.
               </span>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => setDraft(keepRemoved)}
-              >
-                Keep them
-              </button>
+              <LinkButton onClick={() => setDraft(keepRemoved)}>Keep them</LinkButton>
             </p>
           )}
-        </section>
+        </EditorCard>
 
         {!editing && (
-          <section className="card post-card" style={{ gap: 14 }}>
-            <h2 className="h2" style={{ fontSize: 20 }}>
-              People
-            </h2>
+          <EditorCard title="People" className="gap-3.5">
             <form
-              className="row wrap"
-              style={{ gap: 10 }}
+              className="flex flex-wrap items-center gap-2.5"
               onSubmit={(e) => {
                 e.preventDefault()
                 addInvite()
               }}
             >
-              <label className="grow" style={{ flexBasis: 240 }}>
+              <label className="min-w-0 grow basis-60">
                 <span className="sr-only">Collaborator email</span>
                 <Input
                   type="email"
@@ -640,31 +673,24 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                 onChange={(e) => setInvite((i) => ({ ...i, role: e.target.value }))}
                 placeholder="Their role"
                 aria-label="Their role"
-                style={{ width: 200 }}
+                className="w-50"
               />
               <Button type="submit" icon="userPlus" disabled={!invite.email.trim()}>
                 Invite
               </Button>
             </form>
             {draft.invites.map((inv) => (
-              <div key={inv.email} className="invite-row">
+              <div key={inv.email} className="flex items-center gap-3 rounded-xl bg-fill p-3">
                 <Avatar
                   person={{ id: inv.email, name: inv.email.split('@')[0].replace(/[._]/g, ' ') }}
                   size={36}
                 />
-                <div className="grow">
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>
+                <div className="min-w-0 grow">
+                  <div className="text-15 font-semibold">
                     {inv.email.split('@')[0]}
-                    {inv.role && (
-                      <span className="muted" style={{ fontWeight: 400 }}>
-                        {' '}
-                        · {inv.role}
-                      </span>
-                    )}
+                    {inv.role && <span className="font-normal text-muted"> · {inv.role}</span>}
                   </div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {inv.email}
-                  </div>
+                  <div className="text-13 text-muted">{inv.email}</div>
                 </div>
                 <Pill dot="#C07A00">Invited when you save</Pill>
                 <Button
@@ -673,44 +699,47 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
                   iconOnly
                   icon="close"
                   aria-label={`Remove ${inv.email}`}
-                  onClick={() => update({ invites: draft.invites.filter((i) => i.email !== inv.email) })}
+                  onClick={() =>
+                    update({ invites: draft.invites.filter((i) => i.email !== inv.email) })
+                  }
                 />
               </div>
             ))}
-            <p className="muted" style={{ fontSize: 13 }}>
+            <p className="text-13 text-muted">
               Collaborators confirm before they appear on the project.
             </p>
-          </section>
+          </EditorCard>
         )}
 
-        <section className="card post-card" style={{ gap: 14 }}>
-          <h2 className="h2" style={{ fontSize: 20 }}>
-            Who can see this?
-          </h2>
+        <EditorCard title="Who can see this?" className="gap-3.5">
           {takenDown ? (
-            <p className="muted" style={{ fontSize: 14 }}>
-              A moderator took this project down, so it stays private to you and your
-              collaborators.
+            <p className="text-14 text-muted">
+              A moderator took this project down, so it stays private to you and your collaborators.
             </p>
           ) : (
-            <div className="vis-grid">
+            <div className="flex flex-col gap-3 md:flex-row">
               {choices.map((v) => {
                 const on = v.value === visibility
                 return (
-                  <label key={v.value} className={on ? 'vis-option vis-option--on' : 'vis-option'}>
+                  <label
+                    key={v.value}
+                    className={cx(
+                      choice(on),
+                      'relative flex flex-1 cursor-pointer flex-col gap-1.5 rounded-xl p-4'
+                    )}
+                  >
                     <input
                       type="radio"
                       name="visibility"
                       checked={on}
                       onChange={() => setVisibility(v.value)}
+                      className="absolute top-4 right-4 m-0 size-4.5 accent-navy-ink"
                     />
-                    <span style={{ color: 'var(--navy-ink)' }}>
+                    <span className="text-navy-ink">
                       <Icon name={v.icon} size={20} />
                     </span>
-                    <span style={{ fontSize: 15, fontWeight: 600 }}>{v.label}</span>
-                    <span className="muted" style={{ fontSize: 13, lineHeight: 1.4 }}>
-                      {v.hint}
-                    </span>
+                    <span className="text-15 font-semibold">{v.label}</span>
+                    <span className="text-13 leading-[1.4] text-muted">{v.hint}</span>
                   </label>
                 )
               })}
@@ -720,12 +749,12 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
             label="Keep it hidden until"
             hint="Optional. Until this day (Toronto time) only you and your collaborators can see it — useful for course work before grades are out."
           >
-            <div className="row" style={{ gap: 8 }}>
+            <div className="flex items-center gap-2">
               <Input
                 type="date"
                 value={draft.showFrom}
                 onChange={(e) => update({ showFrom: e.target.value })}
-                style={{ width: 200 }}
+                className="w-50"
               />
               {draft.showFrom && (
                 <Button size="sm" variant="ghost" onClick={() => update({ showFrom: '' })}>
@@ -734,36 +763,36 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               )}
             </div>
           </Field>
-        </section>
+        </EditorCard>
 
         {failed.length > 0 && (
-          <div className="notice notice--danger">
-            <Icon name="alert" size={20} />
-            <div>
-              <b>
-                {projectId && !editing
-                  ? 'Saved as a private draft, but some things didn’t go through'
-                  : 'Some things didn’t go through'}
-              </b>
-              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                {failed.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-              <p>
-                Fix them and save again — only what failed is retried.
-                {projectId && !editing && (
-                  <>
-                    {' '}
-                    <Link to={`/projects/${projectId}`}>See the draft →</Link>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
+          <Notice
+            tone="danger"
+            icon="alert"
+            title={
+              projectId && !editing
+                ? 'Saved as a private draft, but some things didn’t go through'
+                : 'Some things didn’t go through'
+            }
+          >
+            <ul className="mt-0.5 list-disc pl-4.5">
+              {failed.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+            <p className="mt-1">
+              Fix them and save again — only what failed is retried.
+              {projectId && !editing && (
+                <>
+                  {' '}
+                  <Link to={`/projects/${projectId}`}>See the draft →</Link>
+                </>
+              )}
+            </p>
+          </Notice>
         )}
 
-        <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
+        <div className="flex items-center justify-end gap-2.5">
           {editing ? (
             <>
               <Button to={`/projects/${project!.id}`}>Cancel</Button>
@@ -792,9 +821,9 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
         </div>
       </div>
 
-      <aside className="post-aside">
-        <span className="lbl">Live preview</span>
-        <article className="card" style={{ overflow: 'hidden' }}>
+      <aside className="sticky top-[calc(var(--spacing-header)+24px)] hidden flex-col gap-3 xl:flex">
+        <Eyebrow as="span">Live preview</Eyebrow>
+        <Card as="article" className="overflow-hidden">
           <Cover
             project={{
               id: `preview-${draft.type ?? 'none'}`,
@@ -803,8 +832,8 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
             }}
             height={200}
           />
-          <div className="stack" style={{ padding: 16, gap: 8 }}>
-            <div className="row" style={{ justifyContent: 'space-between', minHeight: 22 }}>
+          <div className="flex flex-col gap-2 p-4">
+            <div className="flex min-h-5.5 items-center justify-between">
               {meta && (
                 <Badge bg={meta.bg} ink={meta.ink}>
                   {meta.badge}
@@ -817,45 +846,43 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               )}
             </div>
             {courseCode && courseOk && (
-              <span className="muted" style={{ fontSize: 13 }}>
-                Made for {courseCode}
-              </span>
+              <span className="text-13 text-muted">Made for {courseCode}</span>
             )}
-            <h3 className="disp" style={{ margin: '2px 0 0', fontSize: 21 }}>
+            <h3 className="mt-0.5 font-display text-21 font-bold">
               {draft.title || 'Untitled project'}
             </h3>
-            <p style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--ink-3)' }}>
+            <p className="text-14 leading-[1.45] text-ink-3">
               {draft.pitch || 'Your one-line pitch shows up here.'}
             </p>
             {user && (
-              <div className="row" style={{ gap: 8, paddingTop: 6 }}>
+              <div className="flex items-center gap-2 pt-1.5">
                 <Avatar person={user} size={28} />
-                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                <span className="text-13 font-semibold">
                   {user.name.split(/\s+/)[0]}
                   {draft.invites.length > 0 && ` +${draft.invites.length}`}
                 </span>
-                <span className="muted push" style={{ fontSize: 13 }}>
+                <span className="ml-auto text-13 text-muted">
                   {VISIBILITY.find((v) => v.value === visibility)?.label}
                 </span>
               </div>
             )}
           </div>
-        </article>
-        <div className="card tips">
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Tips for a good post</span>
+        </Card>
+        <Card className="flex flex-col gap-2.5 bg-fill-warm px-4.5 py-4">
+          <span className="text-14 font-semibold">Tips for a good post</span>
           {[
             'Lead with the thing itself — a poster, a clip, a page, a photo of the build',
             'Say what question it answers or what it makes possible',
             'Ask one specific question to get useful feedback',
           ].map((tip) => (
-            <span key={tip} className="tips__tip">
-              <Icon name="check" size={16} />
+            <span key={tip} className="flex gap-2 text-13 leading-normal text-ink-3">
+              <Icon name="check" size={16} className="mt-px text-green" />
               {tip}
             </span>
           ))}
-        </div>
+        </Card>
       </aside>
-    </div>
+    </Page>
   )
 }
 

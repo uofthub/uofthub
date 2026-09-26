@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { CONTACT_EMAIL, GITHUB_URL } from '../../lib/site'
 import Mark from '../brand/Mark'
-import { Icon } from '../ui'
+import { cx, Eyebrow, Icon } from '../ui'
+
+const noteLink = 'text-muted hover:text-ink'
 
 /**
  * The line at the foot of the home feed's right rail, which stands in for a
@@ -9,12 +12,22 @@ import { Icon } from '../ui'
  */
 export function FooterNote({ className }: { className?: string }) {
   return (
-    <p className={className ? `footer-note muted ${className}` : 'footer-note muted'}>
-      <Link to="/about">About</Link> ·{' '}
-      <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+    <p className={cx('px-1 text-13 leading-[1.8] text-muted', className)}>
+      <Link to="/about" className={noteLink}>
+        About
+      </Link>{' '}
+      ·{' '}
+      <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={noteLink}>
         Open source
       </a>{' '}
-      · <Link to="/terms">Community guidelines</Link> · <Link to="/privacy">Privacy</Link>
+      ·{' '}
+      <Link to="/terms" className={noteLink}>
+        Community guidelines
+      </Link>{' '}
+      ·{' '}
+      <Link to="/privacy" className={noteLink}>
+        Privacy
+      </Link>
       <br />
       Made by U of T students, for U of T students.
     </p>
@@ -54,50 +67,62 @@ const COLUMNS: { heading: string; links: FooterLink[] }[] = [
 
 const year = new Date().getFullYear()
 
+const social =
+  'flex size-9 items-center justify-center rounded-lg text-muted hover:bg-fill hover:text-ink'
+
 function Social() {
   return (
-    <div className="row" style={{ gap: 4 }}>
+    <div className="flex items-center gap-1">
       <a
         href={GITHUB_URL}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="uofthub on GitHub"
-        className="footer__social"
+        className={social}
       >
         <Icon name="branch" size={20} />
       </a>
-      <a href={`mailto:${CONTACT_EMAIL}`} aria-label="Email us" className="footer__social">
+      <a href={`mailto:${CONTACT_EMAIL}`} aria-label="Email us" className={social}>
         <Icon name="mail" size={20} />
       </a>
     </div>
   )
 }
 
-function Copyright() {
+/** The copyright row both footers end on. */
+function Bottom({ ruled, children }: { ruled?: boolean; children: ReactNode }) {
   return (
-    <div className="footer__bottom">
-      <p>Copyright © {year} uofthub. All Rights Reserved.</p>
-      <Social />
+    <div
+      className={cx(
+        'flex flex-wrap items-center justify-between gap-4 pt-5',
+        ruled && 'border-t border-line'
+      )}
+    >
+      {children}
     </div>
   )
 }
 
+const footerLink = 'inline-flex items-center gap-1 text-14 text-ink hover:text-navy-ink'
+
 /** The tall footer under the signed-out home page, with its link columns. */
 export function LandingFooter() {
   return (
-    <footer className="footer footer--landing">
-      <div className="footer__inner">
-        <div className="footer__cols">
-          <div className="footer__brand">
+    <footer className="mt-12 border-t border-line bg-fill-warm px-6 pt-8 pb-5">
+      <div className="mx-auto max-w-300">
+        <div className="flex flex-wrap gap-8 border-b border-line pb-6">
+          <div className="flex flex-[1_1_240px] flex-col gap-1">
             <Mark size={60} />
-            <p className="disp footer__name">uofthub</p>
-            <p className="muted" style={{ fontSize: 14, maxWidth: 260 }}>
+            <p className="mt-2 font-display text-22 font-extrabold tracking-tighter text-navy-ink">
+              uofthub
+            </p>
+            <p className="max-w-65 text-14 text-muted">
               An open home for everything students build at U of T.
             </p>
           </div>
           {COLUMNS.map((col) => (
-            <div key={col.heading} className="footer__col">
-              <p className="lbl">{col.heading}</p>
+            <div key={col.heading} className="flex flex-[1_1_180px] flex-col gap-3">
+              <Eyebrow className="mb-1">{col.heading}</Eyebrow>
               {col.links.map((l) =>
                 l.external ? (
                   <a
@@ -105,13 +130,13 @@ export function LandingFooter() {
                     href={l.to}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="footer__link"
+                    className={footerLink}
                   >
                     {l.label}
-                    <Icon name="external" size={12} />
+                    <Icon name="external" size={12} className="text-muted" />
                   </a>
                 ) : (
-                  <Link key={l.label} to={l.to} className="footer__link">
+                  <Link key={l.label} to={l.to} className={footerLink}>
                     {l.label}
                   </Link>
                 )
@@ -119,7 +144,10 @@ export function LandingFooter() {
             </div>
           ))}
         </div>
-        <Copyright />
+        <Bottom>
+          <p className="text-14 text-ink-3">Copyright © {year} uofthub. All Rights Reserved.</p>
+          <Social />
+        </Bottom>
       </div>
     </footer>
   )
@@ -138,28 +166,36 @@ const APP_LINKS: FooterLink[] = [
   { label: 'Source Code', to: GITHUB_URL, external: true },
 ]
 
+const appLink = 'text-ink-3 hover:text-navy-ink'
+
 /** The slim footer on every other page. */
 export function AppFooter() {
   return (
-    <footer className="footer">
-      <div className="footer__inner">
-        <div className="footer__bottom">
-          <nav className="footer__links" aria-label="Site">
+    <footer className="px-6 pb-5">
+      <div className="mx-auto max-w-300">
+        <Bottom ruled>
+          <nav className="flex flex-wrap gap-x-4.5 gap-y-1.5 text-14" aria-label="Site">
             {APP_LINKS.map((l) =>
               l.external ? (
-                <a key={l.label} href={l.to} target="_blank" rel="noopener noreferrer">
+                <a
+                  key={l.label}
+                  href={l.to}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={appLink}
+                >
                   {l.label}
                 </a>
               ) : (
-                <Link key={l.label} to={l.to}>
+                <Link key={l.label} to={l.to} className={appLink}>
                   {l.label}
                 </Link>
               )
             )}
           </nav>
-          <p>© {year} uofthub</p>
+          <p className="ml-auto text-14 text-ink-3">© {year} uofthub</p>
           <Social />
-        </div>
+        </Bottom>
       </div>
     </footer>
   )

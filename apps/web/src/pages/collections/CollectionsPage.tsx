@@ -4,8 +4,17 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
-import { CollectionCard, CollectionDialog } from '../../components/collection'
-import { Button, EmptyState, Spinner, UnderlineTabs } from '../../components/ui'
+import { CollectionCard, CollectionDialog, CollectionGrid } from '../../components/collection'
+import {
+  Button,
+  EmptyState,
+  LoadMore,
+  Page,
+  PageLede,
+  PageTitle,
+  Spinner,
+  UnderlineTabs,
+} from '../../components/ui'
 
 const PAGE = 12
 
@@ -30,12 +39,12 @@ export default function CollectionsPage() {
   const collections = pages.data?.pages.flat() ?? []
 
   return (
-    <div className="page page--wide stack" style={{ gap: 28 }}>
+    <Page width="wide" className="flex flex-col gap-7">
       {making && <CollectionDialog onClose={() => setMaking(false)} />}
-      <div className="row wrap" style={{ justifyContent: 'space-between', gap: 16 }}>
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Collections</h1>
-          <p className="page-lede">Hand-picked sets of projects, put together by students.</p>
+          <PageTitle>Collections</PageTitle>
+          <PageLede>Hand-picked sets of projects, put together by students.</PageLede>
         </div>
         <Button
           variant="primary"
@@ -58,7 +67,7 @@ export default function CollectionsPage() {
         />
       )}
 
-      <div key={tab} className="tab-in">
+      <div key={tab} className="motion-safe:animate-tab-in">
         {pages.isLoading ? (
           <Spinner />
         ) : collections.length === 0 ? (
@@ -78,20 +87,14 @@ export default function CollectionsPage() {
             Group the projects you’d show a friend — add any project from its More menu.
           </EmptyState>
         ) : (
-          <div className="collection-grid">
+          <CollectionGrid>
             {collections.map((c) => (
               <CollectionCard key={c.id} collection={c} />
             ))}
-          </div>
+          </CollectionGrid>
         )}
       </div>
-      {pages.hasNextPage && (
-        <div className="row" style={{ justifyContent: 'center' }}>
-          <Button onClick={() => pages.fetchNextPage()} disabled={pages.isFetchingNextPage}>
-            {pages.isFetchingNextPage ? 'Loading…' : 'Show more'}
-          </Button>
-        </div>
-      )}
-    </div>
+      {pages.hasNextPage && <LoadMore query={pages} />}
+    </Page>
   )
 }

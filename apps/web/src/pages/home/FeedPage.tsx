@@ -11,17 +11,18 @@ import { FeedCard, LayoutToggle, ProjectListRow, type CardLayout } from '../../c
 import {
   Button,
   Chip,
+  cx,
   EmptyState,
+  LoadMore,
   SegmentedTabs,
   Spinner,
-  UnderlineTabs,
   type TabOption,
+  UnderlineTabs,
 } from '../../components/ui'
 import { Composer } from './Composer'
 import { RightRail } from './RightRail'
 import { LeftRail } from './LeftRail'
 import { Spotlight } from './Spotlight'
-import './home.css'
 
 type FeedTab = 'following' | 'campus' | 'program'
 
@@ -80,7 +81,7 @@ function FeedList({
   layout: CardLayout
 }) {
   return (
-    <div className="stack" style={{ gap: layout === 'card' ? 20 : 14 }}>
+    <div className={cx('flex flex-col', layout === 'card' ? 'gap-5' : 'gap-3.5')}>
       {items.map(({ project: p, reason }) =>
         layout === 'card' ? (
           <FeedCard key={p.id} project={p} reason={reasonToShow(reason, scope)} />
@@ -163,7 +164,7 @@ export default function FeedPage() {
 
   const feed = (
     <>
-      <div key={tab} className="tab-in">
+      <div key={tab} className="motion-safe:animate-tab-in">
         {active.isLoading ? (
           <Spinner />
         ) : projects.length === 0 && !active.hasNextPage ? (
@@ -172,29 +173,24 @@ export default function FeedPage() {
           <FeedList items={active.items} scope={tab} layout={phone ? 'card' : layout} />
         )}
       </div>
-      {active.hasNextPage && (
-        <div className="row" style={{ justifyContent: 'center' }}>
-          <Button onClick={() => active.fetchNextPage()} disabled={active.isFetchingNextPage}>
-            {active.isFetchingNextPage ? 'Loading…' : 'Show more'}
-          </Button>
-        </div>
-      )}
+      {active.hasNextPage && <LoadMore query={active} />}
     </>
   )
 
   if (phone) {
     return (
-      <div className="feed-phone">
+      <div>
         <UnderlineTabs
           label="Feed"
           options={TABS}
           value={tab}
           onChange={chooseTab}
-          className="feed-phone__tabs"
+          className="gap-5.5 bg-surface px-4"
+          itemClassName="text-15"
         />
         {/* The board filters the phone feed by type — which the API does not
             store yet, so only "All" does anything. */}
-        <div className="feed-phone__chips">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto px-4 py-3">
           <Chip
             tone={type === '' ? 'active' : 'default'}
             pressed={type === ''}
@@ -215,18 +211,16 @@ export default function FeedPage() {
             )
           )}
         </div>
-        <div className="stack" style={{ gap: 12, padding: '0 12px 16px' }}>
-          {feed}
-        </div>
+        <div className="flex flex-col gap-3 px-3 pb-4">{feed}</div>
       </div>
     )
   }
 
   return (
-    <div className="feed-grid">
+    <div className="mx-auto grid w-full max-w-190 grid-cols-1 items-start gap-7 px-6 pt-6 pb-12 lg:max-w-[1440px] lg:grid-cols-[232px_minmax(0,1fr)] 2xl:grid-cols-[232px_minmax(0,1fr)_320px] 2xl:gap-9 2xl:px-10 2xl:pt-7">
       <LeftRail campus={campus} onCampus={setCampus} />
-      <div className="feed-main">
-        <div className="row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div className="flex min-w-0 flex-col gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedTabs label="Feed" options={TABS} value={tab} onChange={chooseTab} />
           <LayoutToggle value={layout} onChange={chooseLayout} />
         </div>

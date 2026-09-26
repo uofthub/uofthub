@@ -10,6 +10,7 @@ import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import {
   Avatar,
   Button,
+  Card,
   Chip,
   Dialog,
   EmptyState,
@@ -17,13 +18,16 @@ import {
   Field,
   Icon,
   Input,
+  Notice,
+  Page,
+  PageTitle,
   Panel,
   Pill,
   Select,
   Spinner,
+  Stat,
   TextArea,
 } from '../../components/ui'
-import './orgs.css'
 
 function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
   const qc = useQueryClient()
@@ -185,13 +189,13 @@ export default function OrgPage() {
   if (isLoading) return <Spinner />
   if (!org) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState
           icon="users"
           title="No group here"
           action={<Button to="/orgs">All clubs &amp; labs</Button>}
         />
-      </div>
+      </Page>
     )
   }
 
@@ -204,27 +208,21 @@ export default function OrgPage() {
   const groupMe = safeUrl(org.groupMeUrl)
 
   return (
-    <div className="page page--wide stack" style={{ gap: 28 }}>
+    <Page width="wide" className="flex flex-col gap-7">
       {open === 'edit' && <EditOrgDialog org={org} onClose={() => setOpen(null)} />}
       {open === 'activity' && <ActivityDialog slug={org.slug} onClose={() => setOpen(null)} />}
 
       {/* Only a group left over from the old self-serve flow can be here
           unverified — and only its members can see it. */}
       {org.status !== 'VERIFIED' && (
-        <div className="notice notice--gold" style={{ margin: 0 }}>
-          <Icon name="shieldCheck" size={20} />
-          <div className="grow">
-            <b>Waiting for a moderator</b>
-            <p>
-              Only members can see this page until a moderator approves it. Questions? Email{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
-            </p>
-          </div>
-        </div>
+        <Notice tone="gold" icon="shieldCheck" title="Waiting for a moderator">
+          Only members can see this page until a moderator approves it. Questions? Email{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        </Notice>
       )}
 
-      <section className="card stack" style={{ padding: 28, gap: 14 }}>
-        <div className="row wrap" style={{ gap: 8 }}>
+      <Card as="section" className="flex flex-col gap-3.5 p-7">
+        <div className="flex flex-wrap items-center gap-2">
           <Chip size="sm" tone="navy" icon={lab ? 'flask' : 'users'}>
             {lab ? 'Research lab' : 'Club'}
           </Chip>
@@ -233,18 +231,16 @@ export default function OrgPage() {
           </Chip>
           <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
           {isAdmin && (
-            <Button size="sm" icon="pen" className="push" onClick={() => setOpen('edit')}>
+            <Button size="sm" icon="pen" className="ml-auto" onClick={() => setOpen('edit')}>
               Edit
             </Button>
           )}
         </div>
-        <h1 className="page-title">{org.name}</h1>
+        <PageTitle>{org.name}</PageTitle>
         {org.description && (
-          <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--ink-3)', maxWidth: 760 }}>
-            {org.description}
-          </p>
+          <p className="max-w-190 text-17 leading-[1.55] text-ink-3">{org.description}</p>
         )}
-        <div className="row wrap" style={{ gap: 10 }}>
+        <div className="flex flex-wrap items-center gap-2.5">
           {website && (
             <Button size="md" icon="globe" href={website}>
               Website
@@ -261,34 +257,19 @@ export default function OrgPage() {
             </Button>
           )}
         </div>
-        <div
-          className="profile__stats"
-          style={{
-            display: 'flex',
-            gap: 40,
-            padding: '14px 0 0',
-            borderTop: '1px solid var(--line)',
-          }}
-        >
+        <div className="flex gap-10 border-y border-line pt-3.5">
           {[
             [org.members.length, 'Members'],
             [org.projects.length, 'Projects'],
             [org.activities.length, 'Events'],
           ].map(([n, label]) => (
-            <div key={label}>
-              <div className="disp" style={{ fontSize: 24, fontWeight: 700 }}>
-                {n}
-              </div>
-              <div className="muted" style={{ fontSize: 13 }}>
-                {label}
-              </div>
-            </div>
+            <Stat key={label} value={n} label={label} />
           ))}
         </div>
-      </section>
+      </Card>
 
-      <div className="org-layout">
-        <div className="stack" style={{ gap: 24, minWidth: 0 }}>
+      <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-6">
           <Panel
             title="Events"
             size="main"
@@ -301,36 +282,24 @@ export default function OrgPage() {
             }
           >
             {org.activities.length === 0 ? (
-              <p className="muted">Nothing posted yet.</p>
+              <p className="text-muted">Nothing posted yet.</p>
             ) : (
               org.activities.map((a) => {
                 const href = safeUrl(a.link)
                 const img = safeUrl(a.imageUrl)
                 return (
-                  <div key={a.id} className="activity">
+                  <div key={a.id} className="flex items-start gap-4">
                     {img ? (
-                      <img src={img} alt="" />
+                      <img src={img} alt="" className="size-24 shrink-0 rounded-btn object-cover" />
                     ) : (
-                      <span
-                        className="event-icon"
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 10,
-                          background: 'var(--gold-tint)',
-                          color: 'var(--gold-ink)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-btn bg-gold-tint text-gold-ink">
                         <Icon name="calendar" size={20} />
                       </span>
                     )}
-                    <div className="grow">
-                      <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-                        <b style={{ fontSize: 16 }}>{a.title}</b>
-                        <span className="muted" style={{ fontSize: 13 }}>
+                    <div className="min-w-0 grow">
+                      <div className="flex items-baseline gap-2.5">
+                        <b className="text-16">{a.title}</b>
+                        <span className="text-13 text-muted">
                           {new Date(a.date).toLocaleDateString(undefined, {
                             year: 'numeric',
                             month: 'short',
@@ -343,21 +312,14 @@ export default function OrgPage() {
                             variant="ghost"
                             iconOnly
                             icon="trash"
-                            className="push"
+                            className="ml-auto"
                             aria-label={`Delete ${a.title}`}
                             onClick={() => removeActivity.mutate(a.id)}
                           />
                         )}
                       </div>
                       {a.description && (
-                        <p
-                          style={{
-                            fontSize: 15,
-                            color: 'var(--ink-3)',
-                            marginTop: 4,
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
+                        <p className="mt-1 text-15 whitespace-pre-wrap text-ink-3">
                           {a.description}
                         </p>
                       )}
@@ -366,8 +328,7 @@ export default function OrgPage() {
                           href={href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="row"
-                          style={{ gap: 4, fontSize: 14, marginTop: 6 }}
+                          className="mt-1.5 flex items-center gap-1 text-14"
                         >
                           <Icon name="external" size={14} /> More
                         </a>
@@ -381,18 +342,17 @@ export default function OrgPage() {
 
           <Panel title="Projects" size="main">
             {org.projects.length === 0 ? (
-              <p className="muted">No projects linked to this group yet.</p>
+              <p className="text-muted">No projects linked to this group yet.</p>
             ) : (
               org.projects.map(({ project }) => (
                 <Link
                   key={project.id}
                   to={`/projects/${project.id}`}
-                  className="mini-row"
-                  style={{ alignItems: 'flex-start' }}
+                  className="flex items-start gap-3 text-ink hover:text-navy-ink"
                 >
-                  <span className="stack" style={{ gap: 3 }}>
-                    <b style={{ fontSize: 16 }}>{project.title}</b>
-                    <span className="muted" style={{ fontSize: 14 }}>
+                  <span className="flex flex-col gap-0.75">
+                    <b className="text-16">{project.title}</b>
+                    <span className="text-14 text-muted">
                       {[project.pitch, project.owner.name].filter(Boolean).join(' · ')}
                     </span>
                   </span>
@@ -402,36 +362,28 @@ export default function OrgPage() {
           </Panel>
         </div>
 
-        <aside className="stack" style={{ gap: 20 }}>
+        <aside className="flex flex-col gap-5">
           <Panel title="Members">
             {org.members.map((m) => (
               <Link
                 key={m.userId}
                 to={`/u/${m.userId}`}
-                className="row"
-                style={{ gap: 10, color: 'var(--ink)' }}
+                className="flex items-center gap-2.5 text-ink"
               >
                 <Avatar
                   person={{ id: m.userId, name: m.user.name, avatarUrl: m.user.avatarUrl }}
                   size={36}
                 />
-                <span className="grow">
-                  <b style={{ fontWeight: 600, fontSize: 15, display: 'block' }}>{m.user.name}</b>
-                  {m.user.faculty && (
-                    <span className="muted" style={{ fontSize: 13 }}>
-                      {m.user.faculty}
-                    </span>
-                  )}
+                <span className="min-w-0 grow">
+                  <b className="block text-15 font-semibold">{m.user.name}</b>
+                  {m.user.faculty && <span className="text-13 text-muted">{m.user.faculty}</span>}
                 </span>
-                <span className="muted" style={{ fontSize: 13, textTransform: 'capitalize' }}>
-                  {m.role.toLowerCase()}
-                </span>
+                <span className="text-13 text-muted capitalize">{m.role.toLowerCase()}</span>
               </Link>
             ))}
             {isAdmin && (
               <form
-                className="row"
-                style={{ gap: 8 }}
+                className="flex items-center gap-2"
                 onSubmit={(e) => {
                   e.preventDefault()
                   if (email.trim()) addMember.mutate()
@@ -456,6 +408,6 @@ export default function OrgPage() {
           </Panel>
         </aside>
       </div>
-    </div>
+    </Page>
   )
 }

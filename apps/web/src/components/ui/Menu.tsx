@@ -38,10 +38,17 @@ export function Menu({
   const close = () => setOpen(false)
 
   return (
-    <div ref={root} className="menu">
+    <div ref={root} className="relative inline-flex">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
-        <div className={cx('menu__panel', `menu__panel--${align}`)} style={{ width }} role="menu">
+        <div
+          className={cx(
+            'absolute top-[calc(100%+6px)] z-60 animate-menu-in rounded-xl border border-line bg-surface p-1.5 shadow-pop',
+            align === 'right' ? 'right-0' : 'left-0'
+          )}
+          style={{ width }}
+          role="menu"
+        >
           {children(close)}
         </div>
       )}
@@ -70,11 +77,15 @@ export function MenuItem({
   href,
   close,
 }: ItemProps) {
-  const className = cx('menu__item', danger && 'menu__item--danger')
+  const className = cx(
+    'flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-14 font-medium',
+    'not-disabled:hover:bg-fill disabled:cursor-not-allowed disabled:opacity-50',
+    danger ? 'text-red hover:text-red' : 'text-ink hover:text-ink'
+  )
   const content = (
     <>
       {icon && <Icon name={icon} size={17} />}
-      <span className="grow">{children}</span>
+      <span className="min-w-0 grow">{children}</span>
     </>
   )
 
@@ -109,5 +120,5 @@ export function MenuItem({
 }
 
 export function MenuDivider() {
-  return <hr className="menu__rule" />
+  return <hr className="mx-1 my-1.5" />
 }

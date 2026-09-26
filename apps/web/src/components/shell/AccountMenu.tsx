@@ -21,7 +21,7 @@ export function AccountMenu() {
       trigger={({ toggle, open }) => (
         <button
           type="button"
-          className="account-trigger"
+          className="rounded-full"
           aria-label="Your account"
           aria-expanded={open}
           onClick={toggle}
@@ -32,9 +32,9 @@ export function AccountMenu() {
     >
       {(close) => (
         <>
-          <div className="account-head">
+          <div className="mb-1.5 flex flex-col gap-0.5 border-b border-line-soft px-2.5 pt-2 pb-2.5 text-14 wrap-anywhere">
             <b>{user.name}</b>
-            <span className="muted">{user.email}</span>
+            <span className="text-13 text-muted">{user.email}</span>
           </div>
           <MenuItem icon="user" to={`/u/${user.id}`} close={close}>
             Your profile
@@ -65,7 +65,7 @@ export function AccountMenu() {
             {darkMode ? 'Light mode' : 'Dark mode'}
           </MenuItem>
           <MenuItem icon="command" onSelect={() => setCommandOpen(true)} close={close}>
-            Command panel <span className="muted">⌘K</span>
+            Command panel <span className="text-muted">⌘K</span>
           </MenuItem>
           <MenuItem icon="info" to="/about" close={close}>
             About uofthub
