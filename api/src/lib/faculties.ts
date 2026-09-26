@@ -6,7 +6,7 @@ import type { Prisma } from '@prisma/client'
  * A fixed list rather than free text: Explore's faculty tiles, the "Your
  * program" feed and the faculty filter all match on this value exactly, and
  * free text meant "Engineering", "engineering sci" and "FASE" were three
- * different faculties that never met. Mirrored in apps/web/src/lib/faculties.ts
+ * different faculties that never met. Mirrored in web/src/lib/faculties.ts
  * — change both together.
  *
  * Profiles written before the list existed keep their free-text value until
@@ -37,7 +37,7 @@ export type Faculty = (typeof FACULTIES)[number]
 export const isFaculty = (value: string): value is Faculty =>
   (FACULTIES as readonly string[]).includes(value)
 
-/** A U of T course code — mirrors isCourseCode in apps/web/src/lib/projectView.ts. */
+/** A U of T course code — mirrors isCourseCode in web/src/lib/projectView.ts. */
 const COURSE_CODE = /^[a-z]{3}\d{3}(?:[hy]\d)?$/i
 export const isCourseCode = (tag: string) => COURSE_CODE.test(tag.trim())
 

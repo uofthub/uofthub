@@ -9,7 +9,7 @@ import { Prose } from './Prose'
  * day-one requirements rather than launch paperwork.
  *
  * Keep this honest with the code: every third party listed under "Who else
- * sees any of it" corresponds to a real integration in apps/api. Adding
+ * sees any of it" corresponds to a real integration in api. Adding
  * another one means editing this page in the same commit.
  */
 

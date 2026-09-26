@@ -1,6 +1,6 @@
 # The redesign
 
-The UI was rebuilt from a `Design.html` export (seven boards: Home feed, Project page, Mobile feed, Explore, Profile, Post a project, Card system), and the backend was changed where the design needed it. This records the decisions, because several reverse earlier ones in [feed-and-density.md](feed-and-density.md) and are easy to undo by accident. The export itself has since been removed from the repo; the design lives on as `apps/web/src/index.css` and the components.
+The UI was rebuilt from a `Design.html` export (seven boards: Home feed, Project page, Mobile feed, Explore, Profile, Post a project, Card system), and the backend was changed where the design needed it. This records the decisions, because several reverse earlier ones in [feed-and-density.md](feed-and-density.md) and are easy to undo by accident. The export itself has since been removed from the repo; the design lives on as `web/src/index.css` and the components.
 
 ## Engagement: reactions are the only public signal
 

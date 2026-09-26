@@ -2,7 +2,7 @@ import type { IconName } from '../components/ui/Icon'
 
 /**
  * The faculties and divisions a profile can name — a fixed list, mirrored
- * from apps/api/src/lib/faculties.ts (change both together). The profile form
+ * from api/src/lib/faculties.ts (change both together). The profile form
  * picks from it, and Explore's tiles, the faculty filter and the "Your
  * program" feed all match on it exactly.
  *

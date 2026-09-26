@@ -43,7 +43,7 @@ export function testDatabaseUrl(): string {
 
   const base = process.env.DATABASE_URL ?? fromEnvFile('DATABASE_URL')
   if (!base) {
-    throw new Error('No DATABASE_URL found — set TEST_DATABASE_URL or create apps/api/.env')
+    throw new Error('No DATABASE_URL found — set TEST_DATABASE_URL or create api/.env')
   }
 
   const url = new URL(base)

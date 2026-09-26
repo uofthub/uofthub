@@ -143,10 +143,11 @@ vite.config.ts.timestamp-*
 .vite/
 
 # Prisma generated client
-apps/api/node_modules/.prisma
+api/node_modules/.prisma
 
 # Build outputs
-apps/*/dist
+api/dist
+web/dist
 
 # Unrelated local directories
 uoftindex.ca/

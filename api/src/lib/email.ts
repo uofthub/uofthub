@@ -10,7 +10,7 @@ import { Resend } from 'resend'
  * Where a recipient can reach a human — the address our outbound mail tells
  * people to write to. Must be a real monitored inbox on our own domain, not
  * the unattended `notifications@` sender. Mirrored client-side in
- * `apps/web/src/components/layout/nav.ts`; change both together.
+ * `web/src/components/layout/nav.ts`; change both together.
  */
 export const CONTACT_EMAIL = 'hello@uofthub.com'
 

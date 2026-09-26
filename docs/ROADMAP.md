@@ -24,8 +24,8 @@ Goal: a working platform that a real U of T student can use to publish and share
 - [x] Add external links (GitHub, demo, website)
 - [x] File uploads — policy in [ARCHITECTURE.md § File storage](ARCHITECTURE.md#file-storage).
   - [x] Pick an S3-compatible storage provider — Cloudflare R2
-  - [x] `apps/api/src/lib/storage.ts` — client wrapper: put/delete/signed-URL-for-download
-  - [x] `POST /projects/:id/files` — allowlist + per-category size check against the actual bytes (magic-byte check via `file-type`/OLE2 signature/SVG sniff in `apps/api/src/lib/fileValidation.ts`, not the client-declared extension or MIME type — verified by hand: a `.exe` renamed to `.pdf` is rejected, a genuine file of the declared type is not), writes a `ProjectFile` row
+  - [x] `api/src/lib/storage.ts` — client wrapper: put/delete/signed-URL-for-download
+  - [x] `POST /projects/:id/files` — allowlist + per-category size check against the actual bytes (magic-byte check via `file-type`/OLE2 signature/SVG sniff in `api/src/lib/fileValidation.ts`, not the client-declared extension or MIME type — verified by hand: a `.exe` renamed to `.pdf` is rejected, a genuine file of the declared type is not), writes a `ProjectFile` row
   - [x] `DELETE /projects/:id/files/:fileId` — owner only, matching the existing owner-only convention for links/collaborators (not "owner/collaborator" as this was originally scoped)
   - [x] ~~Per-account quota enforcement~~ (removed in the redesign) — summed live from `ProjectFile.sizeBytes` against the 2GB cap; per-project 20-file cap
   - [x] Rate-limit the upload route (`config: { rateLimit: {...} }`, same pattern as `auth.ts`)
@@ -65,7 +65,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Formalized TA / professor invite-to-view workflow — faculty users can request VIEWER access; owner approves via collaborator panel
 
 **Notifications**
-- [x] Pick an email transport — Resend, wrapped in `apps/api/src/lib/email.ts`. No caller yet: it exists so Phase 3's org-verification emails aren't blocked on the decision. Sending no-ops with a warning when `RESEND_API_KEY` is unset, so local dev needs no account
+- [x] Pick an email transport — Resend, wrapped in `api/src/lib/email.ts`. No caller yet: it exists so Phase 3's org-verification emails aren't blocked on the decision. Sending no-ops with a warning when `RESEND_API_KEY` is unset, so local dev needs no account
 - [x] Schema — `Notification` model (`userId`, `type`, `payload`, `read`, `createdAt`) for an in-app feed. `payload` is JSON holding denormalized display data (project title, actor name) captured at creation, so the feed still reads correctly after the source row changes or is deleted
 - [x] Backend — emit at each previously-silent trigger via `lib/notifications.ts`: collaborator invited, invite accepted/declined, TA/professor access requested, and access request approved/denied (denial is the `DELETE .../collaborators/:userId` path, not a PATCH)
 - [x] `GET /users/me/notifications` (returns `unreadCount` alongside the list), `POST /users/me/notifications/:id/read`, plus `POST .../read-all` for the bell's open-to-clear behaviour
@@ -189,7 +189,7 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] CI — `.github/workflows/ci.yml` runs install, `prisma generate`, `typecheck`, the API tests (against a Postgres service container), the web tests, `build` and `lint` on every PR and every push to `main`
 - [x] Error monitoring — [Clueline](https://clueline.dev) on both halves (`lib/monitoring.ts`, `lib/monitoring.tsx`). The API reports 5xx only, since a 401/404/429 is the API working; the web app gets a root boundary so a crash is a calm fallback rather than a white screen. Students are identified by id alone — see [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring) for why email is deliberately withheld
 - [x] Legal pages — `/terms` (ownership, acceptable use, moderation) and `/privacy` (what is collected, and every third party that sees any of it). The privacy page's third-party list mirrors the real integrations; adding another one means editing that page in the same commit
-- [x] Deployment/hosting — **Railway** for the API and Postgres, **Cloudflare Pages** for the web build, recorded in [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md#stack-decisions) with the setup in [§ Deployment](ARCHITECTURE.md#deployment). `apps/api/Dockerfile` + `railway.json` build the API and apply migrations at boot; `apps/web/public/_redirects` gives Pages the SPA fallback React Router needs. Nothing is deployed yet — the config exists and the image is verified to build and boot, but the accounts, domains and cron jobs still have to be set up by hand
+- [x] Deployment/hosting — **Railway** for the API and Postgres, **Cloudflare Pages** for the web build, recorded in [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md#stack-decisions) with the setup in [§ Deployment](ARCHITECTURE.md#deployment). `api/Dockerfile` + `railway.json` build the API and apply migrations at boot; `web/public/_redirects` gives Pages the SPA fallback React Router needs. Nothing is deployed yet — the config exists and the image is verified to build and boot, but the accounts, domains and cron jobs still have to be set up by hand
 
 ---
 

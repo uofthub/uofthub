@@ -35,7 +35,7 @@ export interface User {
  * The optional sections a project can hold beyond its overview. Each is shown
  * only when it has something in it. `custom` may repeat and carries its own
  * title; every other kind appears at most once. Mirrored as a value list in
- * apps/api/src/lib/projectContent.ts, which is compile-checked against this.
+ * api/src/lib/projectContent.ts, which is compile-checked against this.
  */
 export type SectionKind =
   | 'motivation'

@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth'
 import { isCourseCode } from '../../lib/projectView'
 import { Button, ChipInput, Dialog, ErrorText, Field } from '../../components/ui'
 
-/** Mirrors COURSES_MAX in apps/api/src/lib/profile.ts. */
+/** Mirrors COURSES_MAX in api/src/lib/profile.ts. */
 const COURSES_MAX = 12
 
 /**

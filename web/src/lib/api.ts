@@ -64,7 +64,7 @@ export type FilePreview =
 
 /**
  * A project as every list returns it — everything a card draws, so no card
- * makes a request of its own (see apps/api/src/lib/projectShape.ts).
+ * makes a request of its own (see api/src/lib/projectShape.ts).
  */
 export type ProjectSummary = Project & {
   links: ProjectLink[]
@@ -110,7 +110,7 @@ export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
 
 /**
  * What a course suggests its projects show — pre-fills the editor, and
- * nothing more. See apps/api/src/lib/courseTemplates.ts.
+ * nothing more. See api/src/lib/courseTemplates.ts.
  */
 export type CourseTemplate = {
   code: string

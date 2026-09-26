@@ -2,7 +2,7 @@
 
 > **Status: built.** All seven phases shipped on the `structured-projects` branch, each ending with tests, `pnpm typecheck && pnpm --filter @uofthub/api test && pnpm build && pnpm lint` passing, and a commit. Where the build departed from the plan, the plan below says so and why.
 
-A project today is a title, a pitch, one Markdown `description`, tags, files and links. That shape was designed around apps: the post form defaults to "App or website", the story placeholder says "What we built", and every type-specific answer that isn't a URL is flattened into the description as `**Label:** value` by `composeDescription` in `apps/web/src/pages/post/compose.ts`. A research poster, a film, or a CSC211H5 comparison of four approaches has nowhere to put its method, data or results except as headings a student has to invent.
+A project today is a title, a pitch, one Markdown `description`, tags, files and links. That shape was designed around apps: the post form defaults to "App or website", the story placeholder says "What we built", and every type-specific answer that isn't a URL is flattened into the description as `**Label:** value` by `composeDescription` in `web/src/pages/post/compose.ts`. A research poster, a film, or a CSC211H5 comparison of four approaches has nowhere to put its method, data or results except as headings a student has to invent.
 
 The goal is a project that holds as much or as little as its author wants, across every faculty, and where **anything left empty does not render at all**: no heading, no placeholder, no menu entry.
 
@@ -14,7 +14,7 @@ This extends [ARCHITECTURE.md](ARCHITECTURE.md) and [redesign.md](redesign.md).
 
 - **`lib/visibility.ts` is the security boundary.** Every new read goes through `canViewProject` / `canViewProjectId` / `visibleProjectWhere`. The show-from date is enforced there and nowhere else (see Phase 1, which also moves three existing checks *into* it).
 - **`ProjectFile` and `ProjectLink`** stay as they are. Outputs are a layer over them, not a replacement.
-- **Tags**, **`Markdown.tsx`** (section bodies are Markdown, rendered by it), **the `components/ui` kit** (styling has since moved to Tailwind CSS v4; see [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-appsweb)).
+- **Tags**, **`Markdown.tsx`** (section bodies are Markdown, rendered by it), **the `components/ui` kit** (styling has since moved to Tailwind CSS v4; see [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-web)).
 - **`searchVector`** stays a `STORED` generated column, extended to cover the new text.
 - **`description`** stays, and becomes the optional *Overview*.
 
@@ -52,7 +52,7 @@ type Section = {
 }
 ```
 
-Rules, enforced by one Zod schema in `apps/api/src/lib/projectContent.ts`:
+Rules, enforced by one Zod schema in `api/src/lib/projectContent.ts`:
 
 - **Stripping.** An item with no label and no body is dropped. Then a section with no body and no remaining items is dropped. A title alone is a placeholder, not content, so it's dropped too. Stripping happens in the schema's `transform`, so a stored row is always clean. The renderer also skips empty sections defensively, since rows can be written outside the route.
 - One section per kind, except `custom`, which can repeat. The in-page nav lists sections by kind, and two "Results" headings would be ambiguous.
@@ -396,7 +396,7 @@ Nothing else. Zod is already an API dependency. The web app doesn't get it: the 
 
 ## What I'd do differently, and why
 
-1. **Course templates in code, not a seeded table** (decided). Templates are plain typed objects in `apps/api/src/lib/courseTemplates.ts`, each with a `version`. A template is product copy that changes rarely and benefits from review, and there's no admin UI to edit a row. Each project stores `templateCode` and `templateVersion`, so templates can move to the database later if instructors need to edit them.
+1. **Course templates in code, not a seeded table** (decided). Templates are plain typed objects in `api/src/lib/courseTemplates.ts`, each with a `version`. A template is product copy that changes rarely and benefits from review, and there's no admin UI to edit a row. Each project stores `templateCode` and `templateVersion`, so templates can move to the database later if instructors need to edit them.
 2. **Primary as a unique `primaryOfProjectId` on the output**, rather than `Project.primaryOutputId`. Ownership of the primary is inherent (a CHECK keeps it equal to the output's own project), and deleting it can't leave a dangling pointer.
 3. **Followers are told when a project appears, not when it's saved** (decided). This needs `announcedAt` and the app's first background job. Never notifying for projects with a show-from date would have been simpler, but it would quietly drop exactly the course work the feature is for.
 4. **Course codes leave `tags`.** Keeping both would mean two sources of truth, and `facets.ts` and `projectView.ts` already disagree on edge cases.

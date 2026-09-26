@@ -6,6 +6,6 @@ export const GITHUB_URL = 'https://github.com/renfrrd-ai/uofthub'
  *
  * On our own domain, deliberately — a `@utoronto.ca` address would imply the
  * university runs this, which it doesn't. Mirrored API-side in
- * `apps/api/src/lib/email.ts`; change both together.
+ * `api/src/lib/email.ts`; change both together.
  */
 export const CONTACT_EMAIL = 'hello@uofthub.com'

@@ -56,7 +56,7 @@ Web tests (Vitest, Testing Library, jsdom) cover the pieces with logic rather th
 
 `pnpm format` runs Prettier, which also sorts Tailwind classes.
 
-### Styling (apps/web)
+### Styling (web)
 
 The web app is styled with Tailwind CSS v4, written as utility classes in the components. There are no per-component stylesheets.
 

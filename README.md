@@ -47,8 +47,8 @@ A pnpm workspace with two apps and one shared package.
 
 | | |
 |---|---|
-| **Web** (`apps/web`) | React 19 + Vite, React Router 7, TanStack Query. Tailwind CSS v4 for styling. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens as a Tailwind `@theme` in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` |
-| **API** (`apps/api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
+| **Web** (`web`) | React 19 + Vite, React Router 7, TanStack Query. Tailwind CSS v4 for styling. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens as a Tailwind `@theme` in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` |
+| **API** (`api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
 | **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password |
@@ -74,14 +74,14 @@ cd uofthub
 pnpm install
 
 docker compose up -d                   # Postgres on :5433, S3 mock on :9090
-cp apps/api/.env.example apps/api/.env # works as-is; set a real JWT_SECRET
-cp apps/web/.env.example apps/web/.env
+cp api/.env.example api/.env # works as-is; set a real JWT_SECRET
+cp web/.env.example web/.env
 pnpm --filter @uofthub/api db:generate
 
 pnpm dev                               # API on :3001, web on :5173
 ```
 
-`pnpm dev` applies any pending migrations before the API starts, and the API reads `apps/api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
+`pnpm dev` applies any pending migrations before the API starts, and the API reads `api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
 
 Sign in with email + password locally: Microsoft OAuth needs real credentials. **Every other integration is optional** — with no keys, email and error reporting no-op with a warning, and AI search falls back to keyword search.
 
@@ -103,12 +103,12 @@ The API tests create their own `_test` database and refuse to run against any da
 
 | Path | |
 |---|---|
-| `apps/api/src/routes` | HTTP surface — auth, projects, users, feed, courses, collections, messages, orgs, spotlight, discover, admin |
-| `apps/api/src/lib` | The rules: visibility, project content, search, trending, notifications, storage, link import |
-| `apps/api/prisma/schema.prisma` | The data model |
-| `apps/web/src/App.tsx` | Every route in the web app |
-| `apps/web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
-| `apps/web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |
+| `api/src/routes` | HTTP surface — auth, projects, users, feed, courses, collections, messages, orgs, spotlight, discover, admin |
+| `api/src/lib` | The rules: visibility, project content, search, trending, notifications, storage, link import |
+| `api/prisma/schema.prisma` | The data model |
+| `web/src/App.tsx` | Every route in the web app |
+| `web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
+| `web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |
 | `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md) |
 
 ---

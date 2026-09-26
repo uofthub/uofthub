@@ -2,7 +2,7 @@
 
 The uofthub web app: React 19 + Vite, React Router 7, TanStack Query, Tailwind CSS v4.
 
-Setup, the full stack and how to run everything together are in the [root README](../../README.md). From the repo root:
+Setup, the full stack and how to run everything together are in the [root README](../README.md). From the repo root:
 
 ```bash
 pnpm --filter @uofthub/web dev    # http://localhost:5173, talks to the API on :3001
@@ -44,4 +44,4 @@ pnpm --filter @uofthub/web lint   # oxlint
 | `/session` | Sign in / sign up |
 | `/about`, `/terms`, `/privacy` | Info pages |
 
-Styling conventions are in [CONTRIBUTING.md § Styling](../../docs/CONTRIBUTING.md#styling-appsweb).
+Styling conventions are in [CONTRIBUTING.md § Styling](../docs/CONTRIBUTING.md#styling-web).

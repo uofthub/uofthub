@@ -6,7 +6,7 @@
 #            localhost:9090. It creates the bucket itself, keeps files across
 #            restarts, and accepts any credentials, so signed URLs just work.
 #
-# Local development only; matches apps/api/.env.example.
+# Local development only; matches api/.env.example.
 
 services:
   db:

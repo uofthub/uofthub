@@ -397,17 +397,17 @@ The two that existed before — the verification sweep (`sweep-orgs`) and term s
 | ORM | Prisma | Clean migrations, generated TS types, good Postgres support |
 | Database | PostgreSQL | Relational model fits the social graph; Prisma handles migrations |
 | Routing (web) | React Router v7 | Standard choice, no SSR complexity needed at MVP |
-| Styling (web) | Tailwind CSS v4 | Design tokens as a `@theme` in `src/index.css`, redefined for dark mode; components style themselves with utilities, and shared shapes live in `src/components/ui`. See [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-appsweb) |
+| Styling (web) | Tailwind CSS v4 | Design tokens as a `@theme` in `src/index.css`, redefined for dark mode; components style themselves with utilities, and shared shapes live in `src/components/ui`. See [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-web) |
 | Data fetching | TanStack Query | Server state management, caching, background refetch |
 | Auth | Microsoft OAuth (domain-restricted) + email/password | Microsoft is what every U of T account already has; password sign-in covers local development and anyone who prefers it. Both are restricted to `@mail.utoronto.ca` / `@utoronto.ca` |
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
-| AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `apps/api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
-| Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
+| AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
+| Email | Resend | Simple API, generous free tier; `api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 | Error monitoring | [Clueline](https://clueline.dev) — `@clueline/core` in the API, `@clueline/react` in the web app | Ships 5xx failures and front-end crashes with the context to act on them, and shows students a calm fallback instead of a white screen. No-ops with a warning when `CLUELINE_API_KEY` / `VITE_CLUELINE_API_KEY` are unset |
 | Tests | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
 | CI | GitHub Actions | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
-| Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `apps/api/` |
+| Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/` |
 | Hosting (web) | Cloudflare Pages | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard |
 
 ---
@@ -418,15 +418,15 @@ Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck`
 
 | Piece | Where | How |
 |---|---|---|
-| API | Railway service | Builds `apps/api/Dockerfile` (repo root as context, per `railway.json`), healthcheck on `/health` |
+| API | Railway service | Builds `api/Dockerfile` (repo root as context, per `railway.json`), healthcheck on `/health` |
 | Database | Railway Postgres | `DATABASE_URL` is injected by Railway; nothing else references the credentials |
-| Web | Cloudflare Pages | Build `pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`, output directory `apps/web/dist` |
+| Web | Cloudflare Pages | Build `pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`, output directory `web/dist` |
 
 **Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the deploy and Railway keeps the previous container serving.
 
 **The API must live on a subdomain of the web domain** — `api.uofthub.com` alongside `uofthub.com`. The session cookie is `SameSite=Lax`, which browsers scope by registrable domain: a subdomain is same-site and the cookie rides along on every `credentials: 'include'` request, but an API on a different domain (a `*.railway.app` URL, say) is cross-site and the browser drops it. Every authenticated request would 401 with nothing obviously wrong in the code. Point a custom domain at the Railway service before treating auth as working.
 
-Environment variables in production — see `apps/api/.env.example` for the full list and shape:
+Environment variables in production — see `api/.env.example` for the full list and shape:
 
 - `DATABASE_URL` — injected by Railway.
 - `JWT_SECRET` — required; `buildApp()` refuses to boot in production without it rather than silently signing forgeable sessions.
