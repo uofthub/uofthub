@@ -130,7 +130,6 @@ One direct message (sender, recipient, body, read_at). A conversation is just th
 |---|---|---|
 | id | uuid | |
 | project_id | uuid | |
-| org_id | uuid? | dormant — was the group a file was billed to under the retired group quotas; no longer written |
 | name | string | |
 | storage_key | string | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
 | size_bytes | int | |
@@ -163,18 +162,8 @@ Clubs and research labs. Full verification/storage/activity policy in [student-g
 | verification_deadline | timestamp? | dormant — from the retired self-serve verification flow; always null for groups created now |
 | verification_note | text? | the group's most recent verification submission |
 | review_note | text? | the admin's note back — what was missing, or why it was denied |
-| verified_at | timestamp? | when it was approved; the start point for term storage grants |
+| verified_at | timestamp? | when it was approved |
 | created_at | timestamp | |
-
-### OrgStorageGrant
-Dormant. It was one row per (group, academic term) for the retired per-term group storage allowance; the table is kept so the history survives, but nothing reads or writes it now that quotas are gone (see [redesign.md](redesign.md#student-groups-and-quotas)).
-
-| Field | Type | Notes |
-|---|---|---|
-| org_id | uuid | |
-| term | string | term key, e.g. `2026F` — see `lib/terms.ts` |
-| bytes | bigint | |
-| granted_at | timestamp | |
 
 ### OrgActivity
 A meeting, event, workshop or recap — lighter than a Project, rendered only on the group's own page.

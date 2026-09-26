@@ -99,7 +99,7 @@ Goal: a group page stops being "anyone can claim it" and becomes something verif
 - [x] Removed `POST /orgs/:slug/verify`, the 7-day deadline, `sweep-orgs` and `.github/workflows/scheduled.yml`; admin decisions are `APPROVE`/`DENY` for legacy groups
 - [x] "Built with" — owners link a project to a group they belong to; cards show verified groups; group admins can unlink with `DELETE /orgs/:slug/projects/:projectId`
 - [x] Removed personal and group storage quotas, `lib/terms.ts` and `grant-term-storage`; per-file size and 20-file caps remain
-- [ ] Drop the dormant `OrgStorageGrant`, `ProjectFile.orgId` and verification columns once the decision has held
+- [x] Dropped the dormant `OrgStorageGrant` table and `ProjectFile.orgId`. The verification columns stay: the admin portal still reads them for groups created before the redesign
 - [ ] Revisit storage limits against real usage
 
 **Verification workflow**

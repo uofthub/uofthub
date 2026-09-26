@@ -432,11 +432,6 @@ model ProjectCollaborator {
 model ProjectFile {
   id         String   @id @default(uuid())
   projectId  String
-  /// The group this file's bytes are billed to, stamped at upload time rather
-  /// than derived from the project's org links: those links can change later,
-  /// and quota already spent must not silently move between accounts. Null
-  /// means it counts against the uploader's personal quota.
-  orgId      String?
   name       String
   /// R2 object key, not a public URL — downloads go through a signed URL so
   /// they still honour project visibility.
@@ -446,13 +441,10 @@ model ProjectFile {
   uploadedAt DateTime @default(now())
 
   project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  org     Organization?  @relation(fields: [orgId], references: [id], onDelete: SetNull)
   output  ProjectOutput?
 
   /// Cover lookups, per-project file lists and the file-count cap.
   @@index([projectId])
-  /// Per-group storage usage aggregates.
-  @@index([orgId])
 }
 
 /// A dataset, paper, piece of software, model, book or archive the project
@@ -637,26 +629,9 @@ model Organization {
   verifiedAt           DateTime?
   createdAt            DateTime  @default(now())
 
-  members       OrgMember[]
-  projects      OrgProject[]
-  activities    OrgActivity[]
-  storageGrants OrgStorageGrant[]
-  files         ProjectFile[]
-}
-
-/// One row per academic term per group: the 10GB allowance granted for that
-/// term. Allowances stack — a group's quota is the sum of every grant it has
-/// ever received, and nothing is reclaimed when a term rolls over.
-model OrgStorageGrant {
-  orgId     String
-  /// Academic term key, e.g. `2026F` — see lib/terms.ts.
-  term      String
-  bytes     BigInt
-  grantedAt DateTime @default(now())
-
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-
-  @@id([orgId, term])
+  members    OrgMember[]
+  projects   OrgProject[]
+  activities OrgActivity[]
 }
 
 /// A meeting, event, workshop or recap — lighter than a Project, and only

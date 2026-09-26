@@ -50,7 +50,7 @@ Groups were a distraction from the core of the app — sharing projects — and 
 - **No self-serve verification.** `POST /orgs/:slug/verify`, the 7-day deadline and the sweep that deleted expired groups are gone. `POST /admin/orgs/:slug/decision` takes only `APPROVE`/`DENY`, for any group left over from the old flow.
 - **"Built with."** A project owner who is a member of a group can link the project to it (project page → More → Link to a group); cards show the verified groups a project was built with. A group admin can unlink a project with `DELETE /orgs/:slug/projects/:projectId`.
 - **No storage quotas at all.** The personal 2GB and the per-term group 10GB were removed, along with `lib/terms.ts`, the `grant-term-storage` and `sweep-orgs` scripts and `.github/workflows/scheduled.yml`. Per-file size limits and the 20-file-per-project cap remain. To be revisited when storage costs are real.
-- **Schema left dormant, not dropped.** `OrgStorageGrant`, `ProjectFile.orgId` and the verification columns on `Organization` stay so no data is destroyed; nothing reads or writes them. Drop them in a later migration once the decision has stuck.
+- **Schema left dormant, then dropped.** `OrgStorageGrant` and `ProjectFile.orgId` were kept until the decision had stuck, then dropped (`20260928000000_drop_org_storage`). The verification columns on `Organization` stay, since the admin portal still shows them for groups created before this.
 
 ## What used to be "coming soon"
 
