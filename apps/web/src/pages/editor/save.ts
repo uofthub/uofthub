@@ -10,7 +10,8 @@ import { contentPayload, outputsPayload, type Draft } from './draft'
  *   2. New files are uploaded.
  *   3. The content — sections, details, references, outputs — is written in
  *      one request, which the API applies in one transaction.
- *   4. Thumbnails are uploaded for the outputs that have new ones.
+ *   4. Thumbnails are uploaded for the outputs that have new ones, and the
+ *      files and links the author removed are deleted.
  *   5. Invitations go out.
  *   6. Only if every step above succeeded, visibility and the show-from date
  *      are written, on their own, last.
@@ -23,7 +24,14 @@ import { contentPayload, outputsPayload, type Draft } from './draft'
 
 type ProjectsApi = Pick<
   typeof Api.projects,
-  'create' | 'update' | 'uploadFile' | 'uploadThumbnail' | 'deleteThumbnail' | 'inviteCollaborator'
+  | 'create'
+  | 'update'
+  | 'uploadFile'
+  | 'uploadThumbnail'
+  | 'deleteThumbnail'
+  | 'deleteFile'
+  | 'deleteLink'
+  | 'inviteCollaborator'
 >
 
 export type SaveResult = {
@@ -38,6 +46,8 @@ export type SaveResult = {
   outputIds: Map<string, string>
   /** Draft output keys whose thumbnail change was saved. */
   thumbnailsDone: Set<string>
+  /** Ids of the files and links that were deleted. */
+  removed: Set<string>
   invited: Set<string>
 }
 
@@ -57,6 +67,7 @@ export async function saveDraft(
   }
   const outputIds = new Map<string, string>()
   const thumbnailsDone = new Set<string>()
+  const removed = new Set<string>()
   const invited = new Set<string>()
 
   // 1. The project, as a private draft if it is new. Nothing else is worth
@@ -102,6 +113,17 @@ export async function saveDraft(
           : await projects.uploadThumbnail(projectId, id, output.thumbnail).catch(note(label))
       if (done) thumbnailsDone.add(output.key)
     }
+
+    // Removed files and links, once the saved outputs no longer name them.
+    for (const [items, remove] of [
+      [draft.removedFiles, projects.deleteFile],
+      [draft.removedLinks, projects.deleteLink],
+    ] as const) {
+      for (const item of items) {
+        const done = await remove(projectId, item.id).catch(note(`Removing ${item.name}`))
+        if (done) removed.add(item.id)
+      }
+    }
   }
 
   // 5. Invitations.
@@ -110,7 +132,7 @@ export async function saveDraft(
     if (sent) invited.add(invite.email)
   }
 
-  const result = { projectId, failed, uploaded, outputIds, thumbnailsDone, invited }
+  const result = { projectId, failed, uploaded, outputIds, thumbnailsDone, removed, invited }
 
   // 6. Visibility last, and only when everything else is in place.
   if (failed.length > 0) return { ...result, visibilityApplied: false }

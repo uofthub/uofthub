@@ -34,7 +34,7 @@ This extends [ARCHITECTURE.md](ARCHITECTURE.md) and [redesign.md](redesign.md).
 | `templateCode` | `String?` | The course template the project was started from, e.g. `CSC211H5`. |
 | `templateVersion` | `Int?` | That template's version at the time. With `templateCode`, lets templates move to the database later (if instructors need to edit them) without losing which projects came from which revision. |
 
-`ProjectVersion` also gets `sections` and `details`, so a version still captures what the project said.
+`ProjectVersion` also gets `sections` and `details`, so a version still captures what the project said. A later migration (`version_content`) adds `courseCode`, `references` and `outputs` too; outputs are stored by the name of their file or link rather than by id, so a version still says what it was after the file is deleted.
 
 #### `sections` shape
 
@@ -192,7 +192,7 @@ The canvas is encoded as WebP at quality 0.82, falling back to JPEG where `toBlo
 
 **Old uploads get a manual thumbnail.** In the editor, an owner can set or replace any output's thumbnail by choosing an image; it goes through the same resize and the same endpoint.
 
-Link outputs (a YouTube video, a demo site) can get a thumbnail from the existing link import, which already fetches `og:image`. The editor offers it rather than doing it silently.
+Link outputs (a YouTube video, a demo site) can get a thumbnail from the existing link import, which already fetches `og:image`. The editor offers it rather than doing it silently: a link output without a thumbnail has "Use the link's preview image", which runs the import and puts the image through the same resize as a hand-picked one.
 
 ---
 
@@ -293,7 +293,7 @@ A project matches a faculty when its owner's faculty matches, **or any accepted 
 | `PUT /projects/:id/outputs/:outputId/thumbnail` | New. Multipart, owner only, validated as above. |
 | `GET /projects/:id/shared-references` | New. `[{ reference, projects[] }]` for references with a `key`, visibility-filtered, at most 3 projects each. |
 | `GET /courses/:code/template` | New. |
-| `POST /projects/:id/versions` | Snapshots `sections` and `details` too. |
+| `POST /projects/:id/versions` | Snapshots `sections`, `details`, `courseCode`, `references` and `outputs` too. |
 | `POST /projects/:id/fork` | Copies sections, details and references. It doesn't copy outputs (the files aren't copied), `courseCode`, or `showFrom`: being filed under someone else's course is the original author's claim, not the forker's. |
 
 An output in `outputs[]` is `{ id?, kind, label?, primary?, fileId }` or `{ id?, kind, label?, primary?, link: { label, url } }`. A new link target creates a `ProjectLink`, so the plain links list stays complete. `id` keeps an existing output, and its thumbnail, across a reorder.

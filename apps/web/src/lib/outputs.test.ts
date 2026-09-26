@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cardAction,
   outputKindForFile,
   outputKindForLink,
   outputLabel,
@@ -56,5 +57,32 @@ describe('resolveOutputs', () => {
         outputs: [{ id: 'o1', kind: 'POSTER', fileId: 'missing', primary: true }],
       })
     ).toEqual([])
+  })
+})
+
+describe('cardAction', () => {
+  const links = [
+    { id: 'l1', projectId: 'p', label: 'Live demo', url: 'https://x.app' },
+    { id: 'l2', projectId: 'p', label: 'Talk', url: 'https://youtu.be/x' },
+  ]
+
+  it('names the button after the lead output, and opens a file in the project’s viewer', () => {
+    expect(
+      cardAction({
+        id: 'p',
+        links,
+        lead: { kind: 'POSTER', label: null, fileId: 'f1', linkId: null },
+      })
+    ).toEqual({ label: 'View poster', icon: 'image', to: '/projects/p?view=f1' })
+  })
+
+  it('sends a lead link where it points', () => {
+    expect(
+      cardAction({ id: 'p', links, lead: { kind: 'VIDEO', label: 'Talk', fileId: null, linkId: 'l2' } })
+    ).toMatchObject({ label: 'Watch', href: 'https://youtu.be/x' })
+  })
+
+  it('falls back to the links without a lead', () => {
+    expect(cardAction({ id: 'p', links })).toMatchObject({ label: 'Try it live', href: 'https://x.app/' })
   })
 })

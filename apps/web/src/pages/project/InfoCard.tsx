@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, safeUrl, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
@@ -138,8 +138,20 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const isOwner = user?.id === project.ownerId
   const outputs = resolveOutputs(project)
   const primary = primaryOutput(outputs)
-  const [viewing, setViewing] = useState<string | null>(null)
   const previewable = project.files.filter((f) => previewKindFor(f.name))
+  // A card's "View poster" arrives as ?view=<fileId>, opening it here.
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('view')
+  const [viewing, setViewing] = useState<string | null>(() =>
+    asked && previewable.some((f) => f.id === asked) ? asked : null
+  )
+  const closeViewer = () => {
+    setViewing(null)
+    if (asked) {
+      params.delete('view')
+      setParams(params, { replace: true })
+    }
+  }
   // An output's file or link is listed with the outputs, not again below.
   const outputFiles = new Set(outputs.flatMap((o) => (o.file ? [o.file.id] : [])))
   const outputLinks = new Set(outputs.flatMap((o) => (o.link ? [o.link.id] : [])))
@@ -158,7 +170,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const code = primary?.kind === 'CODE' ? undefined : codeLink(safeLinks(project.links))
   const course = courseOf(project)
   const pitch = project.pitch
-  const tags = topicTags(project.tags)
+  const tags = topicTags(project)
   const documents = project.files.filter((f) => {
     const kind = previewKindFor(f.name)
     return kind !== 'image' && kind !== 'video' && !outputFiles.has(f.id)
@@ -195,7 +207,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           files={previewable}
           fileId={viewing}
           onSelect={setViewing}
-          onClose={() => setViewing(null)}
+          onClose={closeViewer}
         />
       )}
       {open === 'update' && <UpdateDialog project={project} onClose={() => setOpen(null)} />}

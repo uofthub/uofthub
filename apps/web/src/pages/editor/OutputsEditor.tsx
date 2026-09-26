@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ProjectLink } from '@uofthub/types'
-import type { CourseTemplate, ProjectFile } from '../../lib/api'
+import { api, importedImageFile, type CourseTemplate, type ProjectFile } from '../../lib/api'
 import { lookFor } from '../../lib/files'
+import { useReleasedObjectUrls } from '../../lib/hooks'
 import {
   OUTPUT_KINDS,
   OUTPUT_KIND_KEYS,
@@ -17,7 +18,9 @@ import { move, newId, type DraftOutput } from './draft'
  * file or a link; picking a file makes its thumbnail here in the browser (a
  * PDF's first page, a video frame, a large image scaled down), and any output
  * can have its thumbnail set or replaced by hand — which is also how a file
- * uploaded before thumbnails existed gets one.
+ * uploaded before thumbnails existed gets one. A link can take the preview
+ * image its page advertises, fetched through the same link import as
+ * "Start from a link"; it is offered, never done unasked.
  */
 
 const targetName = (o: DraftOutput) => {
@@ -51,6 +54,10 @@ export function OutputsEditor({
 }) {
   const [link, setLink] = useState({ label: '', url: '' })
   const [problem, setProblem] = useState<string | null>(null)
+  // The output whose link preview is being fetched.
+  const [fetching, setFetching] = useState<string | null>(null)
+
+  useReleasedObjectUrls(outputs.map((o) => o.thumbnailUrl))
   const set = (i: number, patch: Partial<DraftOutput>) =>
     onChange(outputs.map((o, j) => (j === i ? { ...o, ...patch } : o)))
   const hasPrimary = outputs.some((o) => o.primary)
@@ -63,6 +70,20 @@ export function OutputsEditor({
         else if (force) setProblem(`${file.name} couldn’t be made into a thumbnail`)
       })
       .catch(() => setProblem(`No thumbnail could be made from ${file.name}`))
+  }
+
+  /** The link's own preview image (og:image), made into its thumbnail. */
+  const linkPreview = (key: string, url: string) => {
+    setProblem(null)
+    setFetching(key)
+    api.projects
+      .importLink(url)
+      .then((got) => {
+        if (got.image) thumbnailFor(key, importedImageFile(got.image), true)
+        else setProblem('That link’s page has no preview image — set a thumbnail by hand')
+      })
+      .catch((e: Error) => setProblem(`No preview image from that link: ${e.message}`))
+      .finally(() => setFetching(null))
   }
 
   const addFiles = (picked: File[]) => {
@@ -170,6 +191,17 @@ export function OutputsEditor({
                     }}
                   />
                 </label>
+                {(o.target.type === 'link' || o.target.type === 'newLink') &&
+                  !(o.thumbnailUrl && o.thumbnail !== 'remove') && (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      disabled={fetching === o.key}
+                      onClick={() => linkPreview(o.key, (o.target as { url: string }).url)}
+                    >
+                      {fetching === o.key ? 'Fetching the preview…' : 'Use the link’s preview image'}
+                    </button>
+                  )}
                 {o.thumbnailUrl && o.thumbnail !== 'remove' && (
                   <button
                     type="button"

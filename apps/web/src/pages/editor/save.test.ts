@@ -7,7 +7,9 @@ import { saveDraft } from './save'
  * tested as a sequence of calls against a fake API.
  */
 
-function fakeApi(fail: Partial<Record<'upload' | 'update' | 'thumbnail' | 'invite', boolean>> = {}) {
+function fakeApi(
+  fail: Partial<Record<'upload' | 'update' | 'thumbnail' | 'invite' | 'delete', boolean>> = {}
+) {
   const calls: string[] = []
   const api = {
     create: vi.fn(async (body: { visibility?: string }) => {
@@ -33,6 +35,15 @@ function fakeApi(fail: Partial<Record<'upload' | 'update' | 'thumbnail' | 'invit
     }),
     deleteThumbnail: vi.fn(async (_id: string, outputId: string) => {
       calls.push(`unthumbnail:${outputId}`)
+      return { ok: true }
+    }),
+    deleteFile: vi.fn(async (_id: string, fileId: string) => {
+      calls.push(`delete:${fileId}`)
+      if (fail.delete) throw new Error('gone wrong')
+      return { ok: true }
+    }),
+    deleteLink: vi.fn(async (_id: string, linkId: string) => {
+      calls.push(`delete:${linkId}`)
       return { ok: true }
     }),
     inviteCollaborator: vi.fn(async (_id: string, email: string) => {
@@ -142,6 +153,38 @@ describe('saving an existing project', () => {
       api
     )
     expect(calls).toContain('unthumbnail:o0')
+  })
+})
+
+describe('removing what is already on the project', () => {
+  const removing = (overrides: Partial<Draft> = {}) =>
+    emptyDraft({
+      title: 'Poster',
+      removedFiles: [{ id: 'f1', name: 'old.pdf' }],
+      removedLinks: [{ id: 'l1', name: 'Old site' }],
+      ...overrides,
+    })
+
+  it('deletes them after the content is saved, and before visibility', async () => {
+    const { api, calls } = fakeApi()
+    await saveDraft(removing(), { projectId: 'p1', visibility: 'UOFT' }, api)
+    expect(calls).toEqual(['update:content', 'delete:f1', 'delete:l1', 'update:visibility:UOFT'])
+  })
+
+  it('deletes nothing when the content was refused', async () => {
+    const { api, calls } = fakeApi({ update: true })
+    await saveDraft(removing(), { projectId: 'p1', visibility: 'UOFT' }, api)
+    expect(calls.some((c) => c.startsWith('delete:'))).toBe(false)
+  })
+
+  it('names what could not be removed, and retries only that', async () => {
+    const { api } = fakeApi({ delete: true })
+    const first = await saveDraft(removing(), { projectId: 'p1', visibility: 'UOFT' }, api)
+    expect(first.failed).toEqual(['Removing old.pdf: gone wrong'])
+
+    const again = settle(removing(), first)
+    expect(again.removedFiles.map((f) => f.id)).toEqual(['f1'])
+    expect(again.removedLinks).toEqual([])
   })
 })
 

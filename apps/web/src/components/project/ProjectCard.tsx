@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ProjectSummary } from '../../lib/api'
-import { courseOf, makersLabel, primaryAction, safeLinks } from '../../lib/projectView'
+import { cardAction } from '../../lib/outputs'
+import { courseOf, makersLabel } from '../../lib/projectView'
 import { AvatarStack, Chip, Icon, type AvatarPerson } from '../ui'
 import { Cover, CoverTag } from './Cover'
 import { CardTop, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
@@ -11,9 +12,9 @@ function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, make
   return [...(owner ? [owner] : []), ...(project.collaborators ?? []).map((c) => c.user)]
 }
 
-/** "Live demo" on the cover when there is something live to try. */
-function CoverAction({ project }: { project: Pick<ProjectSummary, 'links'> }) {
-  const action = primaryAction(safeLinks(project.links))
+/** "Live demo", "View poster" on the cover: what opening it gets you. */
+function CoverAction({ project }: { project: Pick<ProjectSummary, 'id' | 'links' | 'lead'> }) {
+  const action = cardAction(project)
   if (!action) return null
   return (
     <CoverTag icon={<Icon name={action.icon === 'external' ? 'globe' : action.icon} size={14} />}>

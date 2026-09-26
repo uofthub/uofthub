@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, Link, Route, RouterProvider, Routes } from 'react-router-dom'
 import { api, type CourseTemplate, type ProjectDetail } from '../../lib/api'
 import EditorPage from './EditorPage'
 
 const me = { id: 'me', name: 'Aisha Khan', email: 'aisha@mail.utoronto.ca' }
 vi.mock('../../lib/auth', () => ({ useAuth: () => ({ user: me }) }))
+// jsdom has no canvas: a thumbnail is whatever the image was.
+vi.mock('../../lib/thumbnails', () => ({
+  makeThumbnail: async (file: File) => file,
+  thumbnailSource: () => null,
+}))
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -23,16 +28,31 @@ const template: CourseTemplate = {
   references: { kinds: ['DATASET', 'PAPER'], prompt: 'Datasets and papers you used.' },
 }
 
+// A data router, as in main.tsx: the editor's guard against leaving with
+// unsaved work needs one.
 function open(path: string) {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '*',
+        element: (
+          <>
+            <Link to="/elsewhere">Go elsewhere</Link>
+            <Routes>
+              <Route path="/projects/new" element={<EditorPage />} />
+              <Route path="/projects/:id/edit" element={<EditorPage />} />
+              <Route path="/projects/:id" element={<p>Project page</p>} />
+              <Route path="/elsewhere" element={<p>Somewhere else</p>} />
+            </Routes>
+          </>
+        ),
+      },
+    ],
+    { initialEntries: [path] }
+  )
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/projects/new" element={<EditorPage />} />
-          <Route path="/projects/:id/edit" element={<EditorPage />} />
-          <Route path="/projects/:id" element={<p>Project page</p>} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   )
 }
@@ -92,6 +112,55 @@ describe('the editor, starting a project', () => {
   })
 })
 
+describe('a link output', () => {
+  it('can take the preview image its page advertises as its thumbnail', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+    const importLink = vi.spyOn(api.projects, 'importLink').mockResolvedValue({
+      url: 'https://youtu.be/x',
+      tags: [],
+      links: [],
+      image: { name: 'cover.png', contentType: 'image/png', dataBase64: btoa('png') },
+    })
+    open('/projects/new')
+    fireEvent.change(await screen.findByLabelText('Link to add as an output'), {
+      target: { value: 'https://youtu.be/x' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }))
+    // Offered, not done unasked.
+    expect(importLink).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use the link’s preview image' }))
+
+    expect(await screen.findByRole('button', { name: 'Remove thumbnail' })).toBeTruthy()
+    expect(importLink).toHaveBeenCalledWith('https://youtu.be/x')
+    expect(screen.queryByRole('button', { name: 'Use the link’s preview image' })).toBeNull()
+  })
+})
+
+describe('leaving the editor', () => {
+  it('goes straight away with nothing changed', async () => {
+    open('/projects/new')
+    await screen.findByText('What are you sharing?')
+    fireEvent.click(screen.getByText('Go elsewhere'))
+    expect(await screen.findByText('Somewhere else')).toBeTruthy()
+  })
+
+  it('asks first with unsaved changes, and stays when told to', async () => {
+    open('/projects/new')
+    fireEvent.change(await screen.findByPlaceholderText('Give it a short, specific name'), {
+      target: { value: 'A long CSC211 write-up' },
+    })
+    fireEvent.click(screen.getByText('Go elsewhere'))
+    expect(await screen.findByText('Leave without saving?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByDisplayValue('A long CSC211 write-up')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Go elsewhere'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave' }))
+    expect(await screen.findByText('Somewhere else')).toBeTruthy()
+  })
+})
+
 describe('the editor, changing a project', () => {
   const project = {
     id: 'p1',
@@ -114,6 +183,24 @@ describe('the editor, changing a project', () => {
     open('/projects/p1/edit')
     expect(await screen.findByDisplayValue('Mussels downstream')).toBeTruthy()
     expect(screen.getByDisplayValue('Fewer mussels.')).toBeTruthy()
+  })
+
+  it('removes a file already on the project when saved, not before', async () => {
+    vi.spyOn(api.projects, 'get').mockResolvedValue({
+      ...project,
+      files: [{ id: 'f1', name: 'old-draft.pdf', sizeBytes: 2048, uploadedAt: '' }],
+    })
+    vi.spyOn(api.projects, 'update').mockResolvedValue({ id: 'p1', outputs: [] } as never)
+    const deleteFile = vi.spyOn(api.projects, 'deleteFile').mockResolvedValue({ ok: true })
+    open('/projects/p1/edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove old-draft.pdf' }))
+    expect(screen.queryByText('old-draft.pdf')).toBeNull()
+    expect(screen.getByText(/will be deleted when you save/)).toBeTruthy()
+    expect(deleteFile).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Project page')).toBeTruthy()
+    expect(deleteFile).toHaveBeenCalledWith('p1', 'f1')
   })
 
   it('is the owner’s alone', async () => {

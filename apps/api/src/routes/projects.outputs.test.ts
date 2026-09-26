@@ -180,6 +180,23 @@ describe('saving outputs', () => {
     expect(await db.projectOutput.count()).toBe(0)
     expect(storage.deleteObject).toHaveBeenCalledWith(thumbnailKey)
   })
+
+  it('take their files and thumbnails out of storage when the project is deleted', async () => {
+    const { owner, project, poster } = await seed()
+    const [output] = (
+      await call('PATCH', `/projects/${project.id}`, owner, {
+        outputs: [{ kind: 'POSTER', fileId: poster.id, primary: true }],
+      })
+    ).json().outputs
+    await upload(`/projects/${project.id}/outputs/${output.id}/thumbnail`, owner, PNG)
+    const { thumbnailKey } = await db.projectOutput.findUniqueOrThrow({ where: { id: output.id } })
+    vi.clearAllMocks()
+
+    expect((await call('DELETE', `/projects/${project.id}`, owner)).statusCode).toBe(200)
+    expect(await db.projectFile.count()).toBe(0)
+    expect(storage.deleteObject).toHaveBeenCalledWith(poster.storageKey)
+    expect(storage.deleteObject).toHaveBeenCalledWith(thumbnailKey)
+  })
 })
 
 describe('output thumbnails', () => {
@@ -271,5 +288,43 @@ describe('a project’s cover', () => {
       ],
     })
     expect(await coverOf(project.id)).toBe(`signed:projects/${project.id}/board.png`)
+  })
+})
+
+describe('a project in a list', () => {
+  it('says what it leads with, so its card can name the button', async () => {
+    const { owner, project, poster } = await seed()
+    type Row = { id: string; lead?: { kind: string; fileId: string | null; linkId: string | null } }
+    const leadOf = async () =>
+      ((await call('GET', '/projects')).json() as Row[]).find((r) => r.id === project.id)?.lead
+
+    expect(await leadOf()).toBeUndefined()
+    await call('PATCH', `/projects/${project.id}`, owner, {
+      outputs: [{ kind: 'POSTER', label: 'Final poster', fileId: poster.id, primary: true }],
+    })
+    expect(await leadOf()).toEqual({
+      kind: 'POSTER',
+      label: 'Final poster',
+      fileId: poster.id,
+      linkId: null,
+    })
+  })
+})
+
+describe('the browser', () => {
+  // The web app is on another origin, so a method CORS does not allow fails
+  // in every browser as "Failed to fetch" — and never in a test that calls
+  // the API directly, which is how this once shipped broken.
+  it('is allowed to PUT a thumbnail from the web app', async () => {
+    const app = await getApp()
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/projects/p/outputs/o/thumbnail',
+      headers: {
+        origin: process.env.WEB_URL ?? 'http://localhost:5173',
+        'access-control-request-method': 'PUT',
+      },
+    })
+    expect(String(res.headers['access-control-allow-methods'])).toContain('PUT')
   })
 })

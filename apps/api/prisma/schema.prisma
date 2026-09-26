@@ -358,6 +358,12 @@ model ProjectVersion {
   sections    Json?
   details     Json?
   tags        String[] @default([])
+  courseCode  String?
+  /// The references as they stood: kind, title, url, doi, authors, year, note.
+  references  Json?
+  /// The outputs as they stood, each naming its file or link rather than
+  /// pointing at it — a file deleted since still shows what it was.
+  outputs     Json?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

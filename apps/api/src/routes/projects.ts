@@ -538,7 +538,20 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
+      // The rows go with the project (a cascade); the objects they point at
+      // have to be deleted by hand, and only once nothing points at them.
+      const [files, outputs] = await Promise.all([
+        db.projectFile.findMany({ where: { projectId: project.id }, select: { storageKey: true } }),
+        db.projectOutput.findMany({
+          where: { projectId: project.id },
+          select: { thumbnailKey: true },
+        }),
+      ])
       await db.project.delete({ where: { id: project.id } })
+      await deleteObjects([
+        ...files.map((f) => f.storageKey),
+        ...outputs.map((o) => o.thumbnailKey),
+      ])
       return { ok: true }
     }
   )
@@ -1311,7 +1324,33 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     '/:id/versions',
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const project = await db.project.findUnique({ where: { id: request.params.id } })
+      const project = await db.project.findUnique({
+        where: { id: request.params.id },
+        include: {
+          references: {
+            orderBy: { position: 'asc' },
+            select: {
+              kind: true,
+              title: true,
+              url: true,
+              doi: true,
+              authors: true,
+              year: true,
+              note: true,
+            },
+          },
+          outputs: {
+            orderBy: { position: 'asc' },
+            select: {
+              kind: true,
+              label: true,
+              primaryOfProjectId: true,
+              file: { select: { name: true } },
+              link: { select: { label: true, url: true } },
+            },
+          },
+        },
+      })
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
 
@@ -1335,6 +1374,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           sections: project.sections ?? Prisma.DbNull,
           details: project.details ?? Prisma.DbNull,
           tags: project.tags,
+          courseCode: project.courseCode,
+          references: project.references,
+          // Named, not pointed at: the file or link may be gone by the time
+          // anyone looks back.
+          outputs: project.outputs.map((o) => ({
+            kind: o.kind,
+            label: o.label,
+            primary: o.primaryOfProjectId !== null,
+            ...(o.file && { file: o.file.name }),
+            ...(o.link && { link: o.link }),
+          })),
         },
       })
 

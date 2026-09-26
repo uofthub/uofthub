@@ -90,6 +90,12 @@ export type DraftOutput = {
   thumbnail?: Blob | 'remove'
 }
 
+/**
+ * Something already on the project, named for the author if deleting it
+ * fails, with the outputs made of it so that keeping it brings them back.
+ */
+export type Removed = { id: string; name: string; outputs?: DraftOutput[] }
+
 export type Draft = {
   title: string
   pitch: string
@@ -107,6 +113,9 @@ export type Draft = {
   outputs: DraftOutput[]
   /** Images and other files that are not outputs: a gallery's screenshots. */
   newFiles: File[]
+  /** Files and links already on the project, to delete when it is saved. */
+  removedFiles: Removed[]
+  removedLinks: Removed[]
   invites: { email: string; role: string }[]
   template: { code: string; version: number } | null
   /** What a template suggested for the primary output and references. */
@@ -129,6 +138,8 @@ export function emptyDraft(overrides: Partial<Draft> = {}): Draft {
     references: [],
     outputs: [],
     newFiles: [],
+    removedFiles: [],
+    removedLinks: [],
     invites: [],
     template: null,
     hints: {},
@@ -202,6 +213,42 @@ export function draftFromProject(project: ProjectDetail): Draft {
       ]
     }),
   })
+}
+
+/**
+ * Mark a file or link already on the project for deletion on save. An output
+ * made of it goes with it now, as it will on the API, so the outputs list
+ * never shows something that is about to disappear.
+ */
+export function removeExisting(draft: Draft, what: 'file' | 'link', item: Removed): Draft {
+  const uses = (o: DraftOutput) =>
+    what === 'file'
+      ? o.target.type === 'file' && o.target.fileId === item.id
+      : o.target.type === 'link' && o.target.linkId === item.id
+  const removed = { ...item, outputs: draft.outputs.filter(uses) }
+  return {
+    ...draft,
+    ...(what === 'file'
+      ? { removedFiles: [...draft.removedFiles, removed] }
+      : { removedLinks: [...draft.removedLinks, removed] }),
+    outputs: draft.outputs.filter((o) => !uses(o)),
+  }
+}
+
+/**
+ * Keep everything marked for deletion after all, outputs included — at the
+ * end of the list, and leading only if nothing else has taken the lead since.
+ */
+export function keepRemoved(draft: Draft): Draft {
+  let hasPrimary = draft.outputs.some((o) => o.primary)
+  const back = [...draft.removedFiles, ...draft.removedLinks]
+    .flatMap((r) => r.outputs ?? [])
+    .map((o) => {
+      const primary = o.primary && !hasPrimary
+      if (primary) hasPrimary = true
+      return { ...o, primary }
+    })
+  return { ...draft, removedFiles: [], removedLinks: [], outputs: [...draft.outputs, ...back] }
 }
 
 /** The detail rows a type suggests, as empty rows with its labels. */
@@ -328,8 +375,8 @@ export function contentPayload(draft: Draft): Omit<
 
 /**
  * The draft after a save that partly went through: what was uploaded is now
- * the project's own file, saved outputs carry their ids, and thumbnails and
- * invitations that went out are not sent again. Saving once more retries only
+ * the project's own file, saved outputs carry their ids, and thumbnails,
+ * deletions and invitations that went through are not done again. Saving once more retries only
  * what failed.
  */
 export function settle(
@@ -339,6 +386,8 @@ export function settle(
     outputIds: Map<string, string>
     thumbnailsDone: Set<string>
     invited: Set<string>
+    /** Ids of the files and links that were deleted. */
+    removed: Set<string>
   }
 ): Draft {
   return {
@@ -358,6 +407,8 @@ export function settle(
       }
     }),
     newFiles: draft.newFiles.filter((f) => !result.uploaded.has(f)),
+    removedFiles: draft.removedFiles.filter((f) => !result.removed.has(f.id)),
+    removedLinks: draft.removedLinks.filter((l) => !result.removed.has(l.id)),
     invites: draft.invites.filter((i) => !result.invited.has(i.email)),
   }
 }
