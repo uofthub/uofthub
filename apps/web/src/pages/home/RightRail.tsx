@@ -8,6 +8,7 @@ import { useFacets } from '../../lib/queries'
 import { WeekActivity } from '../../components/activity/WeekActivity'
 import { FooterNote } from '../../components/shell'
 import { Avatar, Button, Icon, Panel } from '../../components/ui'
+import { Rail } from './Rail'
 
 /** The tags on this week's projects, counted across the whole site. */
 function Trending() {
@@ -15,13 +16,11 @@ function Trending() {
   const tags = facets?.tagsThisWeek.slice(0, 5) ?? []
 
   return (
-    <Panel title="Trending this week" gap={6}>
+    <Panel title="Trending this week" className="gap-1.5">
       {!facets ? null : tags.length === 0 ? (
-        <p className="muted" style={{ fontSize: 14 }}>
-          Nothing tagged yet this week.
-        </p>
+        <p className="text-14 text-muted">Nothing tagged yet this week.</p>
       ) : (
-        <div className="stack">
+        <div className="flex flex-col">
           {tags.map((t) => (
             <Link
               key={t.tag}
@@ -30,10 +29,10 @@ function Trending() {
                   ? `/explore?course=${encodeURIComponent(t.tag)}`
                   : `/explore?q=${encodeURIComponent(t.tag)}`
               }
-              className="trend-row"
+              className="flex items-center justify-between border-b border-line-soft py-2 text-15 font-semibold text-ink last:border-b-0 hover:text-navy-ink"
             >
               <span>{t.course ? t.tag : `#${t.tag}`}</span>
-              <span className="muted">{t.count} this week</span>
+              <span className="text-13 font-normal text-muted">{t.count} this week</span>
             </Link>
           ))}
         </div>
@@ -51,11 +50,11 @@ function ComingUp() {
   })
 
   return (
-    <Panel title="Coming up" gap={16}>
+    <Panel title="Coming up" className="gap-4">
       {events && events.length === 0 && (
-        <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+        <p className="text-14 leading-normal text-muted">
           No events posted yet.{' '}
-          <Link to="/orgs" style={{ fontWeight: 600 }}>
+          <Link to="/orgs" className="font-semibold">
             Browse clubs &amp; labs
           </Link>
         </p>
@@ -64,15 +63,14 @@ function ComingUp() {
         <Link
           key={e.id}
           to={`/orgs/${e.org.slug}`}
-          className="row event-row"
-          style={{ gap: 12, alignItems: 'flex-start' }}
+          className="flex items-start gap-3 text-ink hover:text-navy-ink"
         >
-          <span className="event-icon">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-btn bg-gold-tint text-gold-ink">
             <Icon name="calendar" size={20} />
           </span>
           <span>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>{e.title}</span>
-            <span className="muted" style={{ fontSize: 13 }}>
+            <span className="block text-15 font-semibold">{e.title}</span>
+            <span className="text-13 text-muted">
               {e.org.name} ·{' '}
               {new Date(e.date).toLocaleDateString(undefined, {
                 weekday: 'short',
@@ -94,15 +92,15 @@ function Person({
 }) {
   const follow = useFollow(person.id)
   return (
-    <div className="row" style={{ gap: 10 }}>
+    <div className="flex items-center gap-2.5">
       <Link to={`/u/${person.id}`} tabIndex={-1} aria-hidden="true">
         <Avatar person={person} size={40} />
       </Link>
-      <div className="grow">
-        <Link to={`/u/${person.id}`} className="person-name">
+      <div className="min-w-0 grow">
+        <Link to={`/u/${person.id}`} className="block text-15 font-semibold text-ink">
           {person.name}
         </Link>
-        <div className="muted clamp-1" style={{ fontSize: 13 }}>
+        <div className="line-clamp-1 text-13 text-muted">
           {[person.faculty, campusShort(person.campus)].filter(Boolean).join(' · ')}
         </div>
       </div>
@@ -148,12 +146,12 @@ function PeopleInProgram() {
 
 export function RightRail() {
   return (
-    <aside className="rail rail--right">
+    <Rail className="hidden gap-5 2xl:flex">
       <WeekActivity compact />
       <Trending />
       <ComingUp />
       <PeopleInProgram />
       <FooterNote />
-    </aside>
+    </Rail>
   )
 }

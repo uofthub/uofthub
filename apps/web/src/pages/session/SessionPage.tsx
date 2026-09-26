@@ -9,13 +9,13 @@ import { ThemeToggle } from '../../components/shell/ThemeToggle'
 import {
   Button,
   ErrorText,
+  Eyebrow,
   Field,
   Icon,
   Input,
   SegmentedTabs,
   type IconName,
 } from '../../components/ui'
-import './session.css'
 
 /** Matches the domain rule the API enforces on /auth/register. */
 const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
@@ -54,8 +54,7 @@ function CredentialsForm({ mode }: { mode: Mode }) {
 
   return (
     <form
-      className="stack"
-      style={{ gap: 16 }}
+      className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault()
         if (complete && domainOk) submit.mutate()
@@ -84,8 +83,9 @@ function CredentialsForm({ mode }: { mode: Mode }) {
         label="Password"
         hint={mode === 'signup' ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
       >
-        <span className="pw">
+        <span className="relative block">
           <Input
+            className="pr-12"
             type={show ? 'text' : 'password'}
             value={form.password}
             onChange={set('password')}
@@ -99,7 +99,7 @@ function CredentialsForm({ mode }: { mode: Mode }) {
             icon={show ? 'eyeOff' : 'eye'}
             aria-label={show ? 'Hide password' : 'Show password'}
             onClick={() => setShow((s) => !s)}
-            className="pw__toggle"
+            className="absolute top-0.5 right-0.5"
           />
         </span>
       </Field>
@@ -137,36 +137,38 @@ export default function SessionPage() {
   }, [user, navigate])
 
   return (
-    <div className="session">
-      <aside className="session__brand">
-        <div className="session__logo">
+    <div className="flex min-h-screen bg-page">
+      <aside className="hidden flex-[1_1_45%] flex-col justify-between gap-8 bg-panel px-14 py-10 text-white lg:flex">
+        <div>
           <Logo tone="white" />
         </div>
-        <div className="stack" style={{ gap: 16, maxWidth: 460 }}>
-          <h1 className="disp session__title">Everything you built, worth keeping.</h1>
-          <p className="session__lede">
+        <div className="flex max-w-115 flex-col gap-4">
+          <h1 className="font-display text-44 leading-[1.05] font-bold tracking-tightest">
+            Everything you built, worth keeping.
+          </h1>
+          <p className="text-16 leading-[1.55] text-navy-text">
             A living portfolio of the projects, papers and prototypes you make at U of T — built as
             you go, not scrambled together the week an application is due.
           </p>
-          <ul className="stack" style={{ gap: 14, listStyle: 'none', padding: 0, marginTop: 12 }}>
+          <ul className="mt-3 flex flex-col gap-3.5">
             {HIGHLIGHTS.map((h) => (
-              <li key={h.text} className="row" style={{ gap: 12 }}>
-                <Icon name={h.icon} size={20} style={{ color: 'var(--gold)' }} />
+              <li key={h.text} className="flex items-center gap-3">
+                <Icon name={h.icon} size={20} className="text-gold" />
                 <span>{h.text}</span>
               </li>
             ))}
           </ul>
         </div>
-        <p className="session__fine">Not affiliated with the University of Toronto.</p>
+        <p className="text-13 text-navy-soft">Not affiliated with the University of Toronto.</p>
       </aside>
 
-      <main className="session__form">
-        <div className="session__close">
+      <main className="relative flex flex-[1_1_55%] items-center justify-center px-6 py-10">
+        <div className="absolute top-4 right-4 flex gap-1">
           <ThemeToggle bare />
           <Button variant="ghost" iconOnly icon="close" to="/" aria-label="Back to uofthub" />
         </div>
-        <div className="stack" style={{ gap: 20, width: '100%', maxWidth: 420 }}>
-          <div className="session__mobile-logo">
+        <div className="flex w-full max-w-105 flex-col gap-5">
+          <div className="lg:hidden">
             <Logo />
           </div>
           <SegmentedTabs<Mode>
@@ -177,13 +179,13 @@ export default function SessionPage() {
               { value: 'login', label: 'Log in' },
               { value: 'signup', label: 'Sign up' },
             ]}
-            className="session__tabs"
+            itemClassName="flex-1"
           />
           <div>
-            <h2 className="disp" style={{ fontSize: 30, letterSpacing: '-0.02em' }}>
+            <h2 className="font-display text-30 font-bold tracking-tighter">
               {mode === 'login' ? 'Welcome back' : 'Create your account'}
             </h2>
-            <p className="muted" style={{ marginTop: 6, fontSize: 15 }}>
+            <p className="mt-1.5 text-15 text-muted">
               {mode === 'login'
                 ? 'Sign in with the Microsoft account attached to your U of T email.'
                 : 'Any current student, alum or faculty member with a U of T email can join.'}
@@ -198,11 +200,14 @@ export default function SessionPage() {
           >
             {mode === 'login' ? 'Continue with UTORid' : 'Sign up with UTORid'}
           </Button>
-          <div className="session__or">
+          <Eyebrow
+            as="div"
+            className="flex items-center gap-3 before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line"
+          >
             <span>or with email</span>
-          </div>
+          </Eyebrow>
           <CredentialsForm key={mode} mode={mode} />
-          <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>
+          <p className="text-center text-13 text-muted">
             Anything you mark public can be seen by anyone on the internet.
           </p>
         </div>

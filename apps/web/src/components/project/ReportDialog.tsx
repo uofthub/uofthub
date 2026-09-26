@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import type { ReportReason } from '@uofthub/types'
 import { api } from '../../lib/api'
 import { REPORT_REASONS } from '../../lib/moderation'
-import { Button, Dialog, ErrorText, Field, Icon, Select, TextArea } from '../ui'
+import { Button, Dialog, ErrorText, Field, Select, SuccessText, TextArea } from '../ui'
 
 export function ReportDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const [reason, setReason] = useState<ReportReason>(REPORT_REASONS[0].value)
@@ -31,10 +31,7 @@ export function ReportDialog({ projectId, onClose }: { projectId: string; onClos
       }
     >
       {send.isSuccess ? (
-        <p className="row" style={{ gap: 8, color: 'var(--green-ink)' }}>
-          <Icon name="check" />
-          Thanks — a moderator will review this.
-        </p>
+        <SuccessText>Thanks — a moderator will review this.</SuccessText>
       ) : (
         <>
           <Field label="What is wrong with it?">

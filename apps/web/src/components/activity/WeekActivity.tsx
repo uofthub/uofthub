@@ -4,15 +4,14 @@ import { api, type FeedActivity } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { timeShort } from '../../lib/projectView'
 import { REACTIONS, reactionLabel } from '../../lib/reactions'
-import { Avatar, Button, Icon, Panel } from '../ui'
-import './activity.css'
+import { Avatar, Button, Card, cx, Eyebrow, Heading, Icon, Panel } from '../ui'
 
 /** This week's views against last week's. No arrow before there is a last week. */
 function Delta({ now, before }: { now: number; before: number }) {
   if (before === 0 || now === before) return null
   const up = now > before
   return (
-    <span className={up ? 'wk-delta wk-delta--up' : 'wk-delta'}>
+    <span className={cx('text-13 font-bold', up ? 'text-green-ink' : 'text-muted')}>
       {up ? '+' : ''}
       {now - before}
     </span>
@@ -30,13 +29,11 @@ function Metric({
 }) {
   return (
     <div>
-      <div className="row" style={{ gap: 6, alignItems: 'baseline' }}>
-        <span className="disp wk-metric">{value}</span>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-display text-26 leading-[1.1] font-bold">{value}</span>
         {children}
       </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        {label}
-      </div>
+      <div className="text-13 text-muted">{label}</div>
     </div>
   )
 }
@@ -49,7 +46,13 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
 
   return (
     <>
-      <div className={compact ? 'wk-metrics wk-metrics--compact' : 'wk-metrics'}>
+      <div
+        className={
+          compact
+            ? 'grid grid-cols-2 gap-x-4 gap-y-3'
+            : 'flex flex-wrap gap-9 border-y border-line-soft py-3.5'
+        }
+      >
         <Metric value={activity.views} label={activity.views === 1 ? 'view' : 'views'}>
           <Delta now={activity.views} before={activity.previousViews} />
         </Metric>
@@ -67,22 +70,22 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
       {/* Names and sentences, not just counters — a counter that only moves
           when you reload is exactly the "nobody reads it" feeling. */}
       {comments.length > 0 && (
-        <ul className="wk-comments">
+        <ul className="flex flex-col gap-3.5">
           {comments.map((c) => (
-            <li key={c.id} className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+            <li key={c.id} className="flex items-start gap-2.5">
               <Link to={`/u/${c.user.id}`} tabIndex={-1} aria-hidden="true">
                 <Avatar person={c.user} size={compact ? 28 : 32} />
               </Link>
-              <div className="grow">
-                <div style={{ fontSize: 14 }}>
-                  <Link to={`/u/${c.user.id}`} className="wk-name">
+              <div className="min-w-0 grow">
+                <div className="text-14">
+                  <Link to={`/u/${c.user.id}`} className="font-semibold text-ink">
                     {c.user.name}
                   </Link>{' '}
-                  <span className="muted">on</span>{' '}
+                  <span className="text-muted">on</span>{' '}
                   <Link to={`/projects/${c.project.id}#comments`}>{c.project.title}</Link>
-                  {!compact && <span className="muted"> · {timeShort(c.createdAt)}</span>}
+                  {!compact && <span className="text-muted"> · {timeShort(c.createdAt)}</span>}
                 </div>
-                <p className="clamp-2 wk-quote">{c.body}</p>
+                <p className="mt-0.5 line-clamp-2 text-14 leading-[1.45] text-ink-3">{c.body}</p>
               </div>
             </li>
           ))}
@@ -91,7 +94,7 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
 
       {/* All-time, and worded so it doesn't pretend to be this week's news. */}
       {latest && (
-        <p className="muted row" style={{ gap: 6, fontSize: 13, alignItems: 'flex-start' }}>
+        <p className="flex items-start gap-1.5 text-13 text-muted">
           <Icon name={REACTIONS.find((r) => r.kind === latest.kind)?.icon ?? 'star'} size={15} />
           <span>
             Most recent reaction: <Link to={`/u/${latest.user.id}`}>{latest.user.name}</Link> —{' '}
@@ -104,7 +107,7 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
       {/* Only for somebody who has never had a visitor: telling a student whose
           work was read last month that nobody has been by would be wrong. */}
       {engagement === 0 && activity.views === 0 && !history && (
-        <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+        <p className="text-14 leading-normal text-muted">
           Nobody has been by yet. Projects set to <b>U of T only</b> or <b>Public</b> show up in
           other students’ feeds — a draft is only visible to you.
         </p>
@@ -133,26 +136,24 @@ export function WeekActivity({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <Panel title="Your work this week" gap={14}>
+      <Panel title="Your work this week">
         <Body activity={activity} compact />
       </Panel>
     )
   }
 
   return (
-    <section className="card wk">
-      <div className="row wrap" style={{ justifyContent: 'space-between', gap: 12 }}>
+    <Card as="section" className="flex flex-col gap-4.5 px-6 py-5.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="lbl">Hey, {user.name.split(/\s+/)[0]}</span>
-          <h2 className="h2" style={{ fontSize: 20, marginTop: 4 }}>
-            Your work this week
-          </h2>
+          <Eyebrow as="span">Hey, {user.name.split(/\s+/)[0]}</Eyebrow>
+          <Heading className="mt-1 text-20">Your work this week</Heading>
         </div>
         <Button size="sm" icon="plus" to="/projects/new">
           Share a project
         </Button>
       </div>
       <Body activity={activity} compact={false} />
-    </section>
+    </Card>
   )
 }

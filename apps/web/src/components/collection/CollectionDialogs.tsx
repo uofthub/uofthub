@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type CollectionSummary } from '../../lib/api'
-import { Button, Dialog, ErrorText, Field, Icon, Input, Spinner, TextArea } from '../ui'
+import { Button, cx, Dialog, ErrorText, Field, Icon, Input, Spinner, TextArea } from '../ui'
 
 const TITLE_MAX = 80
 const DESCRIPTION_MAX = 500
@@ -83,7 +83,7 @@ export function CollectionDialog({
           placeholder="First-year projects that punch above their weight."
         />
       </Field>
-      <p className="muted" style={{ fontSize: 13 }}>
+      <p className="text-13 text-muted">
         Anyone can see a collection. Each person only sees the projects in it they could already
         see.
       </p>
@@ -140,26 +140,31 @@ export function AddToCollectionDialog({
       {isLoading ? (
         <Spinner />
       ) : !data || data.length === 0 ? (
-        <p className="muted" style={{ fontSize: 15 }}>
+        <p className="text-15 text-muted">
           You don’t have a collection yet. Start one with this project in it.
         </p>
       ) : (
-        <ul className="pick-list">
+        <ul className="flex flex-col gap-1">
           {data.map((c) => (
             <li key={c.id}>
               <button
                 type="button"
-                className="pick-list__item"
+                className="flex w-full items-center gap-3 rounded-btn px-3 py-2.5 text-ink hover:bg-fill"
                 aria-pressed={c.hasProject}
                 disabled={toggle.isPending}
                 onClick={() => toggle.mutate({ id: c.id, has: c.hasProject })}
               >
-                <span className={c.hasProject ? 'pick-box pick-box--on' : 'pick-box'}>
+                <span
+                  className={cx(
+                    'flex size-5.5 shrink-0 items-center justify-center rounded-md border-2',
+                    c.hasProject ? 'border-navy bg-navy text-white' : 'border-line-strong'
+                  )}
+                >
                   {c.hasProject && <Icon name="check" size={14} />}
                 </span>
-                <span className="grow" style={{ textAlign: 'left' }}>
-                  <b style={{ fontWeight: 600 }}>{c.title}</b>
-                  <span className="muted" style={{ fontSize: 13, display: 'block' }}>
+                <span className="min-w-0 grow text-left">
+                  <b className="font-semibold">{c.title}</b>
+                  <span className="block text-13 text-muted">
                     {c.projectCount} project{c.projectCount === 1 ? '' : 's'}
                   </span>
                 </span>

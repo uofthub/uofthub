@@ -12,7 +12,7 @@ import {
   ProjectListRow,
   type CardLayout,
 } from '../../components/project'
-import { Avatar, Button, EmptyState, Spinner } from '../../components/ui'
+import { Avatar, Button, EmptyState, Page, PageLede, PageTitle, Spinner } from '../../components/ui'
 
 /** One collection: who put it together, why, and the projects in it you can see. */
 export default function CollectionPage() {
@@ -45,25 +45,25 @@ export default function CollectionPage() {
   if (isLoading) return <Spinner />
   if (!data)
     return (
-      <div className="page">
+      <Page>
         <EmptyState icon="layers" title="That collection doesn’t exist" />
-      </div>
+      </Page>
     )
 
   const own = user?.id === data.owner.id
   const n = data.projectCount
 
   return (
-    <div className="page page--wide stack" style={{ gap: 28 }}>
+    <Page width="wide" className="flex flex-col gap-7">
       {editing && <CollectionDialog collection={data} onClose={() => setEditing(false)} />}
-      <div className="stack" style={{ gap: 12 }}>
-        <Link to="/collections" className="muted" style={{ fontSize: 14, fontWeight: 600 }}>
+      <div className="flex flex-col gap-3">
+        <Link to="/collections" className="text-14 font-semibold text-muted hover:text-navy-deep">
           ← Collections
         </Link>
-        <div className="row wrap" style={{ justifyContent: 'space-between', gap: 16 }}>
-          <h1 className="page-title">{data.title}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <PageTitle>{data.title}</PageTitle>
           {(own || user?.isAdmin) && (
-            <span className="row" style={{ gap: 8 }}>
+            <span className="flex items-center gap-2">
               {own && (
                 <Button icon="pen" onClick={() => setEditing(true)}>
                   Edit
@@ -83,12 +83,12 @@ export default function CollectionPage() {
             </span>
           )}
         </div>
-        {data.description && <p className="page-lede">{data.description}</p>}
-        <Link to={`/u/${data.owner.id}`} className="row" style={{ gap: 10, fontSize: 14 }}>
+        {data.description && <PageLede>{data.description}</PageLede>}
+        <Link to={`/u/${data.owner.id}`} className="flex items-center gap-2.5 text-14">
           <Avatar person={data.owner} size={28} />
           <span>
-            Curated by <b style={{ fontWeight: 600 }}>{data.owner.name}</b>
-            <span className="muted">
+            Curated by <b className="font-semibold">{data.owner.name}</b>
+            <span className="text-muted">
               {' '}
               · {n} project{n === 1 ? '' : 's'} · updated {timeAgo(data.updatedAt)}
             </span>
@@ -102,10 +102,10 @@ export default function CollectionPage() {
         </EmptyState>
       ) : own ? (
         // The curator gets rows with a way to take a project out.
-        <div className="stack" style={{ gap: 14 }}>
+        <div className="flex flex-col gap-3.5">
           {data.projects.map((p) => (
-            <div key={p.id} className="row" style={{ gap: 10, alignItems: 'stretch' }}>
-              <div className="grow" style={{ minWidth: 0 }}>
+            <div key={p.id} className="flex items-stretch gap-2.5">
+              <div className="min-w-0 grow">
                 <ProjectListRow project={p} />
               </div>
               <Button
@@ -115,19 +115,19 @@ export default function CollectionPage() {
                 title="Remove from collection"
                 disabled={remove.isPending}
                 onClick={() => remove.mutate(p.id)}
-                style={{ alignSelf: 'center' }}
+                className="self-center"
               />
             </div>
           ))}
         </div>
       ) : (
         <>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <div className="flex items-center justify-end">
             <LayoutToggle value={layout} onChange={setLayout} />
           </div>
           <ProjectCollection projects={data.projects} layout={layout} />
         </>
       )}
-    </div>
+    </Page>
   )
 }

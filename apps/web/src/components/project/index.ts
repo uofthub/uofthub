@@ -1,5 +1,3 @@
-import './project.css'
-
 export { Cover, CoverTag } from './Cover'
 export { coverPalette, COVER_PALETTES } from './palette'
 export { ProjectCard, ProjectListRow, ProjectCollection } from './ProjectCard'

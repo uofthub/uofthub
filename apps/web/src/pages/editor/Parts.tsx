@@ -10,6 +10,9 @@ import { move, newId, type DraftDetail, type DraftReference, type DraftSection }
  * its list and hands back a new one; the page owns the draft.
  */
 
+/** One section or reference in a list the author is editing. */
+const block = 'flex flex-col gap-3 rounded-[14px] border border-line p-4'
+
 function RowTools({
   index,
   count,
@@ -24,7 +27,7 @@ function RowTools({
   onRemove: () => void
 }) {
   return (
-    <div className="row" style={{ gap: 4 }}>
+    <div className="flex items-center gap-1">
       <Button
         size="sm"
         variant="ghost"
@@ -95,14 +98,14 @@ export function SectionsEditor({
     ])
 
   return (
-    <div className="stack" style={{ gap: 16 }}>
+    <div className="flex flex-col gap-4">
       {sections.map((section, i) => {
         const heading = sectionLabel({ ...section, title: section.title }, type)
         const noun = section.kind === 'approaches' ? 'approach' : 'example'
         return (
-          <div key={section.id} className="editor-block">
-            <div className="row" style={{ gap: 8, justifyContent: 'space-between' }}>
-              <b className="editor-block__title">{heading}</b>
+          <div key={section.id} className={block}>
+            <div className="flex items-center justify-between gap-2">
+              <b className="text-15">{heading}</b>
               <RowTools
                 index={i}
                 count={sections.length}
@@ -131,10 +134,10 @@ export function SectionsEditor({
               />
             </Field>
             {ITEM_KINDS.has(section.kind) && (
-              <div className="stack" style={{ gap: 10 }}>
+              <div className="flex flex-col gap-2.5">
                 {section.items.map((item, k) => (
-                  <div key={item.key} className="editor-item">
-                    <div className="row" style={{ gap: 8 }}>
+                  <div key={item.key} className="flex flex-col gap-2 rounded-xl bg-fill p-3">
+                    <div className="flex items-center gap-2">
                       <Input
                         aria-label={`Name of ${noun} ${k + 1}`}
                         value={item.label}
@@ -147,7 +150,7 @@ export function SectionsEditor({
                         }
                         placeholder={section.kind === 'approaches' ? 'e.g. Human baseline' : 'Name'}
                         maxLength={80}
-                        className="grow"
+                        className="min-w-0 grow"
                       />
                       <Button
                         size="sm"
@@ -155,9 +158,7 @@ export function SectionsEditor({
                         iconOnly
                         icon="close"
                         aria-label={`Remove ${noun} ${k + 1}`}
-                        onClick={() =>
-                          set(i, { items: section.items.filter((_, m) => m !== k) })
-                        }
+                        onClick={() => set(i, { items: section.items.filter((_, m) => m !== k) })}
                       />
                     </div>
                     <TextArea
@@ -236,16 +237,16 @@ export function DetailsEditor({
   const set = (i: number, patch: Partial<DraftDetail>) =>
     onChange(details.map((d, j) => (j === i ? { ...d, ...patch } : d)))
   return (
-    <div className="stack" style={{ gap: 8 }}>
+    <div className="flex flex-col gap-2">
       {details.map((d, i) => (
-        <div key={d.key} className="row" style={{ gap: 8 }}>
+        <div key={d.key} className="flex items-center gap-2">
           <Input
             aria-label={`Detail ${i + 1} label`}
             value={d.label}
             onChange={(e) => set(i, { label: e.target.value })}
             placeholder="Supervisor"
             maxLength={40}
-            style={{ width: 170 }}
+            className="w-42.5"
           />
           <Input
             aria-label={d.label ? d.label : `Detail ${i + 1} value`}
@@ -253,7 +254,7 @@ export function DetailsEditor({
             onChange={(e) => set(i, { value: e.target.value })}
             placeholder={d.placeholder ?? 'Prof. Ada Lovelace'}
             maxLength={200}
-            className="grow"
+            className="min-w-0 grow"
           />
           <Button
             size="sm"
@@ -306,20 +307,18 @@ export function ReferencesEditor({
     onChange(references.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   const suggested = hint?.kinds ?? ['DATASET', 'PAPER']
   return (
-    <div className="stack" style={{ gap: 12 }}>
+    <div className="flex flex-col gap-3">
       {hint?.prompt && references.length === 0 && (
-        <p className="muted" style={{ fontSize: 14 }}>
-          {hint.prompt}
-        </p>
+        <p className="text-14 text-muted">{hint.prompt}</p>
       )}
       {references.map((r, i) => (
-        <div key={r.key} className="editor-block">
-          <div className="row" style={{ gap: 8 }}>
+        <div key={r.key} className={block}>
+          <div className="flex items-center gap-2">
             <Select
               aria-label={`Reference ${i + 1} kind`}
               value={r.kind}
               onChange={(e) => set(i, { kind: e.target.value as DraftReference['kind'] })}
-              style={{ width: 150 }}
+              className="w-37.5"
             >
               {REFERENCE_KIND_KEYS.map((k) => (
                 <option key={k} value={k}>
@@ -333,7 +332,7 @@ export function ReferencesEditor({
               onChange={(e) => set(i, { title: e.target.value })}
               placeholder="Title"
               maxLength={200}
-              className="grow"
+              className="min-w-0 grow"
             />
             <RowTools
               index={i}
@@ -343,7 +342,7 @@ export function ReferencesEditor({
               onRemove={() => onChange(references.filter((_, j) => j !== i))}
             />
           </div>
-          <div className="editor-grid">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
             <Input
               aria-label="Link"
               type="url"
@@ -382,13 +381,22 @@ export function ReferencesEditor({
         </div>
       ))}
       {references.length < 30 && (
-        <div className="row wrap" style={{ gap: 8 }}>
+        <div className="flex flex-wrap items-center gap-2">
           {suggested.map((k) => (
-            <Button key={k} size="sm" icon="plus" onClick={() => onChange([...references, emptyReference(k)])}>
+            <Button
+              key={k}
+              size="sm"
+              icon="plus"
+              onClick={() => onChange([...references, emptyReference(k)])}
+            >
               Add a {REFERENCE_KINDS[k].label.toLowerCase()}
             </Button>
           ))}
-          <Button size="sm" variant="ghost" onClick={() => onChange([...references, emptyReference('OTHER')])}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onChange([...references, emptyReference('OTHER')])}
+          >
             Something else
           </Button>
         </div>

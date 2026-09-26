@@ -51,7 +51,17 @@ Add a test with the change when you touch a route that decides who can see or do
 
 ## Code style
 
-> Code style conventions will be documented here once the stack and tooling are finalized.
+`pnpm format` runs Prettier, which also sorts Tailwind classes.
+
+### Styling (apps/web)
+
+The web app is styled with Tailwind CSS v4, written as utility classes in the components. There are no per-component stylesheets.
+
+- **Tokens live in `src/index.css`** as a Tailwind `@theme`: colours (`bg-surface`, `text-ink-3`, `border-line`, `text-navy-ink`…), type sizes named by pixel value (`text-15`), `rounded-card`, `shadow-pop`, and so on. Tailwind's own palette is switched off, so use a token rather than `bg-blue-500`. Dark mode redefines the same tokens, so most components need no `dark:` classes at all.
+- **Reach for a component before a class list.** `src/components/ui` has `Button`, `Chip`, `Card`, `Panel`, `Heading`, `Eyebrow`, `PageTitle`, `Page`, `Notice`, `Field`, `Dialog` and friends. If the same handful of classes shows up in a third place, it probably wants to be a component.
+- **Combine classes with `cx`** (from `components/ui`). It merges Tailwind classes, so a `className` passed to a component overrides its defaults — `<Heading className="text-18">` replaces the 22px default rather than fighting it.
+- **Breakpoints are mobile first**: `sm` 640, `md` 720 (the phone line; `PHONE` in `lib/hooks.ts` matches it), `lg` 960, `xl` 1100, `2xl` 1200.
+- Keep `style={{…}}` for values that come from data (an avatar's size, a faculty's colour, a chart bar's height).
 
 ---
 

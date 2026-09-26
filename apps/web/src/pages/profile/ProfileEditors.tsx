@@ -11,6 +11,7 @@ import {
   Dialog,
   ErrorText,
   Field,
+  FieldRow,
   Input,
   Menu,
   MenuItem,
@@ -18,6 +19,13 @@ import {
   TextArea,
   Toggle,
 } from '../../components/ui'
+
+/**
+ * The profile's big avatar: ringed in the page colour so it reads as sitting
+ * on the banner's edge, and smaller on a phone. The sizes beat the inline ones
+ * Avatar sets, hence the !.
+ */
+export const profileAvatar = 'border-5 border-page max-md:size-24! max-md:text-36! md:text-54!'
 
 /** The profile's big avatar, with a camera button for its owner. */
 export function AvatarEditor({
@@ -50,8 +58,8 @@ export function AvatarEditor({
   const busy = upload.isPending || remove.isPending
 
   return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <Avatar person={person} size={size} className="profile__avatar" />
+    <div className="relative shrink-0">
+      <Avatar person={person} size={size} className={profileAvatar} />
       <input
         ref={input}
         type="file"
@@ -64,7 +72,7 @@ export function AvatarEditor({
           if (f) upload.mutate(f)
         }}
       />
-      <span className="profile__camera">
+      <span className="absolute right-1.5 bottom-1.5">
         <Menu
           align="left"
           width={200}
@@ -95,7 +103,7 @@ export function AvatarEditor({
         </Menu>
       </span>
       {error && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, width: 240, marginTop: 6 }}>
+        <div className="absolute top-full left-0 mt-1.5 w-60">
           <ErrorText>{error}</ErrorText>
         </div>
       )}
@@ -179,11 +187,11 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
           {legacyFaculty && <option value={legacyFaculty}>{legacyFaculty}</option>}
         </Select>
       </Field>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="Program" className="grow">
+      <FieldRow>
+        <Field label="Program">
           <Input value={form.program} onChange={set('program')} placeholder="Engineering Science" />
         </Field>
-        <Field label="Graduating" className="grow">
+        <Field label="Graduating">
           <Input
             type="number"
             value={form.classYear}
@@ -191,7 +199,7 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
             placeholder="2027"
           />
         </Field>
-      </div>
+      </FieldRow>
       <Field label="Campus">
         <Select value={form.campus} onChange={set('campus')}>
           <option value="">Prefer not to say</option>
@@ -229,8 +237,8 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
           placeholder="https://"
         />
       </Field>
-      <div className="row wrap" style={{ gap: 16 }}>
-        <Field label="GitHub" className="grow">
+      <FieldRow>
+        <Field label="GitHub">
           <Input
             type="url"
             value={form.githubUrl}
@@ -238,7 +246,7 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
             placeholder="https://github.com/you"
           />
         </Field>
-        <Field label="LinkedIn" className="grow">
+        <Field label="LinkedIn">
           <Input
             type="url"
             value={form.linkedinUrl}
@@ -246,11 +254,11 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
             placeholder="https://linkedin.com/in/you"
           />
         </Field>
-      </div>
+      </FieldRow>
       <Toggle checked={allowMessages} onChange={setAllowMessages}>
         Let other students message me
       </Toggle>
-      <p className="muted" style={{ fontSize: 13, marginTop: -6 }}>
+      <p className="-mt-1.5 text-13 text-muted">
         Turning this off stops new conversations. People you’ve written to can still reply.
       </p>
       {save.isError && <ErrorText>{(save.error as Error).message}</ErrorText>}

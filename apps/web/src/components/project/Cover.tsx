@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { cx } from '../ui'
 import { coverPalette } from './palette'
 
 /**
@@ -23,23 +24,17 @@ export function Cover({
   children?: ReactNode
   style?: CSSProperties
 }) {
-  const frame: CSSProperties = {
-    position: 'relative',
-    height,
-    overflow: 'hidden',
-    borderRadius: radius,
-    flexShrink: 0,
-    ...style,
-  }
+  const frame = 'relative shrink-0 overflow-hidden'
+  const size: CSSProperties = { height, borderRadius: radius, ...style }
 
   if (project.coverUrl) {
     return (
-      <div style={frame}>
+      <div className={frame} style={size}>
         <img
           src={project.coverUrl}
           alt=""
           loading="lazy"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', background: 'var(--fill)' }}
+          className="size-full bg-fill object-cover"
         />
         {children}
       </div>
@@ -52,11 +47,11 @@ export function Cover({
   const title = project.title.trim() || 'Untitled'
 
   return (
-    <div style={frame} data-cover="generated">
+    <div className={frame} style={size} data-cover="generated">
       <svg
         viewBox="0 0 640 360"
         preserveAspectRatio="xMidYMid slice"
-        style={{ display: 'block', width: '100%', height: '100%' }}
+        className="size-full"
         aria-hidden="true"
       >
         <rect width="640" height="360" fill={p.ground} />
@@ -84,7 +79,10 @@ export function Cover({
         )}
       </svg>
       {!small && (
-        <span className="cover__title disp clamp-2" style={{ color: p.ink }}>
+        <span
+          className="absolute right-[34%] bottom-4.5 left-5.5 line-clamp-2 font-display text-26 leading-[1.08] font-extrabold tracking-tighter"
+          style={{ color: p.ink }}
+        >
           {title}
         </span>
       )}
@@ -94,9 +92,22 @@ export function Cover({
 }
 
 /** The white rounded tag in a cover's corner — "Live demo", "PDF · 14 pages". */
-export function CoverTag({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+export function CoverTag({
+  icon,
+  children,
+  className,
+}: {
+  icon?: ReactNode
+  children: ReactNode
+  className?: string
+}) {
   return (
-    <span className="cover__tag">
+    <span
+      className={cx(
+        'absolute bottom-3 left-3 flex h-6.5 items-center gap-1.5 rounded-full bg-white/94 px-2.5 text-12 font-semibold text-[#15171c]',
+        className
+      )}
+    >
       {icon}
       {children}
     </span>

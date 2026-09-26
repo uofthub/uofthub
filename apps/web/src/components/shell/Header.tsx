@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { Button } from '../ui'
 import { AccountMenu } from './AccountMenu'
@@ -16,10 +15,10 @@ export function Header() {
   const { user, maybeSignedIn } = useAuth()
 
   return (
-    <header className="topbar">
+    <header className="sticky top-0 z-50 flex h-header items-center gap-4 border-b border-line bg-surface px-5 2xl:gap-7 2xl:px-8">
       <Logo />
       <SearchBox />
-      <div className="topbar__actions">
+      <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
         {user ? (
           <>
@@ -29,10 +28,10 @@ export function Header() {
               variant="primary"
               icon="plus"
               to="/projects/new"
-              className="topbar__post"
+              className="max-[1000px]:w-11 max-[1000px]:px-0"
               aria-label="Post a project"
             >
-              <span className="topbar__post-label">Post a project</span>
+              <span className="max-[1000px]:hidden">Post a project</span>
             </Button>
             <AccountMenu />
           </>
@@ -41,12 +40,10 @@ export function Header() {
           // the space rather than flashing "Sign in" at somebody who is.
           !maybeSignedIn && (
             <>
-              <Link to="/session" className="btn">
-                Sign in
-              </Link>
-              <Link to="/session" state={{ mode: 'signup' }} className="btn btn-p">
+              <Button to="/session">Sign in</Button>
+              <Button variant="primary" to="/session" state={{ mode: 'signup' }}>
                 Join uofthub
-              </Link>
+              </Button>
             </>
           )
         )}

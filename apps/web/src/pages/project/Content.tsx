@@ -5,7 +5,7 @@ import { REFERENCE_KINDS, referenceByline, referenceHref } from '../../lib/refer
 import { sectionAnchor, sectionLabel, shownSections } from '../../lib/sections'
 import Markdown from '../../components/Markdown'
 import { MiniRow } from '../../components/project'
-import { Icon, Panel } from '../../components/ui'
+import { cx, Eyebrow, Icon, Panel } from '../../components/ui'
 
 /**
  * What a project says about itself: the overview, then each section it has.
@@ -16,13 +16,11 @@ import { Icon, Panel } from '../../components/ui'
  * prompts scattered over their own page.
  */
 
-const PANEL_STYLE = { padding: '30px 34px' }
-
 export function Overview({ project }: { project: ProjectDetail }) {
   const text = project.description?.trim()
   if (!text) return null
   return (
-    <Panel title="Overview" size="main" gap={18} style={PANEL_STYLE} id="overview">
+    <Panel title="Overview" size="story" id="overview">
       <Markdown source={text} />
     </Panel>
   )
@@ -33,10 +31,18 @@ function Items({ section }: { section: ProjectSection }) {
   if (items.length === 0) return null
   // Approaches are compared, so they sit side by side; examples read in order.
   return (
-    <div className={section.kind === 'approaches' ? 'section-items section-items--grid' : 'section-items'}>
+    <div
+      className={cx(
+        'grid gap-3.5',
+        section.kind === 'approaches' && 'grid-cols-[repeat(auto-fit,minmax(220px,1fr))]'
+      )}
+    >
       {items.map((item, i) => (
-        <article key={`${item.label}-${i}`} className="section-item">
-          <h3 className="section-item__label">{item.label}</h3>
+        <article
+          key={`${item.label}-${i}`}
+          className="flex min-w-0 flex-col gap-2 rounded-[14px] border border-line px-4.5 py-4"
+        >
+          <h3 className="text-16 font-[650]">{item.label}</h3>
           {item.body?.trim() && <Markdown source={item.body} />}
         </article>
       ))}
@@ -50,9 +56,7 @@ export function ProjectSections({ project }: { project: ProjectDetail }) {
       key={section.id}
       id={sectionAnchor(section)}
       title={sectionLabel(section, project.type)}
-      size="main"
-      gap={18}
-      style={PANEL_STYLE}
+      size="story"
     >
       {section.body?.trim() && <Markdown source={section.body} />}
       <Items section={section} />
@@ -78,8 +82,8 @@ export function References({ project }: { project: ProjectDetail }) {
   const listed = new Set<string>()
 
   return (
-    <Panel title="References" size="main" gap={16} style={PANEL_STYLE} id="references">
-      <ol className="references">
+    <Panel title="References" size="story" className="gap-4" id="references">
+      <ol className="grid gap-4 text-14 leading-normal">
         {references.map((ref) => {
           const kind = REFERENCE_KINDS[ref.kind]
           const href = referenceHref(ref)
@@ -88,12 +92,15 @@ export function References({ project }: { project: ProjectDetail }) {
           const others = ref.key && !listed.has(ref.key) ? alsoUsed.get(ref.key) : undefined
           if (ref.key) listed.add(ref.key)
           return (
-            <li key={ref.id} className="reference">
-              <span className="reference__icon" title={kind.label}>
+            <li key={ref.id} className="grid grid-cols-[32px_minmax(0,1fr)] items-start gap-3">
+              <span
+                className="grid size-8 place-items-center rounded-lg bg-fill text-navy-ink"
+                title={kind.label}
+              >
                 <Icon name={kind.icon} size={16} />
               </span>
-              <div className="stack" style={{ gap: 4, minWidth: 0 }}>
-                <span className="reference__title">
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-15 font-semibold wrap-anywhere">
                   {href ? (
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       {ref.title}
@@ -101,13 +108,13 @@ export function References({ project }: { project: ProjectDetail }) {
                   ) : (
                     ref.title
                   )}
-                  <span className="muted"> · {kind.label}</span>
+                  <span className="text-muted"> · {kind.label}</span>
                 </span>
-                {byline && <span className="muted">{byline}</span>}
+                {byline && <span className="text-muted">{byline}</span>}
                 {ref.note && <span>{ref.note}</span>}
                 {others && others.length > 0 && (
-                  <div className="stack" style={{ gap: 8, paddingTop: 6 }}>
-                    <span className="lbl">Also used in</span>
+                  <div className="flex flex-col gap-2 pt-1.5">
+                    <Eyebrow as="span">Also used in</Eyebrow>
                     {others.map((p) => (
                       <MiniRow key={p.id} project={p} />
                     ))}
@@ -137,12 +144,14 @@ export function Contents({ project }: { project: ProjectDetail }) {
   ]
   if (entries.length < 2) return null
   return (
-    <Panel title="Contents" style={{ padding: '20px 22px' }}>
+    <Panel title="Contents" className="px-5.5 py-5">
       <nav aria-label="Contents">
-        <ol className="contents">
+        <ol className="grid list-decimal gap-2 pl-5 text-14">
           {entries.map((e) => (
             <li key={e.href}>
-              <a href={e.href}>{e.label}</a>
+              <a href={e.href} className="text-ink">
+                {e.label}
+              </a>
             </li>
           ))}
         </ol>

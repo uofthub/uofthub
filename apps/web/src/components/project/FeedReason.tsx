@@ -3,6 +3,8 @@ import type { FeedReason as Reason } from '../../lib/api'
 import { campusLabel } from '../../lib/campus'
 import { Icon } from '../ui'
 
+const reasonLink = 'font-semibold text-ink-2 hover:text-ink-2'
+
 /** The line above a feed card saying why it is in this student's feed. */
 export function FeedReason({ reason }: { reason: Reason }) {
   const { icon, body } = (() => {
@@ -12,8 +14,10 @@ export function FeedReason({ reason }: { reason: Reason }) {
           icon: 'user' as const,
           body: (
             <>
-              <Link to={`/u/${reason.userId}`}>{reason.userName}</Link>, who you follow, published
-              this
+              <Link to={`/u/${reason.userId}`} className={reasonLink}>
+                {reason.userName}
+              </Link>
+              , who you follow, published this
             </>
           ),
         }
@@ -23,8 +27,10 @@ export function FeedReason({ reason }: { reason: Reason }) {
           body: (
             <>
               Tagged{' '}
-              <Link to={`/explore?course=${encodeURIComponent(reason.tag)}`}>{reason.tag}</Link> —
-              one of your courses
+              <Link to={`/explore?course=${encodeURIComponent(reason.tag)}`} className={reasonLink}>
+                {reason.tag}
+              </Link>{' '}
+              — one of your courses
             </>
           ),
         }
@@ -36,7 +42,7 @@ export function FeedReason({ reason }: { reason: Reason }) {
   })()
 
   return (
-    <div className="feed-card__reason muted">
+    <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-12 text-muted md:px-5 md:pt-3 md:text-13">
       <Icon name={icon} size={14} />
       <span>{body}</span>
     </div>

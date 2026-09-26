@@ -8,46 +8,61 @@ import { CAMPUS_SHORT, CAMPUSES } from '../../lib/campus'
 import { useDocumentTitle } from '../../lib/hooks'
 import { ORG_STATUS_DOTS, ORG_STATUS_LABELS } from '../../lib/orgs'
 import { CONTACT_EMAIL } from '../../lib/site'
-import { Button, Chip, EmptyState, Icon, Pill, Spinner } from '../../components/ui'
+import {
+  Button,
+  Card,
+  CardGrid,
+  Chip,
+  cx,
+  EmptyState,
+  Heading,
+  Icon,
+  Page,
+  PageLede,
+  PageTitle,
+  Pill,
+  Spinner,
+} from '../../components/ui'
 import { CreateOrgDialog } from './CreateOrgDialog'
-import './orgs.css'
 
 function OrgCard({ org }: { org: Org }) {
   const lab = org.type === 'LAB'
   return (
-    <Link to={`/orgs/${org.slug}`} className="card org-card">
-      <div className="row" style={{ gap: 12 }}>
+    <Card
+      as={Link}
+      to={`/orgs/${org.slug}`}
+      className="flex flex-col gap-3 p-5 text-ink hover:border-line-strong hover:text-ink"
+    >
+      <div className="flex items-center gap-3">
         <span
-          className="org-card__icon"
-          style={lab ? { background: 'var(--purple-tint)', color: 'var(--purple-ink)' } : undefined}
+          className={cx(
+            'flex size-11 shrink-0 items-center justify-center rounded-xl',
+            lab ? 'bg-purple-tint text-purple-ink' : 'bg-navy-tint text-navy-ink'
+          )}
         >
           <Icon name={lab ? 'flask' : 'users'} size={22} />
         </span>
-        <div className="grow">
-          <h3 className="disp clamp-1" style={{ fontSize: 19 }}>
-            {org.name}
-          </h3>
-          <span className="muted" style={{ fontSize: 13 }}>
+        <div className="min-w-0 grow">
+          <h3 className="line-clamp-1 font-display text-19 font-bold">{org.name}</h3>
+          <span className="text-13 text-muted">
             {lab ? 'Research lab' : 'Club'} · {org.campus ? CAMPUS_SHORT[org.campus] : 'Tri-campus'}
           </span>
         </div>
       </div>
       {org.description && (
-        <p className="clamp-2" style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--ink-3)' }}>
-          {org.description}
-        </p>
+        <p className="line-clamp-2 text-14 leading-[1.45] text-ink-3">{org.description}</p>
       )}
-      <div className="row wrap" style={{ gap: 12, marginTop: 'auto', fontSize: 13 }}>
+      <div className="mt-auto flex flex-wrap items-center gap-3 text-13">
         {org.status !== 'VERIFIED' && (
           <Pill dot={ORG_STATUS_DOTS[org.status]}>{ORG_STATUS_LABELS[org.status]}</Pill>
         )}
         {org._count && (
-          <span className="muted">
+          <span className="text-muted">
             {org._count.members} members · {org._count.projects} projects
           </span>
         )}
       </div>
-    </Link>
+    </Card>
   )
 }
 
@@ -67,17 +82,14 @@ export default function OrgsPage() {
   const mine = orgs.filter((o) => o.status !== 'VERIFIED')
 
   return (
-    <div className="page page--wide stack" style={{ gap: 32 }}>
+    <Page width="wide" className="flex flex-col gap-8">
       {creating && <CreateOrgDialog onClose={() => setCreating(false)} />}
-      <div
-        className="row wrap"
-        style={{ justifyContent: 'space-between', gap: 16, alignItems: 'flex-end' }}
-      >
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="page-title">Clubs &amp; labs</h1>
-          <p className="page-lede">
+          <PageTitle>Clubs &amp; labs</PageTitle>
+          <PageLede>
             Design teams, student clubs and research groups, and everything their members have made.
-          </p>
+          </PageLede>
         </div>
         {user?.isAdmin ? (
           <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
@@ -86,7 +98,7 @@ export default function OrgsPage() {
         ) : (
           // Groups are set up by a moderator, who checks the group is real
           // before its page exists.
-          <p className="muted" style={{ fontSize: 14, maxWidth: 320 }}>
+          <p className="max-w-80 text-14 text-muted">
             Want your club, design team or lab here?{' '}
             <a href={`mailto:${CONTACT_EMAIL}?subject=Add%20our%20group%20to%20uofthub`}>
               Email us
@@ -96,7 +108,7 @@ export default function OrgsPage() {
         )}
       </div>
 
-      <div className="row wrap" style={{ gap: 6 }}>
+      <div className="flex flex-wrap items-center gap-1.5">
         <Chip tone={campus === '' ? 'active' : 'default'} onClick={() => setCampus('')}>
           All campuses
         </Chip>
@@ -112,18 +124,18 @@ export default function OrgsPage() {
       </div>
 
       {mine.length > 0 && (
-        <section className="stack" style={{ gap: 14 }}>
+        <section className="flex flex-col gap-3.5">
           <div>
-            <h2 className="h2">Your groups, waiting for approval</h2>
-            <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+            <Heading>Your groups, waiting for approval</Heading>
+            <p className="mt-1 text-14 text-muted">
               Only members can see these until a moderator approves them.
             </p>
           </div>
-          <div className="card-grid">
+          <CardGrid>
             {mine.map((o) => (
               <OrgCard key={o.id} org={o} />
             ))}
-          </div>
+          </CardGrid>
         </section>
       )}
 
@@ -132,12 +144,12 @@ export default function OrgsPage() {
       ) : verified.length === 0 ? (
         <EmptyState icon="users" title="No verified groups yet" />
       ) : (
-        <div className="card-grid">
+        <CardGrid>
           {verified.map((o) => (
             <OrgCard key={o.id} org={o} />
           ))}
-        </div>
+        </CardGrid>
       )}
-    </div>
+    </Page>
   )
 }

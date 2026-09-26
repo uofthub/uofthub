@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ProjectDetail } from '../../lib/api'
@@ -8,13 +8,49 @@ import { REACTIONS, reactionLabel } from '../../lib/reactions'
 import {
   Avatar,
   Button,
+  cx,
   Dialog,
+  Dropzone,
   ErrorText,
+  Eyebrow,
   Field,
   Icon,
   Input,
   Spinner,
+  Stat,
+  SuccessText,
 } from '../../components/ui'
+
+/** A list of things the owner can remove or toggle, one outlined row each. */
+function ManageList({ children }: { children: ReactNode }) {
+  return <ul className="flex flex-col gap-2">{children}</ul>
+}
+
+/** One row of a ManageList: an icon, what it is, and the action on it. */
+function ManageRow({
+  as: Tag = 'li',
+  icon,
+  children,
+  action,
+}: {
+  as?: 'li' | 'div'
+  icon: ReactNode
+  children: ReactNode
+  action: ReactNode
+}) {
+  return (
+    <Tag className="flex items-center gap-2.5 rounded-btn border border-line px-2.5 py-2">
+      {icon}
+      <span className="flex min-w-0 grow flex-col">{children}</span>
+      {action}
+    </Tag>
+  )
+}
+
+/** A dialog's opening line, saying what the dialog is for. */
+function Intro({ children }: { children: ReactNode }) {
+  return <p className="text-14 text-muted">{children}</p>
+}
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, id: string) =>
   qc.invalidateQueries({ queryKey: ['project', id] })
@@ -99,36 +135,35 @@ export function LinksDialog({ project, onClose }: { project: ProjectDetail; onCl
 
   return (
     <Dialog title="Links" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
-      <p className="muted" style={{ fontSize: 14 }}>
+      <Intro>
         A live site becomes the “Try it live” button, a GitHub link becomes “View code”, a YouTube
         or Vimeo link becomes “Watch”.
-      </p>
+      </Intro>
       {links.length > 0 && (
-        <ul className="stack" style={{ gap: 8, listStyle: 'none', padding: 0 }}>
+        <ManageList>
           {links.map((l) => (
-            <li key={l.id} className="row manage-row">
-              <Icon name={LINK_ICONS[l.role]} size={18} />
-              <span className="grow">
-                <b style={{ fontWeight: 600 }}>{l.label || 'Link'}</b>
-                <span className="muted clamp-1" style={{ fontSize: 13 }}>
-                  {l.url}
-                </span>
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                iconOnly
-                icon="trash"
-                aria-label={`Remove ${l.label}`}
-                onClick={() => remove.mutate(l.id)}
-              />
-            </li>
+            <ManageRow
+              key={l.id}
+              icon={<Icon name={LINK_ICONS[l.role]} size={18} />}
+              action={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  iconOnly
+                  icon="trash"
+                  aria-label={`Remove ${l.label}`}
+                  onClick={() => remove.mutate(l.id)}
+                />
+              }
+            >
+              <b className="font-semibold">{l.label || 'Link'}</b>
+              <span className="line-clamp-1 text-13 text-muted">{l.url}</span>
+            </ManageRow>
           ))}
-        </ul>
+        </ManageList>
       )}
       <form
-        className="row wrap"
-        style={{ gap: 8 }}
+        className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault()
           if (url.trim()) add.mutate()
@@ -138,13 +173,13 @@ export function LinksDialog({ project, onClose }: { project: ProjectDetail; onCl
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Label, e.g. Live demo"
-          style={{ flex: '1 1 150px', width: 'auto' }}
+          className="w-auto flex-[1_1_150px]"
         />
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://"
-          style={{ flex: '2 1 220px', width: 'auto' }}
+          className="w-auto flex-[2_1_220px]"
         />
         <Button type="submit" icon="plus" disabled={!url.trim() || add.isPending}>
           Add
@@ -170,52 +205,51 @@ export function FilesDialog({ project, onClose }: { project: ProjectDetail; onCl
 
   return (
     <Dialog title="Files" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
-      <p className="muted" style={{ fontSize: 14 }}>
+      <Intro>
         Images and videos appear in the gallery; the first image is the cover on cards. Anything
         else is listed for download.
-      </p>
+      </Intro>
       {project.files.length > 0 && (
-        <ul className="stack" style={{ gap: 8, listStyle: 'none', padding: 0 }}>
+        <ManageList>
           {project.files.map((f) => {
             const look = lookFor(f.name)
             return (
-              <li key={f.id} className="row manage-row">
-                <span className="file-glyph" style={{ background: look.bg, color: look.ink }}>
-                  <Icon name={look.icon} size={16} />
-                </span>
-                <span className="grow">
-                  <b className="clamp-1" style={{ fontWeight: 600 }}>
-                    {f.name}
-                  </b>
-                  <span className="muted" style={{ fontSize: 13 }}>
-                    {formatBytes(f.sizeBytes)}
-                    {!previewKindFor(f.name) && ' · download only'}
+              <ManageRow
+                key={f.id}
+                icon={
+                  <span
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+                    style={{ background: look.bg, color: look.ink }}
+                  >
+                    <Icon name={look.icon} size={16} />
                   </span>
+                }
+                action={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    iconOnly
+                    icon="trash"
+                    aria-label={`Delete ${f.name}`}
+                    onClick={() => remove.mutate(f.id)}
+                  />
+                }
+              >
+                <b className="line-clamp-1 font-semibold">{f.name}</b>
+                <span className="text-13 text-muted">
+                  {formatBytes(f.sizeBytes)}
+                  {!previewKindFor(f.name) && ' · download only'}
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  iconOnly
-                  icon="trash"
-                  aria-label={`Delete ${f.name}`}
-                  onClick={() => remove.mutate(f.id)}
-                />
-              </li>
+              </ManageRow>
             )
           })}
-        </ul>
+        </ManageList>
       )}
-      <label className="dropzone">
-        <span className="dropzone__icon">
-          <Icon name="upload" size={20} />
-        </span>
-        <span className="grow">
-          <b style={{ fontWeight: 600 }}>{upload.isPending ? 'Uploading…' : 'Upload a file'}</b>
-          <span className="muted" style={{ display: 'block', fontSize: 13 }}>
-            Images, video, audio, PDFs, documents, slides, spreadsheets or a .zip
-          </span>
-        </span>
-        <span className="btn btn--md">Browse files</span>
+      <Dropzone
+        icon="upload"
+        title={upload.isPending ? 'Uploading…' : 'Upload a file'}
+        hint="Images, video, audio, PDFs, documents, slides, spreadsheets or a .zip"
+      >
         <input
           type="file"
           className="sr-only"
@@ -226,7 +260,7 @@ export function FilesDialog({ project, onClose }: { project: ProjectDetail; onCl
             if (file) upload.mutate(file)
           }}
         />
-      </label>
+      </Dropzone>
       {upload.isError && <ErrorText>{(upload.error as Error).message}</ErrorText>}
     </Dialog>
   )
@@ -269,9 +303,7 @@ export function InviteDialog({
       }
     >
       {invite.isSuccess ? (
-        <p className="row" style={{ gap: 8, color: 'var(--green-ink)' }}>
-          <Icon name="check" /> Invitation sent. They appear on the project once they accept.
-        </p>
+        <SuccessText>Invitation sent. They appear on the project once they accept.</SuccessText>
       ) : (
         <Field
           label="Their U of T email"
@@ -299,23 +331,23 @@ function ViewsChart({ days }: { days: { date: string; count: number }[] }) {
     `${new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: ${d.count} view${d.count === 1 ? '' : 's'}`
 
   return (
-    <figure className="stack" style={{ gap: 8 }}>
-      <figcaption className="lbl">Views, last 30 days</figcaption>
+    <figure className="flex flex-col gap-2">
+      <Eyebrow as="figcaption">Views, last 30 days</Eyebrow>
       <div
-        className="views-chart"
+        className="flex h-24 items-end border-b border-line"
         role="img"
         aria-label={`Daily views over the last ${days.length} days, peaking at ${max}`}
       >
         {days.map((d) => (
-          <span key={d.date} className="views-chart__slot" title={label(d)}>
+          <span key={d.date} className="group flex h-full flex-1 items-end px-px" title={label(d)}>
             <span
-              className="views-chart__bar"
+              className="w-full rounded-t-sm bg-navy group-hover:bg-navy-deep"
               style={{ height: `${Math.max(2, (d.count / max) * 100)}%` }}
             />
           </span>
         ))}
       </div>
-      <div className="row muted" style={{ justifyContent: 'space-between', fontSize: 12 }}>
+      <div className="flex items-center justify-between text-12 text-muted">
         <span>
           {new Date(days[0].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
         </span>
@@ -359,14 +391,14 @@ function AccessRequests({ projectId }: { projectId: string }) {
   const busy = approve.isPending || deny.isPending
 
   return (
-    <div className="stack" style={{ gap: 10 }}>
-      <span className="lbl">Access requests</span>
+    <div className="flex flex-col gap-2.5">
+      <Eyebrow as="span">Access requests</Eyebrow>
       {requests.map((r) => (
-        <div key={r.userId} className="row" style={{ gap: 10 }}>
+        <div key={r.userId} className="flex items-center gap-2.5">
           <Avatar person={r.user} size={32} />
-          <div className="grow">
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{r.user.name}</div>
-            <div className="muted" style={{ fontSize: 13 }}>
+          <div className="min-w-0 grow">
+            <div className="text-14 font-semibold">{r.user.name}</div>
+            <div className="text-13 text-muted">
               {r.user.faculty ?? r.user.email} — wants viewer access
             </div>
           </div>
@@ -408,7 +440,7 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
         <Spinner />
       ) : (
         <>
-          <div className="stat-row">
+          <div className="flex flex-wrap gap-10 border-b border-line-soft pt-1 pb-3.5">
             {[
               { label: 'Views', value: data.totalViews },
               { label: 'Comments', value: data.comments },
@@ -416,30 +448,20 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
               { label: 'Following', value: data.followers },
               { label: 'Forks', value: data.forks },
             ].map((s) => (
-              <div key={s.label}>
-                <div className="disp" style={{ fontSize: 24, fontWeight: 700 }}>
-                  {s.value}
-                </div>
-                <div className="muted" style={{ fontSize: 13 }}>
-                  {s.label}
-                </div>
-              </div>
+              <Stat key={s.label} value={s.value} label={s.label} />
             ))}
           </div>
 
           {/* Two adjacent weeks tell "quiet" apart from "slowing down", which a
               lifetime total cannot. */}
-          <p style={{ fontSize: 15 }}>
+          <p className="text-15">
             <b>{data.viewsThisWeek}</b> {data.viewsThisWeek === 1 ? 'view' : 'views'} this week
             {data.viewsLastWeek > 0 && (
               <>
                 , against {data.viewsLastWeek} last week
                 {change !== 0 && (
                   <span
-                    style={{
-                      color: change > 0 ? 'var(--green-ink)' : 'var(--muted)',
-                      fontWeight: 600,
-                    }}
+                    className={cx('font-semibold', change > 0 ? 'text-green-ink' : 'text-muted')}
                   >
                     {' '}
                     ({change > 0 ? '+' : ''}
@@ -454,26 +476,25 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
           {data.dailyViews.length > 0 && <ViewsChart days={data.dailyViews} />}
 
           {said.length > 0 && (
-            <p className="muted" style={{ fontSize: 14 }}>
+            <p className="text-14 text-muted">
               {said.map((r) => `${data.reactions[r.kind]} ${r.past}`).join(' · ')}.
             </p>
           )}
 
           {/* The one list nobody else sees: who offered to work on this. */}
           {data.collabInterest.length > 0 && (
-            <div className="stack" style={{ gap: 10 }}>
-              <span className="lbl">Want to collaborate</span>
+            <div className="flex flex-col gap-2.5">
+              <Eyebrow as="span">Want to collaborate</Eyebrow>
               {data.collabInterest.map(({ user, createdAt }) => (
                 <Link
                   key={user.id}
                   to={`/u/${user.id}`}
-                  className="row"
-                  style={{ gap: 10, color: 'var(--ink)' }}
+                  className="flex items-center gap-2.5 text-ink"
                 >
                   <Avatar person={user} size={32} />
-                  <span className="grow">
-                    <b style={{ fontWeight: 600, fontSize: 14, display: 'block' }}>{user.name}</b>
-                    <span className="muted" style={{ fontSize: 13 }}>
+                  <span className="min-w-0 grow">
+                    <b className="block text-14 font-semibold">{user.name}</b>
+                    <span className="text-13 text-muted">
                       {[user.faculty, timeAgo(createdAt)].filter(Boolean).join(' · ')}
                     </span>
                   </span>
@@ -485,18 +506,17 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
 
           {/* Views are anonymous and stay that way; a reaction is attributed. */}
           {data.recentReactions.length > 0 && (
-            <div className="stack" style={{ gap: 10 }}>
-              <span className="lbl">Recent reactions</span>
+            <div className="flex flex-col gap-2.5">
+              <Eyebrow as="span">Recent reactions</Eyebrow>
               {data.recentReactions.map((r) => (
                 <Link
                   key={`${r.user.id}-${r.kind}`}
                   to={`/u/${r.user.id}`}
-                  className="row"
-                  style={{ gap: 8, fontSize: 14, color: 'var(--ink-3)' }}
+                  className="flex items-center gap-2 text-14 text-ink-3"
                 >
                   <Avatar person={r.user} size={26} />
                   <span>
-                    <b style={{ fontWeight: 600, color: 'var(--ink)' }}>{r.user.name}</b> ·{' '}
+                    <b className="font-semibold text-ink">{r.user.name}</b> ·{' '}
                     {reactionLabel(r.kind).toLowerCase()}
                   </span>
                 </Link>
@@ -543,7 +563,7 @@ export function GroupsDialog({
       {isLoading ? (
         <Spinner />
       ) : !mine?.length ? (
-        <p className="muted" style={{ fontSize: 15, lineHeight: 1.5 }}>
+        <p className="text-15 leading-normal text-muted">
           You’re not a member of any club or lab yet. Ask your group’s exec to add you from its page
           on{' '}
           <Link to="/orgs" onClick={onClose}>
@@ -553,28 +573,31 @@ export function GroupsDialog({
         </p>
       ) : (
         <>
-          <p className="muted" style={{ fontSize: 14 }}>
+          <Intro>
             A linked group shows as “Built with …” on this project, and the project appears on the
             group’s page.
-          </p>
+          </Intro>
           {mine.map((org) => {
             const on = linked.has(org.slug)
             return (
-              <div key={org.slug} className="row manage-row">
-                <Icon name={org.type === 'LAB' ? 'flask' : 'users'} size={18} />
-                <span className="grow" style={{ fontWeight: 600 }}>
-                  {org.name}
-                </span>
-                <Button
-                  size="sm"
-                  variant={on ? 'default' : 'primary'}
-                  icon={on ? 'check' : 'plus'}
-                  onClick={() => toggle.mutate(org.slug)}
-                  disabled={toggle.isPending}
-                >
-                  {on ? 'Linked' : 'Link'}
-                </Button>
-              </div>
+              <ManageRow
+                key={org.slug}
+                as="div"
+                icon={<Icon name={org.type === 'LAB' ? 'flask' : 'users'} size={18} />}
+                action={
+                  <Button
+                    size="sm"
+                    variant={on ? 'default' : 'primary'}
+                    icon={on ? 'check' : 'plus'}
+                    onClick={() => toggle.mutate(org.slug)}
+                    disabled={toggle.isPending}
+                  >
+                    {on ? 'Linked' : 'Link'}
+                  </Button>
+                }
+              >
+                <span className="font-semibold">{org.name}</span>
+              </ManageRow>
             )
           })}
         </>

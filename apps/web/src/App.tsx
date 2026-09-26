@@ -50,7 +50,8 @@ export default function App() {
   return (
     <AppShell>
       <Suspense fallback={<Spinner />}>
-        <div key={pageKey(pathname)} className="page-in">
+        {/* Wraps the routed page, so it lays out exactly as a direct child would. */}
+        <div key={pageKey(pathname)} className="flex flex-1 flex-col motion-safe:animate-page-in">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/feed" element={<FeedRoute />} />

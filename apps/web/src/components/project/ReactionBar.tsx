@@ -5,12 +5,12 @@ import type { ReactionKind } from '@uofthub/types'
 import { api, type ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { REACTIONS } from '../../lib/reactions'
-import { Icon } from '../ui'
+import { cx, Icon, PillButton } from '../ui'
 
 type Tally = { counts: Record<ReactionKind, number>; mine: ReactionKind[] }
 
 /**
- * The row of `.rx` buttons under a project: Impressive, Want to collab,
+ * The row of pill buttons under a project: Impressive, Want to collab,
  * Learned something, and the comment count.
  *
  * It draws from the project it is handed — every list already carries the
@@ -57,15 +57,14 @@ export function ReactionBar({
   const mine = new Set(tally.mine)
 
   return (
-    <div className="rx-row">
+    <div className={cx('flex items-center gap-2', compact ? 'flex-nowrap gap-1.5' : 'flex-wrap')}>
       {REACTIONS.map((r) => {
         const count = tally.counts[r.kind] ?? 0
         const pressed = mine.has(r.kind)
         return (
-          <button
+          <PillButton
             key={r.kind}
-            type="button"
-            className="rx"
+            className={cx(compact && 'h-11')}
             aria-pressed={user ? pressed : undefined}
             aria-label={`${r.label}, ${count}`}
             title={user ? r.hint : 'Sign in to react'}
@@ -73,19 +72,20 @@ export function ReactionBar({
             onClick={() => (user ? toggle.mutate(r.kind) : navigate('/session'))}
           >
             <Icon name={r.icon} size={16} />
-            {!compact && <span className="rx__label">{r.label}</span>}
-            {(count > 0 || compact) && <b>{count}</b>}
-          </button>
+            {!compact && <span>{r.label}</span>}
+            {(count > 0 || compact) && <b className="font-semibold">{count}</b>}
+          </PillButton>
         )
       })}
-      <Link
+      <PillButton
+        as={Link}
         to={`/projects/${project.id}#comments`}
-        className="rx"
+        className={cx(compact && 'h-11')}
         aria-label={`${project._count.comments} comments`}
       >
         <Icon name="comment" size={16} />
         {project._count.comments}
-      </Link>
+      </PillButton>
     </div>
   )
 }

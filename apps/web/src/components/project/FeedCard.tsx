@@ -6,9 +6,21 @@ import { campusShort } from '../../lib/campus'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
 import { actionTarget, cardAction } from '../../lib/outputs'
 import { courseOf, postedAt, timeShort, topicTags } from '../../lib/projectView'
-import { Avatar, AvatarStack, Button, Chip, Icon, Menu, MenuItem } from '../ui'
+import {
+  Avatar,
+  AvatarStack,
+  Button,
+  Card,
+  Chip,
+  cx,
+  Icon,
+  Menu,
+  MenuItem,
+  PillButton,
+} from '../ui'
 import { Cover, CoverTag } from './Cover'
 import { SaveButton, StatusPill, TypeBadge, VisibilityPill } from './bits'
+import { titleLink } from './ProjectCard'
 import { ReactionBar } from './ReactionBar'
 import { ReportDialog } from './ReportDialog'
 import { FeedReason } from './FeedReason'
@@ -39,14 +51,19 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
   const copy = () => navigator.clipboard?.writeText(`${window.location.origin}${href}`)
 
   return (
-    <article className="card feed-card">
+    <Card as="article" className="overflow-hidden">
       {reporting && <ReportDialog projectId={project.id} onClose={() => setReporting(false)} />}
       {collecting && (
         <AddToCollectionDialog projectId={project.id} onClose={() => setCollecting(false)} />
       )}
 
       {reason && <FeedReason reason={reason} />}
-      <header className="feed-card__head">
+      <header
+        className={cx(
+          'flex items-center gap-2.5 px-3.5 pb-3 md:gap-3 md:px-5 md:pb-4',
+          reason ? 'pt-2 md:pt-2.5' : 'pt-3 md:pt-4'
+        )}
+      >
         {owner &&
           (partners.length > 0 && !phone ? (
             <AvatarStack people={[owner, ...partners]} size={40} max={2} />
@@ -55,18 +72,19 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
               <Avatar person={owner} size={phone ? 36 : 40} />
             </Link>
           ))}
-        <div className="stack grow" style={{ gap: 2 }}>
+        <div className="flex min-w-0 grow flex-col gap-0.5">
           {owner && (
-            <div className="feed-card__name">
-              <Link to={`/u/${owner.id}`}>{owner.name}</Link>
+            <div className="min-w-0 text-14 font-semibold text-ink md:text-15">
+              <Link to={`/u/${owner.id}`} className={titleLink}>
+                {owner.name}
+              </Link>
               {partners.length > 0 && (
                 <>
-                  <span className="muted" style={{ fontWeight: 400 }}>
-                    {' '}
-                    and{' '}
-                  </span>
+                  <span className="font-normal text-muted"> and </span>
                   {partners.length === 1 ? (
-                    <Link to={`/u/${partners[0].id}`}>{partners[0].name}</Link>
+                    <Link to={`/u/${partners[0].id}`} className={titleLink}>
+                      {partners[0].name}
+                    </Link>
                   ) : (
                     `${partners.length} others`
                   )}
@@ -74,22 +92,17 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
               )}
             </div>
           )}
-          <div className="muted feed-card__meta">{meta}</div>
+          <div className="text-12 text-muted md:text-13">{meta}</div>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="flex items-center gap-2">
           <VisibilityPill visibility={project.visibility} />
           {!phone && <StatusPill status={project.status} />}
           <Menu
             width={200}
             trigger={({ toggle }) => (
-              <button
-                type="button"
-                className="rx rx--bare"
-                aria-label="More options"
-                onClick={toggle}
-              >
+              <PillButton bare aria-label="More options" onClick={toggle}>
                 <Icon name="more" size={18} />
-              </button>
+              </PillButton>
             )}
           >
             {(close) => (
@@ -116,7 +129,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
         </div>
       </header>
 
-      <Link to={href} className="feed-card__cover" tabIndex={-1} aria-hidden="true">
+      <Link to={href} className="block" tabIndex={-1} aria-hidden="true">
         <Cover project={project} height={phone ? 206 : 330}>
           {action && (
             <CoverTag
@@ -128,9 +141,9 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
         </Cover>
       </Link>
 
-      <div className="feed-card__body">
+      <div className="flex flex-col gap-2 px-3.5 pt-3.5 md:gap-2.5 md:px-5 md:pt-4.5 md:pb-1.5">
         {(project.type || course || project.orgProjects.length > 0) && (
-          <div className="row wrap" style={{ gap: 8 }}>
+          <div className="flex flex-wrap items-center gap-2">
             <TypeBadge type={project.type} />
             {course && (
               <Chip size={phone ? 'xs' : 'sm'} tone="subtle">
@@ -150,19 +163,20 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
             ))}
           </div>
         )}
-        <h3 className="disp feed-card__title">
-          <Link to={href}>{project.title}</Link>
+        <h3 className="font-display text-22 leading-[1.15] font-bold tracking-tight md:text-26">
+          <Link to={href} className={titleLink}>
+            {project.title}
+          </Link>
         </h3>
-        {project.pitch && <p className="feed-card__pitch">{project.pitch}</p>}
+        {project.pitch && (
+          <p className="text-14 leading-[1.45] text-ink-3 md:text-15 md:leading-normal">
+            {project.pitch}
+          </p>
+        )}
         {tags.length > 0 && !phone && (
-          <div className="feed-card__tags">
+          <div className="flex flex-wrap gap-1.5">
             {tags.map((t) => (
-              <Chip
-                key={t}
-                size="sm"
-                to={`/explore?q=${encodeURIComponent(t)}`}
-                style={{ height: 26 }}
-              >
+              <Chip key={t} size="sm" to={`/explore?q=${encodeURIComponent(t)}`} className="h-6.5">
                 #{t}
               </Chip>
             ))}
@@ -170,14 +184,14 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
         )}
       </div>
 
-      <footer className="feed-card__foot">
+      <footer className="flex items-center gap-1.5 p-3.5 md:flex-wrap md:gap-3 md:px-5 md:pt-3.5 md:pb-4.5 xl:flex-nowrap">
         <ReactionBar project={project} compact={phone} />
         {phone ? (
-          <span className="push">
+          <span className="ml-auto">
             <SaveButton project={project} />
           </span>
         ) : (
-          <span className="feed-card__cta row" style={{ gap: 8 }}>
+          <span className="ml-auto flex items-center gap-2">
             <SaveButton project={project} />
             {action ? (
               <Button variant="primary" size="md" {...actionTarget(action)}>
@@ -191,6 +205,6 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
           </span>
         )}
       </footer>
-    </article>
+    </Card>
   )
 }

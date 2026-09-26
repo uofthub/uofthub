@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import Mark from '../brand/Mark'
+import { cx } from '../ui'
 
 /**
- * The header lockup: the uofthub mark (navy in light mode, white in dark — see
- * `.mark` in index.css) beside the wordmark.
+ * The header lockup: the uofthub mark (navy in light mode, white in dark) beside
+ * the wordmark.
  */
 export function Logo({
   compact = false,
@@ -17,11 +18,19 @@ export function Logo({
   return (
     <Link
       to={user ? '/feed' : '/'}
-      className={tone === 'white' ? 'logo logo--white' : 'logo'}
+      className={cx(
+        'flex shrink-0 items-center gap-2.5',
+        tone === 'white' ? 'text-white hover:text-white' : 'text-ink hover:text-ink'
+      )}
       aria-label="uofthub home"
     >
       <Mark size={compact ? 26 : 30} tone={tone} />
-      <span className={compact ? 'logo__word logo__word--sm disp' : 'logo__word disp'}>
+      <span
+        className={cx(
+          'font-display font-extrabold tracking-tightest',
+          compact ? 'text-21' : 'text-23'
+        )}
+      >
         uofthub
       </span>
     </Link>

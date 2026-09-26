@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
-import { Button, Icon, type IconName } from '../ui'
+import { Button, cx, Icon, type IconName } from '../ui'
 import { Logo } from './Logo'
 import { MessagesButton } from './MessagesButton'
 import { NotificationBell } from './NotificationBell'
@@ -11,7 +11,7 @@ export function MobileHeader() {
   const navigate = useNavigate()
   const { user } = useAuth()
   return (
-    <header className="topbar topbar--mobile">
+    <header className="sticky top-0 z-50 flex h-header-mobile items-center gap-4 border-b border-line bg-surface px-5">
       <Logo compact />
       <Button
         variant="ghost"
@@ -19,7 +19,7 @@ export function MobileHeader() {
         icon="search"
         iconSize={20}
         aria-label="Search"
-        className="push"
+        className="ml-auto"
         onClick={() => navigate('/explore', { state: { focusSearch: true } })}
       />
       <ThemeToggle bare />
@@ -53,19 +53,32 @@ export function BottomNav() {
   ]
 
   const item = (t: Tab) => (
-    <NavLink key={t.label} to={t.to} end={t.end} className="bottomnav__item">
+    <NavLink
+      key={t.label}
+      to={t.to}
+      end={t.end}
+      className={({ isActive }) =>
+        cx(
+          'flex w-14 flex-col items-center gap-0.75 text-11 font-semibold',
+          isActive ? 'text-navy-ink' : 'text-muted'
+        )
+      }
+    >
       <Icon name={t.icon} size={22} />
       {t.label}
     </NavLink>
   )
 
   return (
-    <nav aria-label="Main" className="bottomnav">
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-50 flex h-bottom-nav items-center justify-around border-t border-line bg-surface pb-[calc(8px+env(safe-area-inset-bottom,0px))]"
+    >
       {tabs.slice(0, 2).map(item)}
       <NavLink
         to={user ? '/projects/new' : '/session'}
         aria-label="Post a project"
-        className="bottomnav__post"
+        className="flex size-13 items-center justify-center rounded-2xl bg-navy text-white hover:bg-navy-deep hover:text-white"
       >
         <Icon name="plus" size={24} />
       </NavLink>

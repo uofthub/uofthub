@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTheme } from '../../lib/theme'
 import { Icon } from '../ui'
+import { Kbd } from './Kbd'
 
 /** True when a keystroke belongs to something the student is typing into. */
 const typing = (target: EventTarget | null) =>
@@ -34,7 +35,7 @@ export function SearchBox() {
   return (
     <form
       role="search"
-      className="searchbox"
+      className="flex h-11 max-w-140 min-w-0 grow items-center gap-2.5 rounded-xl bg-fill px-3.5 text-muted focus-within:outline-2 focus-within:outline-navy-soft"
       onSubmit={(e) => {
         e.preventDefault()
         const q = query.trim()
@@ -50,19 +51,21 @@ export function SearchBox() {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search projects, people or a course code like CSC209"
         aria-label="Search uofthub"
+        className="min-w-0 grow bg-transparent px-0.5 text-15 text-ink outline-none [&::-webkit-search-cancel-button]:hidden"
       />
-      <kbd className="searchbox__kbd" aria-hidden="true">
+      <Kbd aria-hidden="true" className="max-xl:hidden">
         /
-      </kbd>
-      <button
+      </Kbd>
+      <Kbd
+        as="button"
         type="button"
-        className="searchbox__kbd searchbox__cmd"
+        className="font-semibold text-muted hover:border-muted hover:text-ink max-xl:hidden"
         onClick={() => setCommandOpen(true)}
         title="Command panel"
         aria-label="Open the command panel"
       >
         ⌘K
-      </button>
+      </Kbd>
     </form>
   )
 }

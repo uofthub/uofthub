@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react'
+import { cx } from './cx'
 import { avatarFill, initials } from './people'
 
 export type AvatarPerson = { id?: string; name?: string | null; avatarUrl?: string | null }
@@ -21,7 +22,10 @@ export function Avatar({
 
   return (
     <span
-      className={className ? `av ${className}` : 'av'}
+      className={cx(
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-surface leading-none font-bold text-white',
+        className
+      )}
       style={{
         width: size,
         height: size,
@@ -32,7 +36,11 @@ export function Avatar({
       }}
       aria-hidden="true"
     >
-      {img ? <img src={img} alt="" onError={() => setFailed(true)} /> : initials(person.name)}
+      {img ? (
+        <img src={img} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        initials(person.name)
+      )}
     </span>
   )
 }
@@ -48,7 +56,7 @@ export function AvatarStack({
   max?: number
 }) {
   return (
-    <span style={{ display: 'flex' }}>
+    <span className="flex">
       {people.slice(0, max).map((p, i) => (
         <Avatar
           key={p.id ?? i}

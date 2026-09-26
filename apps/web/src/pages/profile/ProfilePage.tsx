@@ -11,15 +11,21 @@ import { ProjectCard, ProjectListRow } from '../../components/project'
 import {
   Avatar,
   Button,
+  CardGrid,
   Chip,
   EmptyState,
+  Eyebrow,
+  Heading,
   Icon,
+  LinkButton,
+  LoadMore,
+  Page,
   Panel,
   Spinner,
+  Stat,
   UnderlineTabs,
 } from '../../components/ui'
-import { AvatarEditor, EditProfileDialog } from './ProfileEditors'
-import './profile.css'
+import { AvatarEditor, EditProfileDialog, profileAvatar } from './ProfileEditors'
 
 /** The API's profile page size; a short page is the last. */
 const PAGE = 24
@@ -29,8 +35,8 @@ type Section = 'projects' | 'collabs' | 'saved'
 /** The navy banner with the gold dot field from the board. */
 function Banner() {
   return (
-    <div className="profile__banner" aria-hidden="true">
-      <svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMid slice">
+    <div className="h-30 md:h-47.5" aria-hidden="true">
+      <svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMid slice" className="size-full">
         <rect width="1440" height="200" fill="#1E3765" />
         {Array.from({ length: 22 }, (_, col) =>
           [40, 88, 136, 184].map((cy, row) => (
@@ -50,19 +56,6 @@ function Banner() {
   )
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
-  return (
-    <div>
-      <div className="disp" style={{ fontSize: 24, fontWeight: 700 }}>
-        {value}
-      </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        {label}
-      </div>
-    </div>
-  )
-}
-
 /** Website, GitHub and LinkedIn, each only when set. */
 function ProfileLinks({ profile }: { profile: ProfileUser }) {
   const links = [
@@ -72,7 +65,7 @@ function ProfileLinks({ profile }: { profile: ProfileUser }) {
   ].filter((l): l is typeof l & { href: string } => !!l.href)
   if (links.length === 0) return null
   return (
-    <div className="row wrap" style={{ gap: 8 }}>
+    <div className="flex flex-wrap items-center gap-2">
       {links.map((l) => (
         <Button key={l.label} size="sm" icon={l.icon} href={l.href}>
           {l.label}
@@ -129,9 +122,9 @@ export default function ProfilePage() {
   if (isLoading) return <Spinner />
   if (!profile) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState icon="user" title="No one here" />
-      </div>
+      </Page>
     )
   }
 
@@ -160,26 +153,28 @@ export default function ProfilePage() {
   ].filter(Boolean)
 
   return (
-    <div className="profile">
+    <div className="mx-auto w-full max-w-[1440px]">
       {editing && <EditProfileDialog onClose={() => setEditing(false)} />}
       <Banner />
 
-      <div className="profile__head">
+      <div className="-mt-12 flex flex-col items-start gap-3 px-4 md:-mt-16 md:flex-row md:items-end md:gap-7 md:px-6 xl:px-16">
         {own ? (
           <AvatarEditor person={maker} size={144} />
         ) : (
-          <Avatar person={maker} size={144} className="profile__avatar" />
+          <Avatar person={maker} size={144} className={profileAvatar} />
         )}
-        <div className="profile__who">
-          <div className="row wrap" style={{ gap: 12 }}>
-            <h1 className="disp profile__name">{profile.name}</h1>
+        <div className="flex min-w-0 grow flex-col gap-1.5 pb-1.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-30 leading-[1.1] font-bold tracking-tightest md:text-40">
+              {profile.name}
+            </h1>
             {/* Every account signed up with a U of T address; the API checks. */}
-            <Chip size="sm" tone="navy" icon="shieldCheck" style={{ height: 26, fontWeight: 600 }}>
+            <Chip size="sm" tone="navy" icon="shieldCheck" className="h-6.5 font-semibold">
               U of T verified
             </Chip>
           </div>
           {(line.length > 0 || profile.campus) && (
-            <div className="profile__line">
+            <div className="flex flex-wrap items-center gap-1.5 text-16 text-ink-3">
               {line.join(' · ')}
               {profile.campus && (
                 <>
@@ -191,7 +186,7 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-        <div className="profile__actions">
+        <div className="flex gap-2.5 pb-2.5">
           {own ? (
             <Button icon="pen" onClick={() => setEditing(true)}>
               Edit profile
@@ -221,27 +216,25 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="profile__grid">
-        <div className="stack" style={{ gap: 30, minWidth: 0 }}>
+      <div className="grid grid-cols-1 items-start gap-6 px-3 pt-5 pb-8 md:gap-10 md:px-6 md:pt-6 md:pb-12 xl:grid-cols-[minmax(0,1fr)_360px] xl:px-16 xl:pt-7">
+        <div className="flex min-w-0 flex-col gap-7.5">
           {own && <WeekActivity />}
-          <div className="stack" style={{ gap: 16 }}>
+          <div className="flex flex-col gap-4">
             {profile.bio ? (
-              <p className="profile__bio">{profile.bio}</p>
+              <p className="max-w-180 text-17 leading-[1.6]">{profile.bio}</p>
             ) : (
               own && (
-                <p className="muted" style={{ fontSize: 15 }}>
+                <p className="text-15 text-muted">
                   Add a line about what you build — it’s the first thing people read.{' '}
-                  <button type="button" className="link-btn" onClick={() => setEditing(true)}>
-                    Write a bio
-                  </button>
+                  <LinkButton onClick={() => setEditing(true)}>Write a bio</LinkButton>
                 </p>
               )
             )}
             {(profile.openTo?.length ?? 0) > 0 && (
-              <div className="row wrap" style={{ gap: 8 }}>
-                <span className="lbl" style={{ marginRight: 4 }}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Eyebrow as="span" className="mr-1">
                   Open to
-                </span>
+                </Eyebrow>
                 {profile.openTo!.map((o) => (
                   <Chip key={o} size="sm" tone="green">
                     {o}
@@ -250,7 +243,7 @@ export default function ProfilePage() {
               </div>
             )}
             <ProfileLinks profile={profile} />
-            <div className="profile__stats">
+            <div className="flex gap-7 border-y border-line py-4 md:gap-10">
               <Stat value={profile._count.ownedProjects} label="Projects" />
               <Stat value={profile._count.collaborations} label="Collaborations" />
               <Stat value={profile._count.followers} label="Followers" />
@@ -259,24 +252,24 @@ export default function ProfilePage() {
           </div>
 
           {pinned.length > 0 && (
-            <section className="stack" style={{ gap: 14 }}>
-              <div className="row wrap" style={{ gap: 10 }}>
-                <h2 className="h2">Pinned</h2>
-                <span className="muted" style={{ fontSize: 14 }}>
+            <section className="flex flex-col gap-3.5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Heading>Pinned</Heading>
+                <span className="text-14 text-muted">
                   {own
                     ? 'Your best work, chosen by you'
                     : `${first}’s best work, chosen by ${first}`}
                 </span>
               </div>
-              <div className="card-grid">
+              <CardGrid>
                 {pinned.map((p) => (
                   <ProjectCard key={p.id} project={p} maker={maker} coverHeight={170} />
                 ))}
-              </div>
+              </CardGrid>
             </section>
           )}
 
-          <section className="stack" style={{ gap: 14 }}>
+          <section className="flex flex-col gap-3.5">
             <UnderlineTabs<Section>
               label="Profile sections"
               value={tab}
@@ -288,12 +281,12 @@ export default function ProfilePage() {
               ]}
             />
             {own && pinned.length === 0 && projects.length > 0 && (
-              <p className="muted row" style={{ gap: 6, fontSize: 14 }}>
+              <p className="flex items-center gap-1.5 text-14 text-muted">
                 <Icon name="pin" size={16} /> Open a project and pin it from its More menu to lead
                 with your best work.
               </p>
             )}
-            <div key={tab} className="tab-in">
+            <div key={tab} className="motion-safe:animate-tab-in">
               {active.isLoading ? (
                 <Spinner />
               ) : shown.length === 0 ? (
@@ -331,7 +324,7 @@ export default function ProfilePage() {
                   </EmptyState>
                 )
               ) : (
-                <div className="stack" style={{ gap: 14 }}>
+                <div className="flex flex-col gap-3.5">
                   {shown.map((p) => (
                     <ProjectListRow
                       key={p.id}
@@ -342,42 +335,35 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-            {active.hasNextPage && (
-              <div className="row" style={{ justifyContent: 'center' }}>
-                <Button onClick={() => active.fetchNextPage()} disabled={active.isFetchingNextPage}>
-                  {active.isFetchingNextPage ? 'Loading…' : 'Show more'}
-                </Button>
-              </div>
-            )}
+            {active.hasNextPage && <LoadMore query={active} />}
           </section>
         </div>
 
-        <aside className="stack" style={{ gap: 20 }}>
+        <aside className="flex flex-col gap-5">
           {skills.length > 0 && (
-            <Panel title="Skills from projects" gap={12} style={{ padding: '20px 22px' }}>
-              <p className="muted" style={{ fontSize: 13 }}>
+            <Panel title="Skills from projects" className="gap-3 px-5.5 py-5">
+              <p className="text-13 text-muted">
                 Counted from tags on {own ? 'your' : `${first}’s`} own projects, not self-reported.
               </p>
-              <div className="row wrap" style={{ gap: 6 }}>
+              <div className="flex flex-wrap items-center gap-1.5">
                 {skills.map((s) => (
                   <Chip key={s.tag} tone="outline" to={`/explore?q=${encodeURIComponent(s.tag)}`}>
-                    {s.tag} <b style={{ color: 'var(--muted)', fontWeight: 600 }}>{s.count}</b>
+                    {s.tag} <b className="font-semibold text-muted">{s.count}</b>
                   </Chip>
                 ))}
               </div>
             </Panel>
           )}
           {courseCounts.length > 0 && (
-            <Panel title="Courses" gap={10} style={{ padding: '20px 22px' }}>
+            <Panel title="Courses" className="gap-2.5 px-5.5 py-5">
               {courseCounts.map((c) => (
                 <Link
                   key={c.code}
                   to={`/explore?course=${encodeURIComponent(c.code)}`}
-                  className="row"
-                  style={{ justifyContent: 'space-between', fontSize: 15 }}
+                  className="flex items-center justify-between text-15"
                 >
-                  <b style={{ fontWeight: 600 }}>{c.code}</b>
-                  <span className="muted">
+                  <b className="font-semibold">{c.code}</b>
+                  <span className="text-muted">
                     {c.n} project{c.n === 1 ? '' : 's'}
                   </span>
                 </Link>

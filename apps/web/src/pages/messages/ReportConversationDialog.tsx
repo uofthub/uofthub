@@ -8,8 +8,8 @@ import {
   Dialog,
   ErrorText,
   Field,
-  Icon,
   Select,
+  SuccessText,
   TextArea,
   Toggle,
 } from '../../components/ui'
@@ -54,10 +54,9 @@ export function ReportConversationDialog({
       }
     >
       {send.isSuccess ? (
-        <p className="row" style={{ gap: 8, color: 'var(--green-ink)' }}>
-          <Icon name="check" />
+        <SuccessText>
           Thanks — a moderator will review this.{block && ` ${first} can no longer message you.`}
-        </p>
+        </SuccessText>
       ) : (
         <>
           <Field label="What is wrong?">

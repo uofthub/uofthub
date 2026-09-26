@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useTheme } from '../../lib/theme'
+import { cx } from '../ui'
 import logoBrand from '../../assets/uofthub-logo.svg'
 import logoLight from '../../assets/uofthub-logo-light.svg'
 
@@ -26,8 +27,8 @@ export default function Logo({
     <img
       src={darkMode ? logoLight : logoBrand}
       alt="uofthub"
-      className={className}
-      style={{ display: 'block', width, maxWidth: '100%', height: 'auto', ...style }}
+      className={cx('block h-auto max-w-full', className)}
+      style={{ width, ...style }}
     />
   )
 }

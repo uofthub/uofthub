@@ -6,7 +6,8 @@ import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { messageFor } from '../../lib/notifications'
 import { timeAgo } from '../../lib/projectView'
-import { Button, Icon, Menu } from '../ui'
+import { Button, cx, Heading, Icon, Menu } from '../ui'
+import { UnreadDot } from './UnreadDot'
 
 /** The header bell: a red dot for unread, and the list under it. */
 export function NotificationBell({ bare = false }: { bare?: boolean }) {
@@ -60,42 +61,46 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
             if (!open) onOpen()
             toggle()
           }}
-          style={{ position: 'relative' }}
+          className="relative"
         >
           <Icon name="bell" size={20} />
-          {unread > 0 && <span className="bell__dot" aria-hidden="true" />}
+          {unread > 0 && <UnreadDot />}
         </Button>
       )}
     >
       {(close) => (
-        <div className="bell">
-          <div className="bell__head">
-            <span className="h2" style={{ fontSize: 18 }}>
+        <div className="max-h-[min(480px,70vh)] overflow-y-auto">
+          <div className="px-3 pt-2 pb-1.5">
+            <Heading as="span" className="text-18">
               Notifications
-            </span>
+            </Heading>
           </div>
           {notifications.length === 0 ? (
-            <p className="muted" style={{ padding: '8px 12px 14px', fontSize: 14 }}>
+            <p className="px-3 pt-2 pb-3.5 text-14 text-muted">
               Nothing yet. Reactions, comments and follows on your work show up here.
             </p>
           ) : (
-            <ul className="bell__list">
+            <ul>
               {notifications.map((n) => {
                 const { text, to } = messageFor(n)
                 const fresh = wasUnread.has(n.id)
                 return (
-                  <li key={n.id} className={fresh ? 'bell__item bell__item--fresh' : 'bell__item'}>
-                    <Link to={to} onClick={close} className="bell__link">
-                      <span className="bell__text">{text}</span>
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        {timeAgo(n.createdAt)}
+                  <li key={n.id} className={cx('rounded-lg', fresh && 'bg-navy-wash')}>
+                    <Link
+                      to={to}
+                      onClick={close}
+                      className="flex flex-col gap-0.75 rounded-lg px-3 py-2.5 text-ink hover:bg-fill hover:text-ink"
+                    >
+                      <span className={cx('text-14 leading-[1.4]', fresh && 'font-semibold')}>
+                        {text}
                       </span>
+                      <span className="text-12 text-muted">{timeAgo(n.createdAt)}</span>
                     </Link>
                     {n.type === 'COLLABORATOR_INVITED' && !answered.has(n.id) && (
                       // Answered here rather than on the project page: a pending
                       // collaborator can't open a PRIVATE project yet, so the
                       // link above would 404 until they accept.
-                      <div className="row" style={{ gap: 8, padding: '0 12px 10px' }}>
+                      <div className="flex items-center gap-2 px-3 pb-2.5">
                         <Button
                           size="sm"
                           variant="primary"

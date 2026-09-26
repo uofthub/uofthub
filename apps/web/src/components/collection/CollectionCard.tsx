@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { CollectionSummary } from '../../lib/api'
 import { campusShort } from '../../lib/campus'
 import { Cover } from '../project/Cover'
-import { Icon } from '../ui'
+import { Card, cx, Icon } from '../ui'
+
+const stack = 'relative block w-70 max-w-full shrink-0'
 
 /** Three covers fanned out, as on the Explore board. */
 export function CoverStack({
@@ -14,14 +17,24 @@ export function CoverStack({
 }) {
   if (projects.length === 0)
     return (
-      <span className="cover-stack cover-stack--empty" aria-hidden="true">
+      <span
+        className={cx(
+          stack,
+          'flex h-34.5 items-center justify-center rounded-xl border border-dashed border-line-dashed text-muted'
+        )}
+        aria-hidden="true"
+      >
         <Icon name="layers" size={28} />
       </span>
     )
   return (
-    <span className="cover-stack" aria-hidden="true" style={{ height: height + 26 }}>
+    <span className={stack} aria-hidden="true" style={{ height: height + 26 }}>
       {projects.slice(0, 3).map((p, i) => (
-        <span key={p.id} className="stacked-cover" style={{ left: i * 34, top: i * 10 }}>
+        <span
+          key={p.id}
+          className="absolute w-50 overflow-hidden rounded-btn border-2 border-surface shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
+          style={{ left: i * 34, top: i * 10 }}
+        >
           <Cover project={p} height={height} />
         </span>
       ))}
@@ -34,15 +47,26 @@ export function CollectionCard({ collection }: { collection: CollectionSummary }
   const n = collection.projectCount
   const campus = campusShort(collection.owner.campus)
   return (
-    <Link to={`/collections/${collection.id}`} className="card collection-card">
+    <Card
+      as={Link}
+      to={`/collections/${collection.id}`}
+      className="flex flex-col gap-3.5 p-4.5 text-ink transition-colors duration-150 hover:border-line-strong hover:text-ink"
+    >
       <CoverStack projects={collection.preview} />
-      <span className="stack" style={{ gap: 4, minWidth: 0 }}>
-        <span className="disp collection-card__title">{collection.title}</span>
-        <span className="muted collection-card__meta">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="font-display text-20 font-bold tracking-tight">{collection.title}</span>
+        <span className="text-14 text-muted">
           {n} project{n === 1 ? '' : 's'} · curated by {collection.owner.name}
           {campus && ` · ${campus}`}
         </span>
       </span>
-    </Link>
+    </Card>
+  )
+}
+
+/** Collection cards, as many across as fit at 300px or more. */
+export function CollectionGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5">{children}</div>
   )
 }

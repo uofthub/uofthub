@@ -7,13 +7,15 @@ import { facultyByName } from '../../lib/faculties'
 import { useDocumentTitle } from '../../lib/hooks'
 import { courseOf } from '../../lib/projectView'
 import { CONTACT_EMAIL } from '../../lib/site'
-import { Button, EmptyState, Icon, Spinner } from '../../components/ui'
+import { Button, cx, EmptyState, Icon, Notice, Page, Spinner } from '../../components/ui'
 import { Gallery } from './Gallery'
 import { InfoCard } from './InfoCard'
 import { UpdateDialog } from './OwnerDialogs'
 import { Contents, Overview, ProjectSections, References } from './Content'
 import { Comments, Related, Updates } from './Sections'
-import './project-page.css'
+
+/** The page's two columns: the story, and a 440px column of facts beside it. */
+const grid = 'grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_440px] xl:gap-8'
 
 /** The Project page board. */
 export default function ProjectPage() {
@@ -42,7 +44,7 @@ export default function ProjectPage() {
   if (isLoading) return <Spinner />
   if (!project) {
     return (
-      <div className="page">
+      <Page>
         <EmptyState
           icon="eyeOff"
           title="This project isn’t here"
@@ -54,7 +56,7 @@ export default function ProjectPage() {
         >
           It may have been deleted, or it is private to the people who made it.
         </EmptyState>
-      </div>
+      </Page>
     )
   }
 
@@ -63,10 +65,13 @@ export default function ProjectPage() {
   const faculty = project.owner?.faculty
 
   return (
-    <div className="page project-page">
+    <Page className="pt-5 md:pt-5 lg:pt-5">
       {updating && <UpdateDialog project={project} onClose={() => setUpdating(false)} />}
 
-      <nav aria-label="Breadcrumb" className="crumbs muted">
+      <nav
+        aria-label="Breadcrumb"
+        className="mb-5 flex flex-wrap items-center gap-2 text-14 text-muted"
+      >
         <Link to="/explore">Explore</Link>
         {faculty && (
           <>
@@ -83,33 +88,27 @@ export default function ProjectPage() {
           </>
         )}
         <Icon name="chevronRight" size={14} />
-        <span className="crumbs__here">{project.title}</span>
+        <span className="font-semibold text-ink">{project.title}</span>
       </nav>
 
       {/* Only the owner and accepted collaborators can still load a taken-down
           project — it is forced back to private — so this is for them. */}
       {project.takenDownAt && (
-        <div className="notice notice--danger">
-          <Icon name="alert" size={20} />
-          <div>
-            <b>Taken down by a moderator</b>
-            <p>
-              This project was reported and reviewed on{' '}
-              {new Date(project.takenDownAt).toLocaleDateString()}. It is private to you now and its
-              visibility cannot be changed. Nothing has been deleted. Email{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to appeal.
-            </p>
-          </div>
-        </div>
+        <Notice tone="danger" icon="alert" title="Taken down by a moderator" className="mb-5">
+          This project was reported and reviewed on{' '}
+          {new Date(project.takenDownAt).toLocaleDateString()}. It is private to you now and its
+          visibility cannot be changed. Nothing has been deleted. Email{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to appeal.
+        </Notice>
       )}
 
-      <div className="project-grid">
+      <div className={grid}>
         <Gallery project={project} isOwner={isOwner} />
         <InfoCard project={project} latest={versions[0]} />
       </div>
 
-      <div className="project-grid project-grid--lower">
-        <div className="stack" style={{ gap: 24, minWidth: 0 }}>
+      <div className={cx(grid, 'pt-5 xl:pt-8')}>
+        <div className="flex min-w-0 flex-col gap-6">
           <Overview project={project} />
           <ProjectSections project={project} />
           <References project={project} />
@@ -121,11 +120,11 @@ export default function ProjectPage() {
           />
           <Comments project={project} />
         </div>
-        <aside className="stack" style={{ gap: 20 }}>
+        <aside className="flex flex-col gap-5">
           <Contents project={project} />
           <Related project={project} />
         </aside>
       </div>
-    </div>
+    </Page>
   )
 }

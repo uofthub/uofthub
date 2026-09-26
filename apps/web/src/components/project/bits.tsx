@@ -5,7 +5,7 @@ import type { ProjectStatus, ProjectType } from '@uofthub/types'
 import { api, type ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { PROJECT_STATUSES, PROJECT_TYPES } from '../../lib/projectMeta'
-import { Badge, Button, Icon, Pill } from '../ui'
+import { Badge, Button, cx, Icon, Pill } from '../ui'
 
 /**
  * The star and comment counts at the foot of a card. The star is the
@@ -22,15 +22,15 @@ export function ProjectStats({
   const comments = project._count.comments
   if (!reactions && !comments) return null
   return (
-    <span className="pstats">
+    <span className="flex items-center gap-3.5 text-13 text-muted">
       {reactions > 0 && (
-        <span className="pstats__n" aria-label={`${reactions} reactions`}>
+        <span className="flex items-center gap-1" aria-label={`${reactions} reactions`}>
           <Icon name="star" size={15} />
           {reactions}
         </span>
       )}
       {comments > 0 && (
-        <span className="pstats__n" aria-label={`${comments} comments`}>
+        <span className="flex items-center gap-1" aria-label={`${comments} comments`}>
           <Icon name="comment" size={15} />
           {comments}
         </span>
@@ -75,9 +75,9 @@ export function CardTop({
   const hidden = project.visibility === 'PRIVATE' || project.visibility === 'UNLISTED'
   if (!project.type && !project.status && !hidden) return null
   return (
-    <div className="pcard__top">
+    <div className="flex items-center justify-between gap-1.5">
       <TypeBadge type={project.type} />
-      <span className="row" style={{ gap: 6, marginLeft: 'auto' }}>
+      <span className="ml-auto flex items-center gap-1.5">
         <VisibilityPill visibility={project.visibility} />
         <StatusPill status={project.status} />
       </span>
@@ -125,7 +125,10 @@ export function SaveButton({
       aria-label={saved ? 'Saved — remove from saved' : 'Save'}
       aria-pressed={saved}
       title={saved ? 'Saved' : 'Save'}
-      className={saved ? 'save-btn save-btn--on' : 'save-btn'}
+      className={cx(
+        saved &&
+          'border-navy-soft bg-navy-tint text-navy-ink hover:bg-navy-tint hover:text-navy-ink [&_svg]:fill-current'
+      )}
       onClick={() => (user ? toggle.mutate() : navigate('/session'))}
       disabled={toggle.isPending}
     />
@@ -145,12 +148,8 @@ export function LayoutToggle({
   label?: boolean
 }) {
   return (
-    <div className="row" style={{ gap: 4 }}>
-      {label && (
-        <span className="muted" style={{ fontSize: 13, marginRight: 6 }}>
-          Layout
-        </span>
-      )}
+    <div className="flex items-center gap-1">
+      {label && <span className="mr-1.5 text-13 text-muted">Layout</span>}
       {(['card', 'list'] as const).map((v) => (
         <Button
           key={v}

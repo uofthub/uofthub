@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, safeUrl, type ProjectDetail, type ProjectVersion } from '../../lib/api'
@@ -27,9 +27,13 @@ import {
 import {
   Avatar,
   Button,
+  Card,
   Chip,
+  cx,
   ErrorText,
+  Eyebrow,
   Icon,
+  LinkButton,
   Menu,
   MenuDivider,
   MenuItem,
@@ -55,15 +59,7 @@ import {
 } from '../../lib/outputs'
 
 type Open =
-  | 'update'
-  | 'links'
-  | 'files'
-  | 'invite'
-  | 'groups'
-  | 'insights'
-  | 'report'
-  | 'collect'
-  | null
+  'update' | 'links' | 'files' | 'invite' | 'groups' | 'insights' | 'report' | 'collect' | null
 
 function Maker({
   person,
@@ -76,27 +72,23 @@ function Maker({
 }) {
   const follow = useFollow(person.id)
   return (
-    <div className="row" style={{ gap: 12 }}>
+    <div className="flex items-center gap-3">
       <Link to={`/u/${person.id}`} tabIndex={-1} aria-hidden="true">
         <Avatar person={person} size={44} />
       </Link>
-      <div className="grow">
-        <Link to={`/u/${person.id}`} className="person-name">
+      <div className="min-w-0 grow">
+        <Link to={`/u/${person.id}`} className="block text-15 font-semibold text-ink">
           {person.name}
         </Link>
-        {line && <div style={{ fontSize: 14, color: 'var(--ink-3)' }}>{line}</div>}
-        {sub && (
-          <div className="muted" style={{ fontSize: 13 }}>
-            {sub}
-          </div>
-        )}
+        {line && <div className="text-14 text-ink-3">{line}</div>}
+        {sub && <div className="text-13 text-muted">{sub}</div>}
       </div>
       {follow.canFollow && (
         <Button
           size="sm"
           onClick={follow.toggle}
           disabled={follow.pending}
-          style={{ fontSize: 13, padding: '0 12px' }}
+          className="px-3 text-13"
         >
           {follow.following ? 'Following' : 'Follow'}
         </Button>
@@ -104,6 +96,27 @@ function Maker({
     </div>
   )
 }
+
+/** One row of the facts list: a grey label, and what it says. */
+function Fact({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <>
+      <dt className="text-muted">{label}</dt>
+      <dd className={cx('min-w-0', className)}>{children}</dd>
+    </>
+  )
+}
+
+/** A link in the facts list, its icon ahead of it. */
+const factLink = 'flex items-center gap-1'
 
 type OutputTarget = { href?: string; onClick?: () => void }
 
@@ -200,7 +213,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const requestAccess = useMutation({ mutationFn: () => api.projects.requestAccess(project.id) })
 
   return (
-    <section className="card info-card">
+    <Card as="section" className="flex flex-col gap-4.5 px-4.5 py-5 md:p-6.5">
       {viewing && (
         <FileViewer
           projectId={project.id}
@@ -223,7 +236,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         <AddToCollectionDialog projectId={project.id} onClose={() => setOpen(null)} />
       )}
 
-      <div className="row" style={{ gap: 8, minHeight: 22 }}>
+      <div className="flex min-h-5.5 items-center gap-2">
         <TypeBadge type={project.type} />
         <StatusPill status={project.status} />
         <VisibilityPill visibility={project.visibility} />
@@ -232,25 +245,23 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
             Pinned
           </Chip>
         )}
-        {latest && (
-          <span className="muted push" style={{ fontSize: 13 }}>
-            v{latest.versionNum}
-          </span>
-        )}
+        {latest && <span className="ml-auto text-13 text-muted">v{latest.versionNum}</span>}
       </div>
 
       <div>
-        <h1 className="disp info-card__title">{project.title}</h1>
-        {pitch && <p className="info-card__pitch">{pitch}</p>}
+        <h1 className="font-display text-32 leading-[1.05] font-bold tracking-tightest wrap-anywhere md:text-44">
+          {project.title}
+        </h1>
+        {pitch && <p className="mt-2.5 text-17 leading-normal text-ink-3">{pitch}</p>}
         {project.forkedFromId && (
-          <p className="muted row" style={{ gap: 6, fontSize: 13, marginTop: 8 }}>
+          <p className="mt-2 flex items-center gap-1.5 text-13 text-muted">
             <Icon name="fork" size={14} /> Forked from{' '}
             <Link to={`/projects/${project.forkedFromId}`}>another project</Link>
           </p>
         )}
       </div>
 
-      <div className="row" style={{ gap: 8 }}>
+      <div className="flex items-center gap-2">
         {action ? (
           action.href ? (
             <Button variant="primary" icon={action.icon} href={action.href} className="grow">
@@ -268,7 +279,12 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         ) : isOwner ? (
           // Not "add a live link": most projects have nothing to run. What
           // every project can lead with is what it produced.
-          <Button variant="primary" icon="plus" to={`/projects/${project.id}/edit`} className="grow">
+          <Button
+            variant="primary"
+            icon="plus"
+            to={`/projects/${project.id}/edit`}
+            className="grow"
+          >
             Add what it produced
           </Button>
         ) : null}
@@ -382,8 +398,8 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
 
       <hr />
 
-      <div className="stack" style={{ gap: 14 }}>
-        <span className="lbl">Made by</span>
+      <div className="flex flex-col gap-3.5">
+        <Eyebrow as="span">Made by</Eyebrow>
         {project.owner && (
           <Maker
             person={project.owner}
@@ -397,152 +413,106 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           <Maker key={c.user.id} person={c.user} line="Collaborator" />
         ))}
         {isOwner && (
-          <button type="button" className="link-btn" onClick={() => setOpen('invite')}>
-            + Invite a collaborator
-          </button>
+          <LinkButton onClick={() => setOpen('invite')}>+ Invite a collaborator</LinkButton>
         )}
       </div>
 
       <hr />
 
-      <dl className="facts">
+      <dl className="grid grid-cols-[110px_1fr] gap-y-2.5 text-14">
         {course && (
-          <>
-            <dt className="muted">Course</dt>
-            <dd>
-              <Link
-                to={`/explore?course=${encodeURIComponent(course)}`}
-                style={{ fontWeight: 600 }}
-              >
-                Made for {course}
-              </Link>
-            </dd>
-          </>
+          <Fact label="Course">
+            <Link to={`/explore?course=${encodeURIComponent(course)}`} className="font-semibold">
+              Made for {course}
+            </Link>
+          </Fact>
         )}
         {/* The author's own facts — Supervisor, Runtime, Performers — in
             their order. The API drops a row missing either side. */}
         {(project.details ?? []).map((d, i) => (
-          <Fragment key={`${d.label}-${i}`}>
-            <dt className="muted">{d.label}</dt>
-            <dd style={{ overflowWrap: 'anywhere' }}>{d.value}</dd>
-          </Fragment>
+          <Fact key={`${d.label}-${i}`} label={d.label} className="wrap-anywhere">
+            {d.value}
+          </Fact>
         ))}
-        {project.owner?.campus && (
-          <>
-            <dt className="muted">Campus</dt>
-            <dd>{campusShort(project.owner.campus)}</dd>
-          </>
-        )}
+        {project.owner?.campus && <Fact label="Campus">{campusShort(project.owner.campus)}</Fact>}
         {project.orgProjects.length > 0 && (
-          <>
-            <dt className="muted">Built with</dt>
-            <dd className="row wrap" style={{ gap: 12 }}>
-              {project.orgProjects.map(({ org }) => (
-                <Link
-                  key={org.slug}
-                  to={`/orgs/${org.slug}`}
-                  className="row"
-                  style={{ gap: 4, fontWeight: 600 }}
-                >
-                  <Icon name={org.type === 'LAB' ? 'flask' : 'users'} size={14} />
-                  {org.name}
-                </Link>
-              ))}
-            </dd>
-          </>
+          <Fact label="Built with" className="flex flex-wrap items-center gap-3">
+            {project.orgProjects.map(({ org }) => (
+              <Link
+                key={org.slug}
+                to={`/orgs/${org.slug}`}
+                className={cx(factLink, 'font-semibold')}
+              >
+                <Icon name={org.type === 'LAB' ? 'flask' : 'users'} size={14} />
+                {org.name}
+              </Link>
+            ))}
+          </Fact>
         )}
-        <dt className="muted">Posted</dt>
-        <dd>
+        <Fact label="Posted">
           {timeAgo(posted)}
           {edited && ` · updated ${timeAgo(project.updatedAt)}`}
-        </dd>
+        </Fact>
         {outputs.length > 0 && (
-          <>
-            <dt className="muted">Outputs</dt>
-            <dd className="stack" style={{ gap: 6 }}>
-              {outputs.map((o) => {
-                const { href, onClick } = target(o)
-                const body = (
-                  <>
-                    <Icon name={OUTPUT_KINDS[o.kind].icon} size={14} />
-                    <span className="clamp-1">{outputLabel(o)}</span>
-                    {o.primary && <span className="muted">· main</span>}
-                  </>
-                )
-                return href ? (
-                  <a
-                    key={o.id}
-                    href={href}
-                    className="row"
-                    style={{ gap: 4 }}
-                    {...(o.link && { target: '_blank', rel: 'noopener noreferrer' })}
-                  >
-                    {body}
-                  </a>
-                ) : (
-                  <button
-                    key={o.id}
-                    type="button"
-                    className="link-btn row"
-                    style={{ gap: 4, justifyContent: 'flex-start' }}
-                    onClick={onClick}
-                  >
-                    {body}
-                  </button>
-                )
-              })}
-            </dd>
-          </>
+          <Fact label="Outputs" className="flex flex-col gap-1.5">
+            {outputs.map((o) => {
+              const { href, onClick } = target(o)
+              const body = (
+                <>
+                  <Icon name={OUTPUT_KINDS[o.kind].icon} size={14} />
+                  <span className="line-clamp-1">{outputLabel(o)}</span>
+                  {o.primary && <span className="text-muted">· main</span>}
+                </>
+              )
+              return href ? (
+                <a
+                  key={o.id}
+                  href={href}
+                  className={factLink}
+                  {...(o.link && { target: '_blank', rel: 'noopener noreferrer' })}
+                >
+                  {body}
+                </a>
+              ) : (
+                <LinkButton key={o.id} className="flex" onClick={onClick}>
+                  {body}
+                </LinkButton>
+              )
+            })}
+          </Fact>
         )}
         {links.length > 0 && (
-          <>
-            <dt className="muted">Links</dt>
-            <dd className="row wrap" style={{ gap: 12 }}>
-              {links.map((l) => (
-                <a
-                  key={l.id}
-                  href={l.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="row"
-                  style={{ gap: 4 }}
-                >
-                  <Icon name={LINK_ICONS[l.role]} size={14} />
-                  {l.label || 'Link'}
-                </a>
-              ))}
-            </dd>
-          </>
+          <Fact label="Links" className="flex flex-wrap items-center gap-3">
+            {links.map((l) => (
+              <a
+                key={l.id}
+                href={l.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={factLink}
+              >
+                <Icon name={LINK_ICONS[l.role]} size={14} />
+                {l.label || 'Link'}
+              </a>
+            ))}
+          </Fact>
         )}
         {documents.length > 0 && (
-          <>
-            <dt className="muted">Files</dt>
-            <dd className="stack" style={{ gap: 4 }}>
-              {documents.map((f) => (
-                <a
-                  key={f.id}
-                  href={api.projects.downloadUrl(project.id, f.id)}
-                  className="row"
-                  style={{ gap: 4 }}
-                >
-                  <Icon name="download" size={14} />
-                  <span className="clamp-1">{f.name}</span>
-                </a>
-              ))}
-            </dd>
-          </>
+          <Fact label="Files" className="flex flex-col gap-1">
+            {documents.map((f) => (
+              <a key={f.id} href={api.projects.downloadUrl(project.id, f.id)} className={factLink}>
+                <Icon name="download" size={14} />
+                <span className="line-clamp-1">{f.name}</span>
+              </a>
+            ))}
+          </Fact>
         )}
       </dl>
 
       {tags.length > 0 && (
-        <div className="row wrap" style={{ gap: 6 }}>
+        <div className="flex flex-wrap items-center gap-1.5">
           {tags.map((t) => (
-            <Chip
-              key={t}
-              size="sm"
-              to={`/explore?q=${encodeURIComponent(t)}`}
-              style={{ height: 26 }}
-            >
+            <Chip key={t} size="sm" to={`/explore?q=${encodeURIComponent(t)}`} className="h-6.5">
               #{t}
             </Chip>
           ))}
@@ -550,10 +520,10 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
       )}
 
       {!user && (
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="text-13 text-muted">
           <Link to="/session">Sign in</Link> to react, comment or fork.
         </p>
       )}
-    </section>
+    </Card>
   )
 }

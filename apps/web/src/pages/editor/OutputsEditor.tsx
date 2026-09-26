@@ -10,7 +10,7 @@ import {
   outputKindForLink,
 } from '../../lib/outputs'
 import { makeThumbnail, thumbnailSource } from '../../lib/thumbnails'
-import { Button, ErrorText, Icon, Input, Select } from '../../components/ui'
+import { Button, Dropzone, ErrorText, Icon, Input, LinkButton, Select } from '../../components/ui'
 import { move, newId, type DraftOutput } from './draft'
 
 /**
@@ -88,8 +88,7 @@ export function OutputsEditor({
 
   const addFiles = (picked: File[]) => {
     const added = picked.map((file, n): DraftOutput => {
-      const kind =
-        n === 0 && !hasPrimary && hint ? hint.kind : outputKindForFile(file.name)
+      const kind = n === 0 && !hasPrimary && hint ? hint.kind : outputKindForFile(file.name)
       const preview = thumbnailSource(file) === 'image' ? URL.createObjectURL(file) : undefined
       return {
         key: newId('o'),
@@ -122,32 +121,34 @@ export function OutputsEditor({
   }
 
   return (
-    <div className="stack" style={{ gap: 12 }}>
-      {hint && outputs.length === 0 && (
-        <p className="muted" style={{ fontSize: 14 }}>
-          {hint.prompt}
-        </p>
-      )}
+    <div className="flex flex-col gap-3">
+      {hint && outputs.length === 0 && <p className="text-14 text-muted">{hint.prompt}</p>}
 
       {outputs.map((o, i) => {
         const look = lookFor(targetName(o))
         const name = targetName(o)
         return (
-          <div key={o.key} className="editor-output">
-            <span className="editor-output__thumb" style={{ background: look.bg, color: look.ink }}>
+          <div
+            key={o.key}
+            className="flex items-start gap-3.5 rounded-[14px] border border-line p-3.5 max-[560px]:flex-wrap"
+          >
+            <span
+              className="grid size-18 shrink-0 place-items-center overflow-hidden rounded-btn"
+              style={{ background: look.bg, color: look.ink }}
+            >
               {o.thumbnailUrl && o.thumbnail !== 'remove' ? (
-                <img src={o.thumbnailUrl} alt="" />
+                <img src={o.thumbnailUrl} alt="" className="size-full object-cover" />
               ) : (
                 <Icon name={OUTPUT_KINDS[o.kind].icon} size={20} />
               )}
             </span>
-            <div className="stack grow" style={{ gap: 8, minWidth: 0 }}>
-              <div className="row wrap" style={{ gap: 8 }}>
+            <div className="flex min-w-0 grow flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Select
                   aria-label={`What ${name} is`}
                   value={o.kind}
                   onChange={(e) => set(i, { kind: e.target.value as DraftOutput['kind'] })}
-                  style={{ width: 130 }}
+                  className="w-32.5"
                 >
                   {OUTPUT_KIND_KEYS.map((k) => (
                     <option key={k} value={k}>
@@ -161,15 +162,12 @@ export function OutputsEditor({
                   onChange={(e) => set(i, { label: e.target.value })}
                   placeholder={OUTPUT_KINDS[o.kind].label}
                   maxLength={80}
-                  className="grow"
-                  style={{ minWidth: 140 }}
+                  className="min-w-35 grow"
                 />
               </div>
-              <span className="muted clamp-1" style={{ fontSize: 13 }}>
-                {name}
-              </span>
-              <div className="row wrap" style={{ gap: 12, fontSize: 13 }}>
-                <label className="row" style={{ gap: 6 }}>
+              <span className="line-clamp-1 text-13 text-muted">{name}</span>
+              <div className="flex flex-wrap items-center gap-3 text-13">
+                <label className="flex items-center gap-1.5">
                   <input
                     type="radio"
                     name="primary-output"
@@ -178,8 +176,10 @@ export function OutputsEditor({
                   />
                   Lead with this
                 </label>
-                <label className="link-btn">
-                  {o.thumbnailUrl && o.thumbnail !== 'remove' ? 'Replace thumbnail' : 'Set a thumbnail'}
+                <LinkButton as="label">
+                  {o.thumbnailUrl && o.thumbnail !== 'remove'
+                    ? 'Replace thumbnail'
+                    : 'Set a thumbnail'}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/gif"
@@ -190,33 +190,36 @@ export function OutputsEditor({
                       if (file) thumbnailFor(o.key, file, true)
                     }}
                   />
-                </label>
+                </LinkButton>
                 {(o.target.type === 'link' || o.target.type === 'newLink') &&
                   !(o.thumbnailUrl && o.thumbnail !== 'remove') && (
-                    <button
-                      type="button"
-                      className="link-btn"
+                    <LinkButton
                       disabled={fetching === o.key}
                       onClick={() => linkPreview(o.key, (o.target as { url: string }).url)}
                     >
-                      {fetching === o.key ? 'Fetching the preview…' : 'Use the link’s preview image'}
-                    </button>
+                      {fetching === o.key
+                        ? 'Fetching the preview…'
+                        : 'Use the link’s preview image'}
+                    </LinkButton>
                   )}
                 {o.thumbnailUrl && o.thumbnail !== 'remove' && (
-                  <button
-                    type="button"
-                    className="link-btn"
+                  <LinkButton
                     onClick={() =>
                       // A saved thumbnail is removed on save; an unsaved one just goes.
-                      set(i, o.id ? { thumbnail: 'remove' } : { thumbnail: undefined, thumbnailUrl: undefined })
+                      set(
+                        i,
+                        o.id
+                          ? { thumbnail: 'remove' }
+                          : { thumbnail: undefined, thumbnailUrl: undefined }
+                      )
                     }
                   >
                     Remove thumbnail
-                  </button>
+                  </LinkButton>
                 )}
               </div>
             </div>
-            <div className="stack" style={{ gap: 2 }}>
+            <div className="flex flex-col gap-0.5">
               <Button
                 size="sm"
                 variant="ghost"
@@ -250,19 +253,11 @@ export function OutputsEditor({
 
       {outputs.length < 20 && (
         <>
-          <label className="dropzone">
-            <span className="dropzone__icon">
-              <Icon name="upload" size={20} />
-            </span>
-            <span className="grow">
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>
-                Add a file as an output
-              </span>
-              <span className="muted" style={{ fontSize: 13 }}>
-                A poster, slides, a paper, a recording. A PDF’s first page becomes its thumbnail.
-              </span>
-            </span>
-            <span className="btn btn--md">Browse files</span>
+          <Dropzone
+            icon="upload"
+            title="Add a file as an output"
+            hint="A poster, slides, a paper, a recording. A PDF’s first page becomes its thumbnail."
+          >
             <input
               type="file"
               multiple
@@ -274,10 +269,9 @@ export function OutputsEditor({
                 addFiles(picked.slice(0, 20 - outputs.length))
               }}
             />
-          </label>
+          </Dropzone>
           <form
-            className="row wrap"
-            style={{ gap: 8 }}
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault()
               addLink()
@@ -288,7 +282,7 @@ export function OutputsEditor({
               value={link.label}
               onChange={(e) => setLink((l) => ({ ...l, label: e.target.value }))}
               placeholder="Label, e.g. Recording"
-              style={{ width: 180 }}
+              className="w-45"
             />
             <Input
               aria-label="Link to add as an output"
@@ -296,8 +290,7 @@ export function OutputsEditor({
               value={link.url}
               onChange={(e) => setLink((l) => ({ ...l, url: e.target.value }))}
               placeholder="https://"
-              className="grow"
-              style={{ minWidth: 200 }}
+              className="min-w-50 grow"
             />
             <Button type="submit" icon="link" disabled={!link.url.trim()}>
               Add link

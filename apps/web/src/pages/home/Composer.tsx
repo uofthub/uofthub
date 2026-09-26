@@ -4,7 +4,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { UpdateDialog } from '../project/OwnerDialogs'
-import { Avatar, Button, Dialog, ErrorText, Field, Icon, Select } from '../../components/ui'
+import {
+  Avatar,
+  Button,
+  Card,
+  Dialog,
+  ErrorText,
+  Field,
+  Icon,
+  PillButton,
+  Select,
+} from '../../components/ui'
 
 type Mode = 'update' | 'help'
 
@@ -72,7 +82,7 @@ function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) 
       }
     >
       {empty ? (
-        <p className="muted" style={{ fontSize: 15, lineHeight: 1.5 }}>
+        <p className="text-15 leading-normal text-muted">
           {mode === 'update'
             ? 'Updates belong to a project, and you haven’t posted one yet.'
             : 'Share the project first, then ask for help on it.'}{' '}
@@ -99,7 +109,7 @@ function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) 
             </Select>
           </Field>
           {mode === 'help' && (
-            <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+            <p className="text-14 leading-normal text-muted">
               It shows up under <b>Looking for help</b> and in Explore’s filter. Say what you need
               in its pitch or story — or{' '}
               <Link to="/projects/new?status=HELP_WANTED" onClick={onClose}>
@@ -122,38 +132,37 @@ export function Composer() {
   if (!user) return null
 
   return (
-    <section className="card composer">
+    <Card as="section" className="flex flex-col gap-3.5 px-4.5 py-4">
       {open && <ComposerDialog mode={open} onClose={() => setOpen(null)} />}
-      <div className="row" style={{ gap: 12 }}>
+      <div className="flex items-center gap-3">
         <Avatar person={user} size={40} />
-        <Link to="/projects/new" className="composer__prompt">
+        <Link
+          to="/projects/new"
+          className="flex h-11 grow items-center rounded-xl bg-fill px-4 text-15 text-muted hover:bg-fill-soft hover:text-ink-3"
+        >
           Share what you’re working on. It doesn’t need to be finished.
         </Link>
       </div>
-      <div className="composer__actions">
-        <Link className="rx" to="/projects/new" style={{ color: 'var(--navy-ink)' }}>
+      <div className="flex flex-wrap gap-2 pl-13">
+        <PillButton as={Link} to="/projects/new" className="text-navy-ink hover:text-navy-ink">
           <Icon name="layers" size={16} />
           Project
-        </Link>
-        <button
-          type="button"
-          className="rx"
-          style={{ color: 'var(--green-ink)' }}
+        </PillButton>
+        <PillButton
+          className="text-green-ink hover:text-green-ink"
           onClick={() => setOpen('update')}
         >
           <Icon name="send" size={16} />
           Update
-        </button>
-        <button
-          type="button"
-          className="rx"
-          style={{ color: 'var(--purple-ink)' }}
+        </PillButton>
+        <PillButton
+          className="text-purple-ink hover:text-purple-ink"
           onClick={() => setOpen('help')}
         >
           <Icon name="megaphone" size={16} />
           Looking for…
-        </button>
+        </PillButton>
       </div>
-    </section>
+    </Card>
   )
 }

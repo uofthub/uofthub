@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import type { ProjectSummary } from '../../lib/api'
 import { cardAction } from '../../lib/outputs'
 import { courseOf, makersLabel } from '../../lib/projectView'
-import { AvatarStack, Chip, Icon, type AvatarPerson } from '../ui'
+import { AvatarStack, Card, CardGrid, Chip, Icon, type AvatarPerson } from '../ui'
 import { Cover, CoverTag } from './Cover'
 import { CardTop, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
 
@@ -11,6 +11,9 @@ function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, make
   const owner = project.owner ?? maker
   return [...(owner ? [owner] : []), ...(project.collaborators ?? []).map((c) => c.user)]
 }
+
+/** A card's title link: ink at rest, navy under the pointer. */
+export const titleLink = 'text-ink hover:text-navy-ink'
 
 /** "Live demo", "View poster" on the cover: what opening it gets you. */
 function CoverAction({ project }: { project: Pick<ProjectSummary, 'id' | 'links' | 'lead'> }) {
@@ -47,21 +50,27 @@ export function ProjectCard({
   const group = project.orgProjects?.[0]?.org
 
   return (
-    <article className="card pcard">
+    <Card as="article" className="flex flex-col overflow-hidden">
       <Link to={href} tabIndex={-1} aria-hidden="true">
         <Cover project={project} height={coverHeight}>
           <CoverAction project={project} />
         </Cover>
       </Link>
-      <div className="pcard__body">
+      <div className="flex grow flex-col gap-2 px-4 pt-3.5 pb-4">
         <CardTop project={project} />
-        <h3 className="disp pcard__title">
-          <Link to={href}>{project.title}</Link>
+        <h3 className="mt-0.5 font-display text-19 leading-[1.2] font-bold tracking-tight">
+          <Link to={href} className={titleLink}>
+            {project.title}
+          </Link>
         </h3>
-        {project.pitch && <p className="pcard__pitch clamp-2">{project.pitch}</p>}
-        <div className="pcard__foot">
+        {project.pitch && (
+          <p className="line-clamp-2 text-14 leading-[1.45] text-ink-3">{project.pitch}</p>
+        )}
+        <div className="mt-auto flex min-w-0 items-center gap-2 pt-2">
           {makers.length > 0 && <AvatarStack people={makers} size={28} />}
-          <span className="pcard__who">{makersLabel(makers.map((m) => m.name ?? ''))}</span>
+          <span className="text-13 font-semibold">
+            {makersLabel(makers.map((m) => m.name ?? ''))}
+          </span>
           {course ? (
             <Chip size="xs" tone="subtle">
               Made for {course}
@@ -73,12 +82,12 @@ export function ProjectCard({
               </Chip>
             )
           )}
-          <span className="push">
+          <span className="ml-auto">
             <ProjectStats project={project} />
           </span>
         </div>
       </div>
-    </article>
+    </Card>
   )
 }
 
@@ -95,42 +104,40 @@ export function ProjectListRow({
   const course = courseOf(project)
 
   return (
-    <article className="card prow">
-      <Link to={href} className="prow__thumb" tabIndex={-1} aria-hidden="true">
+    <Card as="article" className="flex items-center gap-3 p-2.5 sm:gap-4 sm:p-3">
+      <Link to={href} className="block w-26 shrink-0 sm:w-44" tabIndex={-1} aria-hidden="true">
         <Cover project={project} height={104} radius={10} />
       </Link>
-      <div className="prow__main">
+      <div className="flex min-w-0 grow flex-col gap-1.5">
         {(project.type || course || project.orgProjects?.length > 0) && (
-          <div className="row wrap" style={{ gap: 8 }}>
+          <div className="flex flex-wrap items-center gap-2">
             <TypeBadge type={project.type} />
-            {course && (
-              <span className="muted" style={{ fontSize: 13 }}>
-                Made for {course}
-              </span>
-            )}
+            {course && <span className="text-13 text-muted">Made for {course}</span>}
             {project.orgProjects?.[0] && (
-              <span className="muted" style={{ fontSize: 13 }}>
+              <span className="text-13 text-muted">
                 Built with {project.orgProjects[0].org.name}
               </span>
             )}
           </div>
         )}
-        <h3 className="disp prow__title">
-          <Link to={href}>{project.title}</Link>
+        <h3 className="font-display text-17 leading-[1.2] font-bold sm:text-19">
+          <Link to={href} className={titleLink}>
+            {project.title}
+          </Link>
         </h3>
-        {project.pitch && <p className="prow__pitch clamp-1">{project.pitch}</p>}
+        {project.pitch && <p className="line-clamp-1 text-14 text-ink-3">{project.pitch}</p>}
       </div>
-      <div className="prow__side">
-        <span className="row" style={{ gap: 6 }}>
+      <div className="hidden shrink-0 flex-col items-end gap-2.5 pr-2 sm:flex">
+        <span className="flex items-center gap-1.5">
           <VisibilityPill visibility={project.visibility} />
           <StatusPill status={project.status} />
         </span>
-        <span className="row" style={{ gap: 8 }}>
+        <span className="flex items-center gap-2">
           {makers.length > 0 && <AvatarStack people={makers} size={26} />}
           <ProjectStats project={project} />
         </span>
       </div>
-    </article>
+    </Card>
   )
 }
 
@@ -146,7 +153,7 @@ export function ProjectCollection({
 }) {
   if (layout === 'list') {
     return (
-      <div className="stack" style={{ gap: 14 }}>
+      <div className="flex flex-col gap-3.5">
         {projects.map((p) => (
           <ProjectListRow key={p.id} project={p} maker={maker} />
         ))}
@@ -154,10 +161,10 @@ export function ProjectCollection({
     )
   }
   return (
-    <div className="card-grid">
+    <CardGrid>
       {projects.map((p) => (
         <ProjectCard key={p.id} project={p} maker={maker} />
       ))}
-    </div>
+    </CardGrid>
   )
 }

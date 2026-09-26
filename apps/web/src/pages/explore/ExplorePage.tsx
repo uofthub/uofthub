@@ -12,18 +12,25 @@ import { LayoutToggle, ProjectCollection, type CardLayout } from '../../componen
 import {
   Button,
   Chip,
+  cx,
   EmptyState,
+  Heading,
   Icon,
-  Input,
+  LinkButton,
+  LoadMore,
   Menu,
   MenuItem,
+  Page,
+  PageLede,
+  PageTitle,
+  searchFrame,
+  searchInput,
   Spinner,
   Toggle,
 } from '../../components/ui'
-import { CollectionCard, CollectionDialog } from '../../components/collection'
+import { CollectionCard, CollectionDialog, CollectionGrid } from '../../components/collection'
 import { useAuth } from '../../lib/auth'
 import { FacultyTiles } from './FacultyTiles'
-import './explore.css'
 
 type Sort = 'new' | 'trending'
 
@@ -45,10 +52,10 @@ function FilterMenu<T extends string>({
       align="left"
       width={220}
       trigger={({ toggle, open }) => (
-        <button type="button" className="btn btn--md" aria-expanded={open} onClick={toggle}>
+        <Button size="md" aria-expanded={open} onClick={toggle}>
           {current ? `${label}: ${current.label}` : label}
           <Icon name="chevronDown" size={16} />
-        </button>
+        </Button>
       )}
     >
       {(close) => (
@@ -83,11 +90,11 @@ function CourseBrowser() {
   const popular = (facets?.courses ?? []).slice(0, 5).map((c) => ({ tag: c.code, count: c.count }))
 
   return (
-    <section className="stack" style={{ gap: 16 }}>
-      <h2 className="h2">Browse by course</h2>
-      <div className="course-browser">
+    <section className="flex flex-col gap-4">
+      <Heading>Browse by course</Heading>
+      <div className="flex flex-wrap items-center gap-3.5">
         <form
-          className="course-search"
+          className={cx(searchFrame, 'h-12 w-90 max-w-full gap-2.5 rounded-xl px-3.5')}
           onSubmit={(e) => {
             e.preventDefault()
             if (code.trim())
@@ -100,27 +107,26 @@ function CourseBrowser() {
             onChange={(e) => setCode(e.target.value)}
             placeholder="Course code, e.g. MAT102"
             aria-label="Course code"
+            className={cx(searchInput, 'px-0.5 text-15')}
           />
         </form>
         {popular.length > 0 && (
           <>
-            <span className="muted" style={{ fontSize: 14 }}>
-              Popular:
-            </span>
+            <span className="text-14 text-muted">Popular:</span>
             {popular.map((t) => (
-              <Link
+              <Chip
                 key={t.tag}
                 to={`/explore?course=${encodeURIComponent(t.tag)}`}
-                className="chip course-chip"
+                className="h-10 border border-line bg-surface px-3.5 text-14 text-ink"
               >
-                <b>{t.tag}</b>
-                <span className="muted">{t.count}</span>
-              </Link>
+                <b className="font-bold">{t.tag}</b>
+                <span className="text-muted">{t.count}</span>
+              </Chip>
             ))}
           </>
         )}
       </div>
-      <p className="muted" style={{ fontSize: 14 }}>
+      <p className="text-14 text-muted">
         See what past students made for a course before you start yours.
       </p>
     </section>
@@ -137,39 +143,34 @@ function Collections() {
     queryFn: () => api.collections.list({ take: 3 }),
   })
   return (
-    <section className="stack" style={{ gap: 16 }}>
+    <section className="flex flex-col gap-4">
       {making && <CollectionDialog onClose={() => setMaking(false)} />}
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h2 className="h2">Collections</h2>
-        <span className="row" style={{ gap: 18 }}>
+      <div className="flex items-baseline justify-between">
+        <Heading>Collections</Heading>
+        <span className="flex items-center gap-4.5">
           {data.length > 0 && (
-            <Link to="/collections" style={{ fontSize: 14, fontWeight: 600 }}>
+            <Link to="/collections" className="text-14 font-semibold">
               See all
             </Link>
           )}
-          <button
-            type="button"
-            className="link-btn"
-            style={{ fontSize: 14, fontWeight: 600 }}
-            onClick={() => (user ? setMaking(true) : navigate('/session'))}
-          >
+          <LinkButton onClick={() => (user ? setMaking(true) : navigate('/session'))}>
             Make a collection →
-          </button>
+          </LinkButton>
         </span>
       </div>
       {isLoading ? (
         <Spinner />
       ) : data.length === 0 ? (
-        <p className="muted" style={{ fontSize: 15 }}>
+        <p className="text-15 text-muted">
           No collections yet. Put together the projects you’d show a friend — “Best of UTM”, “Built
           in first year” — and they’ll show up here.
         </p>
       ) : (
-        <div className="collection-grid">
+        <CollectionGrid>
           {data.map((c) => (
             <CollectionCard key={c.id} collection={c} />
           ))}
-        </div>
+        </CollectionGrid>
       )}
     </section>
   )
@@ -270,32 +271,30 @@ export default function ExplorePage() {
               : ''
 
   return (
-    <div className="page page--wide stack" style={{ gap: 44 }}>
-      <div className="stack" style={{ gap: 18 }}>
+    <Page width="wide" className="flex flex-col gap-11">
+      <div className="flex flex-col gap-4.5">
         <div>
-          <h1 className="page-title page-title--xl">Explore</h1>
-          <p className="page-lede" style={{ fontSize: 18 }}>
+          <PageTitle size="xl">Explore</PageTitle>
+          <PageLede className="text-18 md:text-18">
             Work from every faculty and all three campuses.
-          </p>
+          </PageLede>
         </div>
 
-        <label className="big-search">
+        <label className={cx(searchFrame, 'h-15 gap-3 rounded-2xl px-5')}>
           <Icon name="search" size={22} />
-          <Input
-            inputRef={searchRef}
+          <input
+            ref={searchRef}
             type="search"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Search projects, people, tags or a course code"
             aria-label="Search"
+            className={cx(searchInput, 'h-full text-18')}
           />
         </label>
 
-        <div className="filter-row">
-          <span
-            className="muted row"
-            style={{ gap: 6, fontSize: 14, fontWeight: 600, marginRight: 4 }}
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 flex items-center gap-1.5 text-14 font-semibold text-muted">
             <Icon name="filter" size={16} />
             Filter
           </span>
@@ -317,7 +316,7 @@ export default function ExplorePage() {
             options={[{ value: 'trending', label: 'Trending this week' }]}
             onChange={(v) => set('sort', v)}
           />
-          <span className="push">
+          <span className="ml-auto">
             <Toggle checked={helpOnly} onChange={(on) => set('help', on ? '1' : '')}>
               Only projects looking for help
             </Toggle>
@@ -326,11 +325,11 @@ export default function ExplorePage() {
       </div>
 
       {searching ? (
-        <section className="stack" style={{ gap: 16 }}>
-          <div className="row wrap" style={{ justifyContent: 'space-between', gap: 12 }}>
-            <div className="stack" style={{ gap: 6 }}>
-              <h2 className="h2">{heading}</h2>
-              <div className="row wrap" style={{ gap: 6 }}>
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Heading>{heading}</Heading>
+              <div className="flex flex-wrap items-center gap-1.5">
                 {q && (
                   <Chip size="sm" tone="outline" onClick={() => set('q', '')}>
                     “{q}” ✕
@@ -386,18 +385,12 @@ export default function ExplorePage() {
             <ProjectCollection projects={results.projects} layout={layout} />
           )}
 
-          {results.hasNextPage && (
-            <div className="row" style={{ justifyContent: 'center' }}>
-              <Button onClick={() => results.fetchNextPage()} disabled={results.isFetchingNextPage}>
-                {results.isFetchingNextPage ? 'Loading…' : 'Load more'}
-              </Button>
-            </div>
-          )}
+          {results.hasNextPage && <LoadMore query={results} label="Load more" />}
         </section>
       ) : (
         <>
-          <section className="stack" style={{ gap: 16 }}>
-            <h2 className="h2">Browse by faculty</h2>
+          <section className="flex flex-col gap-4">
+            <Heading>Browse by faculty</Heading>
             <FacultyTiles />
           </section>
 
@@ -405,9 +398,9 @@ export default function ExplorePage() {
 
           <Collections />
 
-          <section className="stack" style={{ gap: 16 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <h2 className="h2">Trending this week</h2>
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <Heading>Trending this week</Heading>
               <LayoutToggle value={trendingLayout} onChange={setTrendingLayout} label={false} />
             </div>
             {trending.isLoading ? (
@@ -420,6 +413,6 @@ export default function ExplorePage() {
           </section>
         </>
       )}
-    </div>
+    </Page>
   )
 }

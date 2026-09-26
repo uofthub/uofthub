@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ReportStatus } from '@uofthub/types'
 import { api, type AdminMessageReport, type MessageReportDecision } from '../../lib/api'
 import { reasonShort } from '../../lib/moderation'
-import { Button, Chip, ErrorText, Pill, TextArea } from '../../components/ui'
+import { Button, Chip, cx, ErrorText, Pill, TextArea } from '../../components/ui'
+import { Decisions, QueueCard, Quote } from './QueueCard'
 
 const STATUS: Record<ReportStatus, { label: string; dot: string }> = {
   OPEN: { label: 'Open', dot: '#C07A00' },
@@ -45,43 +46,38 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
   const error = decide.error || lift.error
 
   return (
-    <article className="card stack" style={{ padding: 22, gap: 12 }}>
-      <div className="row wrap" style={{ gap: 10 }}>
-        <Link to={`/u/${reported.id}`} className="disp" style={{ fontSize: 19, fontWeight: 700 }}>
-          {reported.name}
-        </Link>
-        <Chip size="sm" tone="navy">
-          {reasonShort(report.reason)}
-        </Chip>
-        <Pill dot={STATUS[report.status].dot}>{STATUS[report.status].label}</Pill>
-        <span className="muted push" style={{ fontSize: 13 }}>
-          {new Date(report.createdAt).toLocaleString()}
-        </span>
-      </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        Sender {reported.email} · reported by <Link to={`/u/${reporter.id}`}>{reporter.name}</Link>{' '}
-        ({reporter.email})
-      </div>
-      {report.details && <p style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>“{report.details}”</p>}
+    <QueueCard
+      to={`/u/${reported.id}`}
+      title={reported.name}
+      tags={
+        <>
+          <Chip size="sm" tone="navy">
+            {reasonShort(report.reason)}
+          </Chip>
+          <Pill dot={STATUS[report.status].dot}>{STATUS[report.status].label}</Pill>
+        </>
+      }
+      when={new Date(report.createdAt).toLocaleString()}
+      meta={
+        <>
+          Sender {reported.email} · reported by{' '}
+          <Link to={`/u/${reporter.id}`}>{reporter.name}</Link> ({reporter.email})
+        </>
+      }
+    >
+      {report.details && <Quote>{report.details}</Quote>}
 
-      <ol className="stack" style={{ gap: 6, margin: 0, padding: 0, listStyle: 'none' }}>
+      <ol className="flex flex-col gap-1.5">
         {report.messages.map((m, i) => {
           const fromReported = m.senderId === reported.id
           return (
             <li
               key={i}
-              style={{
-                fontSize: 14,
-                padding: '6px 10px',
-                borderRadius: 8,
-                background: fromReported ? 'var(--fill)' : undefined,
-              }}
+              className={cx('rounded-lg px-2.5 py-1.5 text-14', fromReported && 'bg-fill')}
             >
               <b>{fromReported ? reported.name : reporter.name}</b>{' '}
-              <span className="muted" style={{ fontSize: 12 }}>
-                {new Date(m.createdAt).toLocaleString()}
-              </span>
-              <p style={{ whiteSpace: 'pre-wrap', margin: '2px 0 0' }}>{m.body}</p>
+              <span className="text-12 text-muted">{new Date(m.createdAt).toLocaleString()}</span>
+              <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
             </li>
           )
         })}
@@ -96,7 +92,7 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
             onChange={(e) => setNote(e.target.value)}
             placeholder="Note to the sender (sent with a warning or suspension)…"
           />
-          <div className="row wrap" style={{ gap: 8 }}>
+          <Decisions>
             {DECISIONS.map((d) => (
               <Button
                 key={d.value}
@@ -109,10 +105,10 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
                 {d.label}
               </Button>
             ))}
-          </div>
+          </Decisions>
         </>
       ) : (
-        <div className="row wrap muted" style={{ fontSize: 13, gap: 8 }}>
+        <div className="flex flex-wrap items-center gap-2 text-13 text-muted">
           <span>
             {report.reviewedBy ? `Decided by ${report.reviewedBy.name}` : 'Decided'}
             {report.reviewedAt && ` on ${new Date(report.reviewedAt).toLocaleDateString()}`}
@@ -121,7 +117,7 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
           {reported.messagingSuspendedAt && (
             <Button
               size="sm"
-              className="push"
+              className="ml-auto"
               onClick={() => lift.mutate()}
               disabled={lift.isPending}
             >
@@ -131,6 +127,6 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
         </div>
       )}
       {error && <ErrorText>{(error as Error).message}</ErrorText>}
-    </article>
+    </QueueCard>
   )
 }

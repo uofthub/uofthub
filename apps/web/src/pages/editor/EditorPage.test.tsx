@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, Link, Route, RouterProvider, Routes } from 'react-router-dom'
 import { api, type CourseTemplate, type ProjectDetail } from '../../lib/api'
@@ -51,7 +51,9 @@ function open(path: string) {
     { initialEntries: [path] }
   )
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <RouterProvider router={router} />
     </QueryClientProvider>
   )
@@ -73,7 +75,9 @@ describe('the editor, starting a project', () => {
   it('preselects no type, and offers no Draft option beside Publish', async () => {
     open('/projects/new')
     expect(await screen.findByText('What are you sharing?')).toBeTruthy()
-    expect(screen.queryAllByRole('button', { pressed: true }).filter((b) => b.className.includes('type-tile'))).toEqual([])
+    const types = within(screen.getByRole('group', { name: 'Project type' }))
+    expect(types.getAllByRole('button').length).toBeGreaterThan(0)
+    expect(types.queryAllByRole('button', { pressed: true })).toEqual([])
     expect(screen.queryByText('Only you and your collaborators')).toBeNull()
   })
 

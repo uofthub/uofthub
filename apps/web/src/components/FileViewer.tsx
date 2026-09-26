@@ -1,11 +1,10 @@
 import { useCallback, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type FilePreview, type ProjectFile } from '../lib/api'
 import { CSV_ROW_CAP, parseCsv } from '../lib/csv'
 import { extOf, formatBytes, lookFor } from '../lib/files'
-import { Button, Chip, Icon, Spinner } from './ui'
-import Markdown from './Markdown'
+import { Button, Card, Chip, cx, dialogPanel, EmptyState, Icon, Scrim, Spinner } from './ui'
+import Markdown, { DocTable, docPre } from './Markdown'
 
 /**
  * The in-app document viewer.
@@ -18,34 +17,15 @@ import Markdown from './Markdown'
 
 function CsvTable({ text }: { text: string }) {
   const rows = parseCsv(text)
-  if (rows.length === 0) return <p className="muted">This file is empty.</p>
+  if (rows.length === 0) return <p className="text-muted">This file is empty.</p>
 
   const [header, ...body] = rows
   const shown = body.slice(0, CSV_ROW_CAP)
 
   return (
     <>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="md-table">
-          <thead>
-            <tr>
-              {header.map((cell, i) => (
-                <th key={i}>{cell}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={i}>
-                {header.map((_, n) => (
-                  <td key={n}>{r[n] ?? ''}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
+      <DocTable header={header} rows={shown} />
+      <p className="mt-3 text-13 text-muted">
         {body.length > shown.length
           ? `Showing the first ${CSV_ROW_CAP} of ${body.length} rows — download the file for all of it.`
           : `${body.length} ${body.length === 1 ? 'row' : 'rows'}.`}
@@ -60,7 +40,7 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
     return (
       <>
         {preview.truncated && (
-          <p className="muted row" style={{ fontSize: 13, marginBottom: 12, gap: 6 }}>
+          <p className="mb-3 flex items-center gap-1.5 text-13 text-muted">
             <Icon name="info" size={15} /> This file is large — only the beginning is shown.
             Download it for the rest.
           </p>
@@ -70,9 +50,7 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
         ) : ext === 'csv' ? (
           <CsvTable text={preview.text} />
         ) : (
-          <pre className="md-pre" style={{ whiteSpace: 'pre-wrap' }}>
-            {preview.text}
-          </pre>
+          <pre className={cx(docPre, 'whitespace-pre-wrap')}>{preview.text}</pre>
         )}
       </>
     )
@@ -83,13 +61,7 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
       <img
         src={preview.url}
         alt={name}
-        style={{
-          maxWidth: '100%',
-          maxHeight: '72vh',
-          objectFit: 'contain',
-          borderRadius: 10,
-          margin: '0 auto',
-        }}
+        className="mx-auto max-h-[72vh] max-w-full rounded-btn object-contain"
       />
     )
   }
@@ -101,40 +73,23 @@ function Preview({ preview, name }: { preview: FilePreview; name: string }) {
       <iframe
         src={preview.url}
         title={name}
-        style={{
-          width: '100%',
-          height: '74vh',
-          border: 'none',
-          borderRadius: 10,
-          background: '#fff',
-        }}
+        className="h-[74vh] w-full rounded-btn border-none bg-white"
       />
     )
   }
 
   if (preview.kind === 'video') {
     return (
-      <video
-        src={preview.url}
-        controls
-        style={{ maxWidth: '100%', maxHeight: '72vh', borderRadius: 10, margin: '0 auto' }}
-      />
+      <video src={preview.url} controls className="mx-auto max-h-[72vh] max-w-full rounded-btn" />
     )
   }
 
   return (
-    <div style={{ padding: '40px 0', textAlign: 'center' }}>
-      <span
-        className="empty__icon"
-        style={{ margin: '0 auto', width: 64, height: 64, borderRadius: 16 }}
-      >
+    <div className="py-10 text-center">
+      <span className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-navy-tint text-navy-ink">
         <Icon name="music" size={30} />
       </span>
-      <audio
-        src={preview.url}
-        controls
-        style={{ display: 'block', width: '100%', marginTop: 24 }}
-      />
+      <audio src={preview.url} controls className="mt-6 block w-full" />
     </div>
   )
 }
@@ -191,47 +146,30 @@ export default function FileViewer({
   if (!file) return null
   const look = lookFor(file.name)
 
-  return createPortal(
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div
-        className="dialog card"
+  return (
+    <Scrim onClose={onClose}>
+      <Card
+        className={cx(dialogPanel, 'max-w-250')}
         role="dialog"
         aria-modal="true"
         aria-label={file.name}
-        style={{ maxWidth: 1000 }}
       >
-        <div
-          className="row"
-          style={{
-            gap: 12,
-            padding: '14px 16px 14px 20px',
-            borderBottom: '1px solid var(--line-soft)',
-          }}
-        >
+        <div className="flex items-center gap-3 border-b border-line-soft py-3.5 pr-4 pl-5">
           <span
-            className="row"
-            style={{
-              justifyContent: 'center',
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: look.bg,
-              color: look.ink,
-            }}
+            className="flex size-10 items-center justify-center rounded-btn"
+            style={{ background: look.bg, color: look.ink }}
           >
             <Icon name={look.icon} size={20} />
           </span>
-          <div className="grow">
-            <div className="clamp-1" style={{ fontWeight: 600 }}>
-              {file.name}
-            </div>
-            <div className="muted" style={{ fontSize: 13 }}>
+          <div className="min-w-0 grow">
+            <div className="line-clamp-1 font-semibold">{file.name}</div>
+            <div className="text-13 text-muted">
               {formatBytes(file.sizeBytes)} · {new Date(file.uploadedAt).toLocaleDateString()}
             </div>
           </div>
 
           {files.length > 1 && (
-            <div className="row" style={{ gap: 4 }}>
+            <div className="flex items-center gap-1">
               <Button
                 size="md"
                 variant="ghost"
@@ -241,7 +179,7 @@ export default function FileViewer({
                 disabled={index === 0}
                 aria-label="Previous file"
               />
-              <span className="muted" style={{ fontSize: 13 }}>
+              <span className="text-13 text-muted">
                 {index + 1} / {files.length}
               </span>
               <Button
@@ -269,25 +207,20 @@ export default function FileViewer({
           />
         </div>
 
-        <div style={{ padding: 20, overflow: 'auto' }}>
+        <div className="overflow-auto p-5">
           {isLoading ? (
             <Spinner label="Opening…" />
           ) : error || !data ? (
-            <div className="empty">
-              <span className="empty__icon">
-                <Icon name="eyeOff" size={22} />
-              </span>
-              <div className="empty__title">
-                {(error as Error | null)?.message ?? 'This file could not be opened.'}
-              </div>
-              <Chip size="sm">{extOf(file.name).toUpperCase() || 'FILE'}</Chip>
-            </div>
+            <EmptyState
+              icon="eyeOff"
+              title={(error as Error | null)?.message ?? 'This file could not be opened.'}
+              action={<Chip size="sm">{extOf(file.name).toUpperCase() || 'FILE'}</Chip>}
+            />
           ) : (
             <Preview preview={data} name={file.name} />
           )}
         </div>
-      </div>
-    </div>,
-    document.body
+      </Card>
+    </Scrim>
   )
 }

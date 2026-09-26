@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { GITHUB_URL } from '../../lib/site'
 import { useTheme } from '../../lib/theme'
-import { Icon, type IconName } from '../ui'
+import { Card, cx, dialogPanel, Eyebrow, Icon, Scrim, type IconName } from '../ui'
+import { Kbd } from './Kbd'
 
 type Command = {
   id: string
@@ -212,15 +212,15 @@ function Palette({
 
   let lastGroup = ''
 
-  return createPortal(
-    <div className="scrim scrim--top" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div
-        className="dialog card palette"
+  return (
+    <Scrim onClose={close} top>
+      <Card
+        className={cx(dialogPanel, 'max-w-155')}
         role="dialog"
         aria-modal="true"
         aria-label="Command panel"
       >
-        <div className="palette__search">
+        <div className="flex items-center gap-3 border-b border-line-soft px-5 py-4 text-muted">
           <Icon name="search" size={20} />
           <input
             autoFocus
@@ -228,40 +228,40 @@ function Palette({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search projects, jump to a page…"
             aria-label="Search commands"
+            className="min-w-0 flex-1 bg-transparent px-0.5 text-17 text-ink outline-none"
           />
-          <kbd className="searchbox__kbd">ESC</kbd>
+          <Kbd>ESC</Kbd>
         </div>
-        <div className="palette__list" ref={list} role="listbox">
-          {commands.length === 0 && <p className="muted palette__empty">No matches.</p>}
+        <div className="max-h-[55vh] overflow-y-auto p-1.5" ref={list} role="listbox">
+          {commands.length === 0 && <p className="p-6 text-center text-muted">No matches.</p>}
           {commands.map((c, i) => {
             const header = c.group !== lastGroup ? c.group : null
             lastGroup = c.group
             return (
               <div key={`${c.group}-${c.id}`}>
-                {header && <div className="palette__group lbl">{header}</div>}
+                {header && (
+                  <Eyebrow as="div" className="px-3 pt-3 pb-1.5">
+                    {header}
+                  </Eyebrow>
+                )}
                 <button
                   type="button"
                   role="option"
                   aria-selected={i === cursor}
                   data-active={i === cursor}
-                  className="palette__item"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-btn px-3 text-left text-15 font-medium text-ink data-[active=true]:bg-fill"
                   onMouseEnter={() => setCursor(i)}
                   onClick={c.run}
                 >
-                  <Icon name={c.icon} size={18} />
-                  <span className="grow clamp-1">{c.label}</span>
-                  {c.hint && (
-                    <span className="muted" style={{ fontSize: 13 }}>
-                      {c.hint}
-                    </span>
-                  )}
+                  <Icon name={c.icon} size={18} className="text-navy-ink" />
+                  <span className="line-clamp-1 min-w-0 grow">{c.label}</span>
+                  {c.hint && <span className="text-13 text-muted">{c.hint}</span>}
                 </button>
               </div>
             )
           })}
         </div>
-      </div>
-    </div>,
-    document.body
+      </Card>
+    </Scrim>
   )
 }
