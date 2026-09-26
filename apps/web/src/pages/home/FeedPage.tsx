@@ -18,8 +18,8 @@ import {
   type TabOption,
 } from '../../components/ui'
 import { Composer } from './Composer'
-import { LeftRail } from './LeftRail'
 import { RightRail } from './RightRail'
+import { LeftRail } from './LeftRail'
 import { Spotlight } from './Spotlight'
 import './home.css'
 
@@ -92,7 +92,7 @@ function FeedList({
   )
 }
 
-/** The signed-in home page — the Home feed and Mobile feed boards. */
+/** The signed-in home page at /feed — the Home feed and Mobile feed boards. */
 export default function FeedPage() {
   const { user } = useAuth()
   const phone = useMediaQuery(PHONE)

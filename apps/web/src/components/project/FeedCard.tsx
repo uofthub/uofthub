@@ -4,14 +4,8 @@ import type { FeedReason as Reason, ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
-import {
-  courseOf,
-  postedAt,
-  primaryAction,
-  safeLinks,
-  timeShort,
-  topicTags,
-} from '../../lib/projectView'
+import { actionTarget, cardAction } from '../../lib/outputs'
+import { courseOf, postedAt, timeShort, topicTags } from '../../lib/projectView'
 import { Avatar, AvatarStack, Button, Chip, Icon, Menu, MenuItem } from '../ui'
 import { Cover, CoverTag } from './Cover'
 import { SaveButton, StatusPill, TypeBadge, VisibilityPill } from './bits'
@@ -35,8 +29,8 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
   const owner = project.owner
   const partners = project.collaborators.map((c) => c.user)
   const course = courseOf(project)
-  const tags = topicTags(project.tags).slice(0, 4)
-  const action = primaryAction(safeLinks(project.links))
+  const tags = topicTags(project).slice(0, 4)
+  const action = cardAction(project)
   // The phone card drops the campus to keep the line to one row.
   const meta = [owner?.faculty, !phone && campusShort(owner?.campus), timeShort(postedAt(project))]
     .filter(Boolean)
@@ -186,7 +180,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
           <span className="feed-card__cta row" style={{ gap: 8 }}>
             <SaveButton project={project} />
             {action ? (
-              <Button variant="primary" size="md" icon={action.icon} href={action.href}>
+              <Button variant="primary" size="md" {...actionTarget(action)}>
                 {action.label}
               </Button>
             ) : (

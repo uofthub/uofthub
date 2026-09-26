@@ -1,7 +1,7 @@
 import type { OutputKind, ProjectOutput } from '@uofthub/types'
 import type { IconName } from '../components/ui/Icon'
-import type { ProjectDetail } from './api'
-import { linkRole } from './projectView'
+import { safeUrl, type ProjectDetail, type ProjectSummary } from './api'
+import { linkRole, primaryAction, safeLinks } from './projectView'
 
 /**
  * What a project produced, as the page names it: the kind's label, its icon,
@@ -77,3 +77,33 @@ export function resolveOutputs(
 
 /** The one the project leads with. */
 export const primaryOutput = (outputs: ResolvedOutput[]) => outputs.find((o) => o.primary)
+
+/** A card's main button: a link out, or a page in the app. */
+export type CardAction = { label: string; icon: IconName } & (
+  | { href: string; to?: never }
+  | { to: string; href?: never }
+)
+
+/**
+ * The main button for a project in a list. Its lead output decides it when it
+ * has one — "View poster" opens the poster in the project page's viewer, a
+ * video link is watched where it lives — and otherwise it is read off the
+ * links, as before outputs existed.
+ */
+export function cardAction(
+  project: Pick<ProjectSummary, 'id' | 'links' | 'lead'>
+): CardAction | undefined {
+  const lead = project.lead
+  if (lead) {
+    const { action: label, icon } = OUTPUT_KINDS[lead.kind]
+    const link = lead.linkId ? project.links.find((l) => l.id === lead.linkId) : undefined
+    const href = link && safeUrl(link.url)
+    if (href) return { label, icon, href }
+    if (lead.fileId) return { label, icon, to: `/projects/${project.id}?view=${lead.fileId}` }
+  }
+  const fromLinks = primaryAction(safeLinks(project.links))
+  return fromLinks && { label: fromLinks.label, icon: fromLinks.icon, href: fromLinks.href }
+}
+
+/** A card action as Button props: its icon, and where it goes. */
+export const actionTarget = ({ label: _label, ...target }: CardAction) => target

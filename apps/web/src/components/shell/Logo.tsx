@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
 import Mark from '../brand/Mark'
 
 /**
@@ -12,9 +13,10 @@ export function Logo({
   compact?: boolean
   tone?: 'brand' | 'white'
 }) {
+  const { user } = useAuth()
   return (
     <Link
-      to="/"
+      to={user ? '/feed' : '/'}
       className={tone === 'white' ? 'logo logo--white' : 'logo'}
       aria-label="uofthub home"
     >

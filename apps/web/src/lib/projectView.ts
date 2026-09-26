@@ -24,9 +24,14 @@ export const isCourseCode = (tag: string) => COURSE_CODE.test(tag.trim())
 export const courseOf = (project: { courseCode?: string | null }): string | undefined =>
   project.courseCode ?? undefined
 
-/** Everything else — the `#React #Maps` row. */
-export function topicTags(tags: string[]): string[] {
-  return tags.filter((t) => !isCourseCode(t))
+/**
+ * The `#React #Maps` row: the tags, less a repeat of the project's own course.
+ * Any other course code stays — "also used in CSC311" is worth showing, and
+ * the course column holds only one.
+ */
+export function topicTags(project: { tags: string[]; courseCode?: string | null }): string[] {
+  const course = project.courseCode?.trim().toUpperCase()
+  return project.tags.filter((t) => t.trim().toUpperCase() !== course)
 }
 
 /* ---------------------------------- links ---------------------------------- */

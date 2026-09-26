@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Visibility } from '@uofthub/types'
-import { api, type ImportedLink, type ProjectDetail } from '../../lib/api'
+import { api, importedImageFile, type ImportedLink, type ProjectDetail } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { formatBytes } from '../../lib/files'
-import { useDocumentTitle } from '../../lib/hooks'
+import { useDocumentTitle, useReleasedObjectUrls } from '../../lib/hooks'
 import { outputKindForLink } from '../../lib/outputs'
 import {
   PROJECT_STATUSES,
@@ -20,6 +20,7 @@ import {
   Avatar,
   Badge,
   Button,
+  Dialog,
   EmptyState,
   ErrorText,
   Field,
@@ -35,7 +36,9 @@ import {
   applyTemplate,
   draftFromProject,
   emptyDraft,
+  keepRemoved,
   newId,
+  removeExisting,
   settle,
   suggestedDetails,
   type Draft,
@@ -166,6 +169,7 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
     () => (firstImage ? URL.createObjectURL(firstImage) : undefined),
     [firstImage]
   )
+  useReleasedObjectUrls([previewFile])
   const previewCover = (lead?.thumbnail !== 'remove' && lead?.thumbnailUrl) || previewFile
 
   const setType = (type: ProjectType) =>
@@ -193,13 +197,7 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
           primary: !hasPrimary && n === 0 && !got.image,
           target: { type: 'newLink', label: l.label, url: l.url },
         }))
-        const image = got.image
-          ? new File(
-              [Uint8Array.from(atob(got.image.dataBase64), (c) => c.charCodeAt(0))],
-              got.image.name,
-              { type: got.image.contentType }
-            )
-          : null
+        const image = got.image ? importedImageFile(got.image) : null
         return {
           ...d,
           type,
@@ -219,6 +217,12 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
     },
   })
 
+  // Anything changed since the page opened, or since a save that went
+  // through, is unsaved — and a long write-up is too much to lose to a
+  // stray click or a closed tab.
+  const dirty = draft !== initial || visibility !== (project?.visibility ?? initial.visibility)
+  const leave = useLeaveGuard(dirty)
+
   const save = useMutation({
     mutationFn: (as: Visibility | undefined) =>
       saveDraft(draft, { projectId, visibility: as }, api.projects),
@@ -227,6 +231,7 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
       qc.invalidateQueries({ queryKey: ['userProjects'] })
       qc.invalidateQueries({ queryKey: ['project', result.projectId] })
       if (result.failed.length === 0) {
+        leave.allow()
         navigate(`/projects/${result.projectId}`)
         return
       }
@@ -247,8 +252,13 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
   // The project's files and links that are not outputs, to offer as ones.
   const usedFiles = new Set(draft.outputs.flatMap((o) => (o.target.type === 'file' ? [o.target.fileId] : [])))
   const usedLinks = new Set(draft.outputs.flatMap((o) => (o.target.type === 'link' ? [o.target.linkId] : [])))
-  const spareFiles = (project?.files ?? []).filter((f) => !usedFiles.has(f.id))
-  const spareLinks = (project?.links ?? []).filter((l) => !usedLinks.has(l.id))
+  const goneFiles = new Set(draft.removedFiles.map((f) => f.id))
+  const goneLinks = new Set(draft.removedLinks.map((l) => l.id))
+  const keptFiles = (project?.files ?? []).filter((f) => !goneFiles.has(f.id))
+  const keptLinks = (project?.links ?? []).filter((l) => !goneLinks.has(l.id))
+  const spareFiles = keptFiles.filter((f) => !usedFiles.has(f.id))
+  const spareLinks = keptLinks.filter((l) => !usedLinks.has(l.id))
+  const removed = draft.removedFiles.length + draft.removedLinks.length
 
   const ready = !!draft.title.trim() && courseOk && !save.isPending
   const meta = draft.type ? PROJECT_TYPES[draft.type] : null
@@ -257,6 +267,23 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
 
   return (
     <div className="page page--wide post-grid">
+      {leave.blocker.state === 'blocked' && (
+        <Dialog
+          title="Leave without saving?"
+          onClose={() => leave.blocker.reset?.()}
+          width={440}
+          footer={
+            <>
+              <Button onClick={() => leave.blocker.reset?.()}>Keep editing</Button>
+              <Button variant="danger" onClick={() => leave.blocker.proceed?.()}>
+                Leave
+              </Button>
+            </>
+          }
+        >
+          <p>What you’ve changed here hasn’t been saved, and will be lost.</p>
+        </Dialog>
+      )}
       <div className="stack" style={{ gap: 22, minWidth: 0 }}>
         <div>
           <h1 className="page-title">{editing ? 'Edit project' : 'Share your work'}</h1>
@@ -527,9 +554,61 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               ))}
             </ul>
           )}
-          {editing && (
-            <p className="muted" style={{ fontSize: 13 }}>
-              Files already on the project are managed from its page’s ⋯ menu.
+          {(keptFiles.length > 0 || keptLinks.length > 0) && (
+            <div className="stack" style={{ gap: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>On the project now</span>
+              <ul className="stack" style={{ gap: 6, listStyle: 'none', padding: 0, margin: 0 }}>
+                {keptFiles.map((f) => (
+                  <li key={f.id} className="row" style={{ gap: 8, fontSize: 14 }}>
+                    <Icon name="file" size={16} />
+                    <span className="grow clamp-1">{f.name}</span>
+                    <span className="muted">{formatBytes(f.sizeBytes)}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      iconOnly
+                      icon="close"
+                      aria-label={`Remove ${f.name}`}
+                      onClick={() =>
+                        setDraft((d) => removeExisting(d, 'file', { id: f.id, name: f.name }))
+                      }
+                    />
+                  </li>
+                ))}
+                {keptLinks.map((l) => (
+                  <li key={l.id} className="row" style={{ gap: 8, fontSize: 14 }}>
+                    <Icon name="link" size={16} />
+                    <span className="grow clamp-1">{l.label || l.url}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      iconOnly
+                      icon="close"
+                      aria-label={`Remove ${l.label || l.url}`}
+                      onClick={() =>
+                        setDraft((d) =>
+                          removeExisting(d, 'link', { id: l.id, name: l.label || l.url })
+                        )
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {removed > 0 && (
+            <p className="row" style={{ gap: 8, fontSize: 13 }}>
+              <span className="muted">
+                {removed === 1 ? 'One file or link' : `${removed} files and links`} will be deleted
+                when you save, along with any output made of them.
+              </span>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setDraft(keepRemoved)}
+              >
+                Keep them
+              </button>
             </p>
           )}
         </section>
@@ -778,4 +857,29 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
       </aside>
     </div>
   )
+}
+
+/**
+ * Asks before leaving with unsaved changes: a dialog for a move within the
+ * app, the browser's own prompt for closing the tab or reloading. `allow()`
+ * lets the next move through, for the one after a successful save.
+ */
+function useLeaveGuard(dirty: boolean) {
+  const allowed = useRef(false)
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && !allowed.current && currentLocation.pathname !== nextLocation.pathname
+  )
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+  return {
+    blocker,
+    allow: () => {
+      allowed.current = true
+    },
+  }
 }

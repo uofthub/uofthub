@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
-import { primaryAction, safeLinks } from '../../lib/projectView'
+import { actionTarget, cardAction } from '../../lib/outputs'
 import { Cover } from '../../components/project'
 import { Button, Icon } from '../../components/ui'
 
@@ -21,7 +21,7 @@ export function Spotlight() {
   if (!project) return null
 
   const faculty = project.owner?.faculty
-  const action = primaryAction(safeLinks(project.links))
+  const action = cardAction(project)
   const kicker = data.curated
     ? `Weekly spotlight${faculty ? ` · ${faculty}` : ''}`
     : `Most active this week${faculty ? ` · ${faculty}` : ''}`
@@ -44,7 +44,7 @@ export function Spotlight() {
         )}
         <div className="row wrap" style={{ gap: 10, marginTop: 4 }}>
           {action ? (
-            <Button variant="gold" icon={action.icon} href={action.href}>
+            <Button variant="gold" {...actionTarget(action)}>
               {action.label}
             </Button>
           ) : (

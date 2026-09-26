@@ -48,6 +48,46 @@ describe('POST /projects/:id/versions', () => {
     expect(versions[1].tags).toEqual(['CSC301'])
   })
 
+  it('captures the course, references and outputs, naming what the outputs were', async () => {
+    const owner = await createUser()
+    const project = await createProject(owner.id, { courseCode: 'CSC211H5' })
+    const file = await db.projectFile.create({
+      data: { projectId: project.id, name: 'poster.pdf', storageKey: 'k/poster.pdf', sizeBytes: 10 },
+    })
+    const link = await db.projectLink.create({
+      data: { projectId: project.id, label: 'Talk', url: 'https://youtu.be/abc' },
+    })
+    await db.projectOutput.createMany({
+      data: [
+        { projectId: project.id, kind: 'POSTER', fileId: file.id, position: 0, primaryOfProjectId: project.id },
+        { projectId: project.id, kind: 'VIDEO', label: 'Talk', linkId: link.id, position: 1 },
+      ],
+    })
+    await db.projectReference.create({
+      data: { projectId: project.id, kind: 'DATASET', title: 'MNIST', year: 1998, position: 0 },
+    })
+
+    await snapshot(project.id, owner)
+    // Later changes do not reach back into the version.
+    await db.projectFile.delete({ where: { id: file.id } })
+    await db.project.update({ where: { id: project.id }, data: { courseCode: 'CSC311H5' } })
+
+    const version = await db.projectVersion.findFirstOrThrow({ where: { projectId: project.id } })
+    expect(version.courseCode).toBe('CSC211H5')
+    expect(version.references).toEqual([
+      expect.objectContaining({ kind: 'DATASET', title: 'MNIST', year: 1998 }),
+    ])
+    expect(version.outputs).toEqual([
+      { kind: 'POSTER', label: null, primary: true, file: 'poster.pdf' },
+      {
+        kind: 'VIDEO',
+        label: 'Talk',
+        primary: false,
+        link: { label: 'Talk', url: 'https://youtu.be/abc' },
+      },
+    ])
+  })
+
   it('numbers each project independently', async () => {
     const owner = await createUser()
     const first = await createProject(owner.id)

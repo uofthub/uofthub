@@ -36,7 +36,8 @@ export async function buildApp() {
   await app.register(cors, {
     origin: process.env.WEB_URL ?? 'http://localhost:5173',
     credentials: true,
-    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'],
+    // Every method a route uses: PUT is how an output's thumbnail is set.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
 
   await app.register(cookie)

@@ -5,7 +5,9 @@ import {
   contentPayload,
   draftFromProject,
   emptyDraft,
+  keepRemoved,
   outputsPayload,
+  removeExisting,
   sectionsPayload,
   suggestedDetails,
   torontoDay,
@@ -180,5 +182,47 @@ describe('small helpers', () => {
       ['Runtime', ''],
       ['Credits', ''],
     ])
+  })
+})
+
+describe('removing a file or link already on the project', () => {
+  const poster: DraftOutput = {
+    key: 'o1',
+    id: 'o1',
+    kind: 'POSTER',
+    label: '',
+    primary: true,
+    target: { type: 'file', fileId: 'f1', name: 'poster.pdf' },
+  }
+  const talk: DraftOutput = {
+    key: 'o2',
+    id: 'o2',
+    kind: 'VIDEO',
+    label: '',
+    primary: false,
+    target: { type: 'link', linkId: 'l1', label: 'Talk', url: 'https://youtu.be/x' },
+  }
+
+  it('drops the outputs made of it, and brings them back when kept', () => {
+    const start = emptyDraft({ outputs: [poster, talk] })
+    const gone = removeExisting(start, 'file', { id: 'f1', name: 'poster.pdf' })
+    expect(gone.outputs.map((o) => o.key)).toEqual(['o2'])
+    expect(gone.removedFiles.map((f) => f.id)).toEqual(['f1'])
+
+    const kept = keepRemoved(gone)
+    expect(kept.removedFiles).toEqual([])
+    expect(kept.outputs.map((o) => [o.key, o.primary])).toEqual([
+      ['o2', false],
+      ['o1', true],
+    ])
+  })
+
+  it('does not hand the lead back if another output took it meanwhile', () => {
+    const gone = removeExisting(emptyDraft({ outputs: [poster, talk] }), 'file', {
+      id: 'f1',
+      name: 'poster.pdf',
+    })
+    const led = { ...gone, outputs: gone.outputs.map((o) => ({ ...o, primary: true })) }
+    expect(keepRemoved(led).outputs.filter((o) => o.primary).map((o) => o.key)).toEqual(['o2'])
   })
 })

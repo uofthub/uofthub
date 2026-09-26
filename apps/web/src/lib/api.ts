@@ -85,6 +85,11 @@ export type ProjectSummary = Project & {
   saved: boolean
   /** The verified groups it was built with — "Built with UofT Robotics". */
   orgProjects: { org: OrgRef }[]
+  /**
+   * The output it leads with, by which file or link it is — what a card's
+   * main button opens. Absent when it has none.
+   */
+  lead?: Pick<ProjectOutput, 'kind' | 'label'> & { fileId: string | null; linkId: string | null }
 }
 
 export type OrgRef = { slug: string; name: string; type: 'CLUB' | 'LAB' }
@@ -249,6 +254,12 @@ export type ImportedLink = {
   image?: { name: string; contentType: string; dataBase64: string }
 }
 
+/** The picture a link import brought back, as a file the browser can use. */
+export const importedImageFile = (image: NonNullable<ImportedLink['image']>) =>
+  new File([Uint8Array.from(atob(image.dataBase64), (c) => c.charCodeAt(0))], image.name, {
+    type: image.contentType,
+  })
+
 export type ProjectVersion = {
   id: string
   projectId: string
@@ -258,6 +269,16 @@ export type ProjectVersion = {
   title: string
   description?: string
   tags: string[]
+  /** Absent on versions saved before these were recorded. */
+  courseCode?: string | null
+  references?: Omit<ProjectReference, 'id' | 'key'>[] | null
+  /** Each names its file or link, which may have been deleted since. */
+  outputs?:
+    | (Pick<ProjectOutput, 'kind' | 'label' | 'primary'> & {
+        file?: string
+        link?: { label: string; url: string }
+      })[]
+    | null
   createdAt: string
 }
 

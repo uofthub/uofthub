@@ -133,6 +133,17 @@ function Hero() {
             Search
           </Button>
         </form>
+        {/* The header has no Explore link — the sidebar carries it, and the
+            landing page has no sidebar — so this is how a visitor looks around. */}
+        <div className="hero__ctas">
+          <Button variant="primary" size="lg" icon="compass" to="/explore">
+            Explore projects
+          </Button>
+          <Button size="lg" icon="megaphone" to="/help-wanted">
+            See who’s looking for help
+          </Button>
+        </div>
+        <p className="hero__note">No account needed to look around.</p>
       </div>
     </section>
   )

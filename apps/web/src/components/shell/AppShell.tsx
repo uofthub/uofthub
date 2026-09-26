@@ -36,15 +36,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </>
     )
 
-  const signedInHome = pathname === '/' && (user || maybeSignedIn)
+  const landing = pathname === '/' && !user && !maybeSignedIn
   // The feed's right rail carries its own footer line.
-  const feedHasRail = signedInHome && wide
+  const feedHasRail = pathname === '/feed' && wide
 
   return (
     <div className={phone ? 'shell shell--phone' : 'shell'}>
       {phone ? <MobileHeader /> : <Header />}
       <main className="shell__main">{children}</main>
-      {pathname === '/' && !signedInHome ? <LandingFooter /> : !feedHasRail && <AppFooter />}
+      {landing ? <LandingFooter /> : !feedHasRail && <AppFooter />}
       {phone && <BottomNav />}
       <ScrollUp />
       <CommandPalette />

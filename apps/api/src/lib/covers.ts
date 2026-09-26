@@ -1,8 +1,9 @@
+import type { OutputKind } from '@prisma/client'
 import { db } from '../db/client.js'
 import { signedDownloadUrl } from './storage.js'
 
 /**
- * Cover thumbnails for a list of projects.
+ * Cover thumbnails for a list of projects, and what each one leads with.
  *
  * A project's cover is, in order:
  *   1. its primary output's thumbnail — a poster's first page, a video frame,
@@ -25,14 +26,26 @@ const isImage = (name: string) =>
 
 type Source = { key: string; name: string }
 
-export async function coverUrls(projectIds: string[]): Promise<Map<string, string>> {
-  if (projectIds.length === 0) return new Map()
+/**
+ * What a project leads with, for a card's main button ("View poster") —
+ * which file or link it is, not the file itself.
+ */
+export type Lead = { kind: OutputKind; label: string | null; fileId: string | null; linkId: string | null }
+
+type Covers = { covers: Map<string, string>; leads: Map<string, Lead> }
+
+export async function coverUrls(projectIds: string[]): Promise<Covers> {
+  if (projectIds.length === 0) return { covers: new Map(), leads: new Map() }
 
   const [primaries, images] = await Promise.all([
     db.projectOutput.findMany({
       where: { primaryOfProjectId: { in: projectIds } },
       select: {
         projectId: true,
+        kind: true,
+        label: true,
+        fileId: true,
+        linkId: true,
         thumbnailKey: true,
         file: { select: { storageKey: true, name: true } },
       },
@@ -49,6 +62,12 @@ export async function coverUrls(projectIds: string[]): Promise<Map<string, strin
     }),
   ])
 
+  const leads = new Map<string, Lead>(
+    primaries.map((p) => [
+      p.projectId,
+      { kind: p.kind, label: p.label, fileId: p.fileId, linkId: p.linkId },
+    ])
+  )
   const sources = new Map<string, Source>()
   for (const p of primaries) {
     if (p.thumbnailKey) sources.set(p.projectId, { key: p.thumbnailKey, name: 'cover' })
@@ -68,17 +87,19 @@ export async function coverUrls(projectIds: string[]): Promise<Map<string, strin
         return [projectId, url] as const
       })
     )
-    return new Map(signed)
+    return { covers: new Map(signed), leads }
   } catch {
     // Storage isn't configured (a fresh clone, or the test suite). A directory
     // that renders every card with its fallback is a much better failure than
     // a directory that 500s.
-    return new Map()
+    return { covers: new Map(), leads }
   }
 }
 
-/** `projects` with a `coverUrl` attached wherever one exists. */
-export async function withCovers<T extends { id: string }>(projects: T[]): Promise<(T & { coverUrl?: string })[]> {
-  const covers = await coverUrls(projects.map((p) => p.id))
-  return projects.map((p) => ({ ...p, coverUrl: covers.get(p.id) }))
+/** `projects` with a `coverUrl` and a `lead` attached wherever one exists. */
+export async function withCovers<T extends { id: string }>(
+  projects: T[]
+): Promise<(T & { coverUrl?: string; lead?: Lead })[]> {
+  const { covers, leads } = await coverUrls(projects.map((p) => p.id))
+  return projects.map((p) => ({ ...p, coverUrl: covers.get(p.id), lead: leads.get(p.id) }))
 }

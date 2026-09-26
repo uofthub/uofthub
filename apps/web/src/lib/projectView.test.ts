@@ -27,8 +27,13 @@ describe('courses', () => {
     expect(courseOf({ courseCode: null })).toBeUndefined()
     expect(courseOf({})).toBeUndefined()
   })
-  it('leaves stray course-looking tags out of the topics', () => {
-    expect(topicTags(['React', 'csc309'])).toEqual(['React'])
+  it('leaves the project’s own course out of the topics, and keeps any other', () => {
+    expect(topicTags({ tags: ['React', 'csc309'], courseCode: 'CSC309' })).toEqual(['React'])
+    expect(topicTags({ tags: ['React', 'CSC311H5'], courseCode: 'CSC211H5' })).toEqual([
+      'React',
+      'CSC311H5',
+    ])
+    expect(topicTags({ tags: ['MAT102'] })).toEqual(['MAT102'])
   })
 })
 

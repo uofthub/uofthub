@@ -290,7 +290,7 @@ export function Comments({ project }: { project: ProjectDetail }) {
 /** "More built for CSC309" and "You might also like". */
 export function Related({ project }: { project: ProjectDetail }) {
   const course = courseOf(project)
-  const topic = topicTags(project.tags)[0]
+  const topic = topicTags(project)[0]
 
   const { data: sameCourse = [] } = useQuery({
     queryKey: ['projects', { course, take: 6 }],
