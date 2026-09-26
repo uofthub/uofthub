@@ -40,8 +40,7 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             time.
           </li>
           <li>
-            <strong>Operational records</strong> — server logs, and error reports when something
-            breaks.
+            <strong>Operational records</strong> — server logs.
           </li>
         </ul>
         <p>
@@ -126,12 +125,6 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             files, not your identity. Ordinary search on <Link to="/explore">Explore</Link> involves
             no third party at all.
           </li>
-          <li>
-            <strong>Clueline</strong> — receives an error report when the site breaks: the error,
-            where in the app it happened, and an anonymous identifier for the session. If you choose
-            to answer "what were you doing?" on a crash screen, that answer goes with it. We do not
-            send your email address or name.
-          </li>
         </ul>
         <p>
           No student work is ever used to train an AI model, by us or by anyone we send data to.
@@ -151,8 +144,8 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         </p>
         <p>
           A project taken down by a moderator is <em>not</em> deleted — it is forced private, and
-          stays in your account. Server logs and error reports are short-lived operational records,
-          not a profile of you.
+          stays in your account. Server logs are short-lived operational records, not a profile of
+          you.
         </p>
         <p>
           Your account does not expire when you graduate. Alumni keeping their portfolio is a

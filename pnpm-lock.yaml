@@ -26,9 +26,6 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1120.0
         version: 3.1120.0
-      '@clueline/core':
-        specifier: ^0.2.0
-        version: 0.2.0
       '@fastify/cookie':
         specifier: ^11.0.0
         version: 11.1.2
@@ -89,9 +86,6 @@ importers:
 
   web:
     dependencies:
-      '@clueline/react':
-        specifier: ^0.2.0
-        version: 0.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-query':
         specifier: ^5.59.0
         version: 5.102.5(react@19.2.8)
@@ -284,15 +278,6 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
-
-  '@clueline/core@0.2.0':
-    resolution: {integrity: sha512-j49NPD6tzz+hYAD/U8/S7wIUpOvL5Um3ziAuBHNOqXKSnnwcXfyztCNMdGgGZs1DNYfiR8z3UCkaJ3Lo3bJC9A==}
-
-  '@clueline/react@0.2.0':
-    resolution: {integrity: sha512-S/p8pQmVxWzIMORwoN0AJq8bEAZM9hGLP/EdZ94G6dlvNyVj59Msiza4/6Z8Al3/95Fh1DQg8Wq+YGnedXAA/g==}
-    peerDependencies:
-      react: '>=18'
-      react-dom: '>=18'
 
   '@csstools/color-helpers@6.1.1':
     resolution: {integrity: sha512-gLNsunvwf3mCi5u5o46/Z/JcJMnhbHSaZ69rkgPzNM3J4s8hWwpPUQB6/tt0EDFyCiWzxANlx+2LJwpYj4zS1w==}
@@ -2367,14 +2352,6 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@clueline/core@0.2.0': {}
-
-  '@clueline/react@0.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
-    dependencies:
-      '@clueline/core': 0.2.0
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-
   '@csstools/color-helpers@6.1.1': {}
 
   '@csstools/css-calc@3.3.0(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)':
@@ -2975,7 +2952,7 @@ snapshots:
       obug: 2.1.4
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
+      vitest: 4.1.11(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
 
   '@vitest/expect@4.1.11':
     dependencies:

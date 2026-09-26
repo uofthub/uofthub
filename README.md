@@ -52,7 +52,7 @@ A pnpm workspace with two apps and one shared package.
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
 | **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password |
-| **Email** | Resend · **AI search** OpenAI · **Errors** [Clueline](https://clueline.dev) — each degrades to a no-op when its key is unset |
+| **Email** | Resend · **AI search** OpenAI — each degrades to a no-op when its key is unset |
 | **Tests / CI** | Vitest against a real Postgres, GitHub Actions on every PR |
 
 Every decision above, with the reasoning: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -83,7 +83,7 @@ pnpm dev                               # API on :3001, web on :5173
 
 `pnpm dev` applies any pending migrations before the API starts, and the API reads `api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
 
-Sign in with email + password locally: Microsoft OAuth needs real credentials. **Every other integration is optional** — with no keys, email and error reporting no-op with a warning, and AI search falls back to keyword search.
+Sign in with email + password locally: Microsoft OAuth needs real credentials. **Every other integration is optional** — with no keys, email no-ops with a warning, and AI search falls back to keyword search.
 
 If `docker compose` says *permission denied* on `/var/run/docker.sock`, your user can't reach the Docker daemon yet — run it once with `sudo`, or add yourself to the `docker` group.
 

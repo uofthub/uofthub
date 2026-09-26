@@ -278,13 +278,7 @@ The interpreted filters are returned to the client and rendered as chips. This i
 
 ## Error monitoring
 
-Both halves report to [Clueline](https://clueline.dev), and both degrade to nothing without a key — the same contract as email and AI discovery.
-
-**API** (`lib/monitoring.ts`) — a Fastify `onError` hook rather than `setErrorHandler`, so it observes failures without taking over the response. It reports **5xx only**: a 401 on an expired session, a 404 standing in for a private project, a 400 on a bad payload and a 429 from the rate limiter are all the API working correctly, and reporting them would bury real failures in noise. Reports carry the route *pattern* (`/projects/:id`) rather than the filled-in URL — ids are noise for grouping, and a private project's id isn't ours to ship — plus the method, status, request id and, on authenticated routes, the user id. Process-level `unhandledRejection` / `uncaughtException` handlers are installed in `index.ts`, not `buildApp()`, so the test suite doesn't take ownership of the process.
-
-**Web** (`lib/monitoring.tsx`) — `CluelineProvider` wraps the whole tree outside the router, so a crash while the app is still mounting is caught too. Students see a fallback with an optional "what were you doing?" prompt instead of a white screen.
-
-**What is deliberately not sent:** the signed-in student is identified by `userId` alone. The SDK accepts `email` and `name`, which is what would let Clueline contact the person directly, and that is an opt-in we have not taken — mailing a student's U of T address to a third party by default contradicts what `/about` and `/privacy` promise. Taking it later means editing `IdentifyViewer` **and** the third-party list on the privacy page in the same commit.
+None for now. Errors go to the API's own logs (Railway keeps them); the web app has no error reporting. Clueline was wired into both halves and has been removed until it is needed again — its setup is in git history (`lib/monitoring.ts`, `lib/monitoring.tsx`). Adding any error reporter back means adding it to the third-party list on `/privacy` in the same commit.
 
 ---
 
@@ -404,7 +398,6 @@ The two that existed before — the verification sweep (`sweep-orgs`) and term s
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
 | AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
 | Email | Resend | Simple API, generous free tier; `api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
-| Error monitoring | [Clueline](https://clueline.dev) — `@clueline/core` in the API, `@clueline/react` in the web app | Ships 5xx failures and front-end crashes with the context to act on them, and shows students a calm fallback instead of a white screen. No-ops with a warning when `CLUELINE_API_KEY` / `VITE_CLUELINE_API_KEY` are unset |
 | Tests | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
 | CI | GitHub Actions | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
 | Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/` |
@@ -436,7 +429,6 @@ Environment variables in production — see `api/.env.example` for the full list
 - `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
-- `CLUELINE_API_KEY` — error reporting; unset means errors are logged and not reported. `RELEASE` is optional and tags every report with a version. The web app needs its own `VITE_CLUELINE_API_KEY` set at build time on Cloudflare Pages — a Vite variable is baked into the bundle, so changing it means a rebuild, not a restart.
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
 
