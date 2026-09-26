@@ -44,7 +44,7 @@ const FEATURES: { title: string; text: string; icon: IconName; colour: string; p
   },
   {
     title: 'Clubs & Labs',
-    text: 'Design teams, research labs and student clubs get a shared page collecting everything their members have shipped.',
+    text: 'Design teams, research labs and student clubs get a shared page collecting everything their members have made.',
     icon: 'users',
     colour: '#8A3B12',
     page: '/orgs',

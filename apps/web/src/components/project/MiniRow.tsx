@@ -9,7 +9,7 @@ import { Cover } from './Cover'
  */
 export function MiniRow({ project }: { project: ProjectSummary }) {
   const course = courseOf(project)
-  const sub = [project.owner?.name, course && `Built for ${course}`].filter(Boolean).join(' · ')
+  const sub = [project.owner?.name, course && `Made for ${course}`].filter(Boolean).join(' · ')
   return (
     <Link to={`/projects/${project.id}`} className="mini-row">
       <span className="mini-row__thumb">

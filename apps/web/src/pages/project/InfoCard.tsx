@@ -254,8 +254,10 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
             View code
           </Button>
         ) : isOwner ? (
-          <Button variant="primary" icon="link" onClick={() => setOpen('links')} className="grow">
-            Add a live link
+          // Not "add a live link": most projects have nothing to run. What
+          // every project can lead with is what it produced.
+          <Button variant="primary" icon="plus" to={`/projects/${project.id}/edit`} className="grow">
+            Add what it produced
           </Button>
         ) : null}
         {action && code && (
@@ -400,7 +402,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
                 to={`/explore?course=${encodeURIComponent(course)}`}
                 style={{ fontWeight: 600 }}
               >
-                Built for {course}
+                Made for {course}
               </Link>
             </dd>
           </>

@@ -255,7 +255,7 @@ export function OutputsEditor({
               aria-label="Link label"
               value={link.label}
               onChange={(e) => setLink((l) => ({ ...l, label: e.target.value }))}
-              placeholder="Label, e.g. Live demo"
+              placeholder="Label, e.g. Recording"
               style={{ width: 180 }}
             />
             <Input

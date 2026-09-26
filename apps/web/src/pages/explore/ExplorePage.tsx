@@ -121,7 +121,7 @@ function CourseBrowser() {
         )}
       </div>
       <p className="muted" style={{ fontSize: 14 }}>
-        See what past students built for a course before you start yours.
+        See what past students made for a course before you start yours.
       </p>
     </section>
   )

@@ -106,7 +106,7 @@ export function Badge({
   )
 }
 
-/** The outlined status pill with a coloured dot — "● Shipped". */
+/** The outlined status pill with a coloured dot — "● Finished". */
 export function Pill({
   dot,
   children,

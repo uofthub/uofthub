@@ -140,7 +140,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
             <TypeBadge type={project.type} />
             {course && (
               <Chip size={phone ? 'xs' : 'sm'} tone="subtle">
-                Built for {course}
+                Made for {course}
               </Chip>
             )}
             {project.orgProjects.map(({ org }) => (

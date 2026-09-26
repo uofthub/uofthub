@@ -63,7 +63,7 @@ export function ProjectCard({
           <span className="pcard__who">{makersLabel(makers.map((m) => m.name ?? ''))}</span>
           {course ? (
             <Chip size="xs" tone="subtle">
-              Built for {course}
+              Made for {course}
             </Chip>
           ) : (
             group && (
@@ -104,7 +104,7 @@ export function ProjectListRow({
             <TypeBadge type={project.type} />
             {course && (
               <span className="muted" style={{ fontSize: 13 }}>
-                Built for {course}
+                Made for {course}
               </span>
             )}
             {project.orgProjects?.[0] && (

@@ -1,6 +1,6 @@
 # Structured projects
 
-> **Status: approved plan, being built phase by phase.** Each phase ends with tests, `pnpm typecheck && pnpm --filter @uofthub/api test && pnpm build && pnpm lint` passing, and a commit.
+> **Status: built.** All seven phases shipped on the `structured-projects` branch, each ending with tests, `pnpm typecheck && pnpm --filter @uofthub/api test && pnpm build && pnpm lint` passing, and a commit. Where the build departed from the plan, the plan below says so and why.
 
 A project today is a title, a pitch, one Markdown `description`, tags, files and links. That shape was designed around apps: the post form defaults to "App or website", the story placeholder says "What we built", and every type-specific answer that isn't a URL is flattened into the description as `**Label:** value` by `composeDescription` in `apps/web/src/pages/post/compose.ts`. A research poster, a film, or a CSC211H5 comparison of four approaches has nowhere to put its method, data or results except as headings a student has to invent.
 
@@ -343,7 +343,10 @@ Editing a project that is already visible saves straight to it. Steps 2–4 are 
 - The link-import placeholder ("Paste a GitHub, YouTube…") becomes a list across media.
 - The tips stop assuming screenshots.
 - The story copy stops saying "What we built".
-- A sweep for other CS-first defaults: I'll grep for GitHub, code, demo, ship and screenshot, and list each change in the phase's commit.
+- "Built for CSC309" becomes "Made for CSC309" on every card and on the info card; the profile's "Built for courses" panel is "Courses".
+- The owner's empty main button, "Add a live link", becomes "Add what it produced", which opens the editor. Most projects have nothing to run.
+- The gallery's "Add a screenshot to replace this cover" becomes "Add an image, or lead with an output". Explore and the landing page say "made" where they said "built for" and "shipped".
+- Left alone on purpose: "Try it live" and "View code" still appear, but only when a project actually has a live link or a code link; the type-specific suggestions for an app (a live link, a repository) stay on the app type; and GitHub stays as a profile link.
 
 ---
 

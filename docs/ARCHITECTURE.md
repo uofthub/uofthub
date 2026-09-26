@@ -58,12 +58,24 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | id | uuid | |
 | owner_id | uuid | FK → User |
 | title | string | |
-| description | text | |
-| tags | string[] | course, faculty, topic |
-| visibility | enum | `private`, `uoft`, `public` |
+| description | text? | the optional Overview |
+| sections | jsonb? | optional sections (motivation, method, approaches, results…), stripped of empties on save — see [structured-projects.md](structured-projects.md) |
+| details | jsonb? | short labelled facts: `[{ label, value }]` |
+| course_code | string? | the course it was made for, upper-cased; the one source of truth for course filters |
+| template_code, template_version | string?, int? | the course template it started from |
+| tags | string[] | topics |
+| visibility | enum | `private`, `uoft`, `public`, `unlisted` |
+| show_from | timestamp? | hidden from everyone but its makers until then, whatever its visibility |
+| announced_at | timestamp? | when followers were told; see [Scheduled jobs](#scheduled-jobs) |
 | taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility or fork the project — see [Moderation](#moderation) |
 | created_at | timestamp | |
 | updated_at | timestamp | |
+
+### ProjectReference
+A dataset, paper, piece of software, model, book, archive or website the project used. `key` is its normalized identity (a DOI, an arXiv id, a GitHub repo, a canonical URL — `lib/references.ts`), which is how the page names other projects that used the same thing.
+
+### ProjectOutput
+What the project produced — poster, slides, paper, video, audio, demo, code, dataset — as an ordered layer over its files and links. Exactly one target (a CHECK). At most one per project is primary (`primaryOfProjectId`, unique); its thumbnail, made in the author's browser, is the project's image everywhere (`lib/covers.ts`).
 
 ### ProjectFollow
 Private "tell me about updates" on a project: (user, project). A version saved with a note notifies followers who can still see the project.
@@ -209,7 +221,11 @@ Projects have three visibility levels:
 | `uoft` | Any authenticated U of T user |
 | `public` | Anyone on the internet |
 
+`unlisted` opens for anyone with the link but is never listed.
+
 Default: `private`. Students must explicitly open visibility up.
+
+A **show-from date** hides a project from everyone but its owner and accepted collaborators until that moment, whatever its level — course work posted before grading appears after it. This rule, like every other, lives only in `lib/visibility.ts`; nothing else decides who may see a project.
 
 TA/professor access is granted per-project by the student owner (generates a view-only invite link), never platform-wide.
 
@@ -313,7 +329,7 @@ A student or group that needs more than the per-file size or file-count cap (e.g
 
 Project search runs on a Postgres `tsvector`, not `ILIKE`.
 
-`Project.searchVector` is a `GENERATED ALWAYS ... STORED` column over the title (weight A), tags (B) and description (C), with a GIN index on it. Generated rather than trigger-maintained so there is no write path that updates a project and forgets its vector. The expression spells out `'english'::regconfig` because the one-argument `to_tsvector(text)` is only STABLE, and a generated column needs IMMUTABLE; `uofthub_tags_text` exists for the same reason, narrowing `array_to_string` to the `text[]` case where it is genuinely immutable.
+`Project.searchVector` is a `GENERATED ALWAYS ... STORED` column over the title and course (weight A), pitch and tags (B), and the description, sections and details (C), with a GIN index on it. `ProjectReference` has its own over title and authors, and `lib/search.ts` unions the two, ranking a reference match at half weight. Generated rather than trigger-maintained so there is no write path that updates a project and forgets its vector. The expression spells out `'english'::regconfig` because the one-argument `to_tsvector(text)` is only STABLE, and a generated column needs IMMUTABLE; `uofthub_tags_text` exists for the same reason, narrowing `array_to_string` to the `text[]` case where it is genuinely immutable.
 
 `lib/search.ts` turns a query into a prefix `tsquery` (`robotics:*`), dropping everything non-alphanumeric so nothing can reach `to_tsquery` as syntax and 500 the directory. It returns **ids only**, capped at 1,000 by rank, and the caller feeds them back into the same Prisma query it always ran — visibility stays in `visibleProjectWhere` and is never re-expressed in SQL, because a second copy of the rule is what eventually drifts and leaks a private project.
 
@@ -323,7 +339,9 @@ Two consequences worth knowing: matching is by whole stemmed word plus prefix, s
 
 ## Scheduled jobs
 
-None. The two that existed — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Housekeeping that would otherwise need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
+One, in process: the **announcement sweep** (`lib/announcements.ts`). A project published with a future show-from date is announced to its owner's followers when that date passes, not when it was saved. The sweep runs at boot and every five minutes, registered in `index.ts` rather than `buildApp()` so tests never start a timer. It claims and marks due projects in one `UPDATE … RETURNING`, so several instances, or overlapping runs, cannot announce a project twice.
+
+The two that existed before — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Other housekeeping that would need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
 `pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. See [Moderation](#moderation).
 

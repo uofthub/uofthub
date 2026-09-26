@@ -65,12 +65,12 @@ describe('ProjectCard', () => {
 
   it('files a project under its course', () => {
     show(project({ courseCode: 'CSC309', tags: ['React'] }))
-    expect(screen.getByText('Built for CSC309')).toBeInTheDocument()
+    expect(screen.getByText('Made for CSC309')).toBeInTheDocument()
   })
 
   it('does not take a course from the tags', () => {
     show(project({ tags: ['React', 'csc309'] }))
-    expect(screen.queryByText(/Built for/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Made for/)).not.toBeInTheDocument()
   })
 
   it('hides zero counts instead of printing a row of noughts', () => {
@@ -93,7 +93,7 @@ describe('ProjectCard', () => {
   it('shows the type badge and where the project stands', () => {
     show(project({ type: 'APP', status: 'SHIPPED' }))
     expect(screen.getByText('App')).toBeInTheDocument()
-    expect(screen.getByText('Shipped')).toBeInTheDocument()
+    expect(screen.getByText('Finished')).toBeInTheDocument()
   })
 
   it('says which group it was built with when it has no course', () => {
@@ -113,7 +113,7 @@ describe('ProjectCard', () => {
         orgProjects: [{ org: { slug: 'r', name: 'UofT Robotics', type: 'CLUB' } }],
       })
     )
-    expect(screen.getByText('Built for CSC309')).toBeInTheDocument()
+    expect(screen.getByText('Made for CSC309')).toBeInTheDocument()
     expect(screen.queryByText('Built with UofT Robotics')).not.toBeInTheDocument()
   })
 
