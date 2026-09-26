@@ -133,7 +133,7 @@ export default function SessionPage() {
   useDocumentTitle(mode === 'login' ? 'Log in' : 'Sign up')
 
   useEffect(() => {
-    if (user) navigate('/', { replace: true })
+    if (user) navigate('/feed', { replace: true })
   }, [user, navigate])
 
   return (

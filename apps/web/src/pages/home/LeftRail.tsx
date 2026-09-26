@@ -38,7 +38,7 @@ export function LeftRail({
   const courseCount = new Map(facets?.courses.map((c) => [c.code, c.count]))
 
   const sections: Section[] = [
-    { to: '/', label: 'Home', icon: 'home' },
+    { to: '/feed', label: 'Home', icon: 'home' },
     { to: '/explore', label: 'Explore', icon: 'compass' },
     { to: '/collections', label: 'Collections', icon: 'layers' },
     { to: '/help-wanted', label: 'Looking for help', icon: 'megaphone', badge: facets?.helpWanted },

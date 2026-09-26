@@ -66,6 +66,21 @@
 .hero__search .btn {
   border-radius: 999px;
 }
+.hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+.hero__ctas .btn {
+  border-radius: 999px;
+}
+.hero__note {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
 
 /* The drifting shapes are a wide-screen flourish; phones get the calm version. */
 @media (max-width: 1199px) {

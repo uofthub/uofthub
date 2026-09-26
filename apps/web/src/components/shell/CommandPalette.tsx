@@ -62,7 +62,7 @@ function Palette({
       navigate(to)
     }
     const pages: Command[] = [
-      { id: 'home', label: 'Home', icon: 'home', group: 'Pages', run: go('/') },
+      { id: 'home', label: 'Home', icon: 'home', group: 'Pages', run: go(user ? '/feed' : '/') },
       { id: 'explore', label: 'Explore', icon: 'compass', group: 'Pages', run: go('/explore') },
       {
         id: 'post',

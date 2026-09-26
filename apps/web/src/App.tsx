@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AppShell } from './components/shell'
 import { Spinner } from './components/ui'
-import HomePage from './pages/home/HomePage'
+import HomePage, { FeedRoute } from './pages/home/HomePage'
 import ExplorePage from './pages/explore/ExplorePage'
 import ProjectPage from './pages/project/ProjectPage'
 import ProfilePage from './pages/profile/ProfilePage'
@@ -53,6 +53,7 @@ export default function App() {
         <div key={pageKey(pathname)} className="page-in">
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/feed" element={<FeedRoute />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/projects" element={<ToExplore />} />
             <Route path="/projects/new" element={<EditorPage />} />

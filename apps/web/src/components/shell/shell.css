@@ -113,30 +113,11 @@
   background: var(--surface);
 }
 
-.topbar__nav {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  margin-left: auto;
-}
-.topbar__link {
+.topbar__actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
-  padding: 0 14px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink-3);
-}
-.topbar__link:hover {
-  color: var(--ink);
-  background: var(--fill);
-}
-.topbar__link.active {
-  background: var(--navy-tint);
-  color: var(--navy-ink);
+  margin-left: auto;
 }
 
 .bell__dot {
@@ -175,12 +156,6 @@
   .topbar {
     gap: 16px;
     padding: 0 20px;
-  }
-  .topbar__label {
-    display: none;
-  }
-  .topbar__link {
-    padding: 0 12px;
   }
 }
 @media (max-width: 1000px) {
@@ -491,3 +466,4 @@ button.searchbox__cmd:hover {
   color: var(--ink);
   background: var(--fill);
 }
+

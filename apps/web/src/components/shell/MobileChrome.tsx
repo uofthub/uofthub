@@ -46,7 +46,7 @@ type Tab = { to: string; label: string; icon: IconName; end?: boolean }
 export function BottomNav() {
   const { user } = useAuth()
   const tabs: Tab[] = [
-    { to: '/', label: 'Home', icon: 'home', end: true },
+    { to: user ? '/feed' : '/', label: 'Home', icon: 'home', end: true },
     { to: '/explore', label: 'Explore', icon: 'compass' },
     { to: '/saved', label: 'Saved', icon: 'bookmark' },
     { to: user ? `/u/${user.id}` : '/session', label: 'You', icon: 'user' },
