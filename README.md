@@ -17,13 +17,17 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 
 ---
 
-## Features (MVP)
+## Features
 
-- **Projects** — title, description, tags, files, external links (GitHub, demo, website), collaborators
-- **Profiles** — name, faculty, program, year, auto-generated portfolio
-- **Visibility controls** — Private / U of T only / Public, defaulting to private
-- **Discovery** — search by faculty, course, type or topic; a feed with Following, Campus and Your program tabs; this week's trending; a weekly spotlight
-- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows, threaded comments
+- **Projects** — a title, a one-line pitch and whatever else the work needs: an overview, optional sections (motivation, method, results…), short details, the course it was made for, tags, files, links and collaborators. Anything left empty doesn't render. A project can lead with what it produced (a poster, paper, video, demo…) and record what it drew on (datasets, papers, software), linking to other projects that used the same thing. Made and edited on one page, published last; can start from a GitHub repo or any link. See [structured-projects.md](docs/structured-projects.md)
+- **Visibility** — Draft / U of T / Public / Unlisted, defaulting to Draft, plus an optional show-from date that keeps course work hidden until after grading
+- **Profiles** — name, faculty, campus, program, year, courses, "Open to" and personal links; pinned projects above the rest
+- **Discovery** — Explore (search and filter by faculty, course, type, campus or topic), a feed at `/feed` with Following, Campus and Your program tabs, this week's trending, a weekly spotlight, Looking for help, collections, and AI search at `/discover`
+- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments, versions with update notes, forks, and one-to-one messages with block and report
+- **Clubs & labs** — group pages with events, created by moderators; projects credit the groups they were built with
+- **Moderation** — reports on projects and conversations, reviewed at `/admin`
+
+The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.
 
 See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond.
 
@@ -88,6 +92,7 @@ If `docker compose` says *permission denied* on `/var/run/docker.sock`, your use
 ```bash
 pnpm typecheck
 pnpm --filter @uofthub/api test   # needs the Postgres above running
+pnpm --filter @uofthub/web test
 pnpm build
 pnpm lint
 ```
@@ -98,11 +103,13 @@ The API tests create their own `_test` database and refuse to run against any da
 
 | Path | |
 |---|---|
-| `apps/api/src/routes` | HTTP surface — projects, users, orgs, admin, discover, auth |
-| `apps/api/src/lib` | The rules: visibility, moderation, org verification, storage, terms |
+| `apps/api/src/routes` | HTTP surface — auth, projects, users, feed, courses, collections, messages, orgs, spotlight, discover, admin |
+| `apps/api/src/lib` | The rules: visibility, project content, search, trending, notifications, storage, link import |
 | `apps/api/prisma/schema.prisma` | The data model |
-| `apps/web/src/pages` | One file per route |
-| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [student groups](docs/student-groups.md) |
+| `apps/web/src/App.tsx` | Every route in the web app |
+| `apps/web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
+| `apps/web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |
+| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md) |
 
 ---
 

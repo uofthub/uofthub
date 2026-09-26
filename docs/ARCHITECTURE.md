@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the system design of uofthub. It will evolve as the stack is finalized.
+This document describes the system design of uofthub as it is built today.
 
 ---
 
@@ -16,18 +16,18 @@ This document describes the system design of uofthub. It will evolve as the stac
                    │
         ┌──────────┼──────────┐
         ▼          ▼          ▼
-    Projects     People     Courses
+    Projects     People     Groups
         │
-   ┌────┼─────┐
-   ▼    ▼     ▼
- Files GitHub  Links
+   ┌────┬───────┼──────────┬────────────┐
+   ▼    ▼       ▼          ▼            ▼
+ Files Links  Outputs  References  Sections
 ```
 
-Future graph: Students → Projects → People → Courses → Research → Clubs → University.
+A project is filed under at most one course (`course_code`) and credited to the groups it was built with. Around it sit reactions, saves, threaded comments, versions, follows and collections; around people, follows and direct messages.
 
 ---
 
-## Data model (draft)
+## Data model
 
 ### User
 | Field | Type | Notes |
@@ -58,15 +58,22 @@ Future graph: Students → Projects → People → Courses → Research → Club
 | id | uuid | |
 | owner_id | uuid | FK → User |
 | title | string | |
+| pitch | string? | the one line a card shows |
 | description | text? | the optional Overview |
 | sections | jsonb? | optional sections (motivation, method, approaches, results…), stripped of empties on save — see [structured-projects.md](structured-projects.md) |
 | details | jsonb? | short labelled facts: `[{ label, value }]` |
 | course_code | string? | the course it was made for, upper-cased; the one source of truth for course filters |
 | template_code, template_version | string?, int? | the course template it started from |
+| type | enum? | `APP`, `RESEARCH`, `FILM`, `DESIGN`, `AUDIO`, `HARDWARE`, `WRITING`, `OTHER` |
+| status | enum? | `IN_PROGRESS`, `SHIPPED`, `HELP_WANTED` |
 | tags | string[] | topics |
-| visibility | enum | `private`, `uoft`, `public`, `unlisted` |
+| visibility | enum | `private` (shown as Draft), `uoft`, `public`, `unlisted` |
+| forked_from_id | uuid? | the project it was forked from |
+| published_at | timestamp? | first time it stopped being private; the feed orders by it — see [feed-and-density.md](feed-and-density.md#publishedat) |
 | show_from | timestamp? | hidden from everyone but its makers until then, whatever its visibility |
 | announced_at | timestamp? | when followers were told; see [Scheduled jobs](#scheduled-jobs) |
+| pinned_at | timestamp? | pinned to the top of the owner's profile, at most six |
+| view_count | int | lifetime total, shown to the owner only |
 | taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility or fork the project — see [Moderation](#moderation) |
 | created_at | timestamp | |
 | updated_at | timestamp | |
@@ -76,6 +83,27 @@ A dataset, paper, piece of software, model, book, archive or website the project
 
 ### ProjectOutput
 What the project produced — poster, slides, paper, video, audio, demo, code, dataset — as an ordered layer over its files and links. Exactly one target (a CHECK). At most one per project is primary (`primaryOfProjectId`, unique); its thumbnail, made in the author's browser, is the project's image everywhere (`lib/covers.ts`).
+
+### ProjectReaction / ProjectSave
+A reaction is one row per (user, project, kind), kinds `IMPRESSIVE`, `USEFUL` (shown as Learned something) and `COLLAB` (Want to collab). A save is a private bookmark: it never notifies, and the owner sees only a count. See [redesign.md](redesign.md#engagement-reactions-are-the-only-public-signal).
+
+### Comment / CommentHelpful
+Comments with one level of replies (`parent_id`) and Helpful votes; helpful comments are listed first.
+
+### ProjectVersion
+A snapshot of the project, including its sections, details and outputs. A version saved with a `note` is an update: it shows on the Updates timeline and notifies the project's followers.
+
+### ProjectDailyView / ProjectViewer
+Views per project per day. `ProjectViewer` holds the day's viewer keys (a user id, or a salted hash for a visitor) so each person counts once a day; yesterday's are pruned when a view is recorded.
+
+### Follow
+(follower, following) between students.
+
+### Spotlight
+A moderator's pick of one project for a Monday-to-Sunday week, with an optional reason.
+
+### OrgProject
+"Built with": a project linked to a group its owner belongs to.
 
 ### ProjectFollow
 Private "tell me about updates" on a project: (user, project). A version saved with a note notifies followers who can still see the project.
@@ -164,13 +192,14 @@ A meeting, event, workshop or recap — lighter than a Project, rendered only on
 | created_at | timestamp | |
 
 ### Notification
-In-app feed only for now — no email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
+The bell's feed, polled every 30 seconds. No email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | |
 | user_id | uuid | recipient |
-| type | enum | `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED` |
+| type | enum | Administrative: `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED`, `MESSAGING_MODERATED`. Social: `PROJECT_COMMENTED`, `COMMENT_REPLIED`, `PROJECT_FORKED`, `PROJECT_REACTED`, `PROJECT_COLLAB_INTEREST`, `PROJECT_UPDATED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. `PROJECT_LIKED` is no longer sent; it stays for old rows |
+| key | string? | identity of what is announced, so a toggled state (a reaction, a follow) notifies once — see `notifyOnce` in `lib/notifications.ts` |
 | payload | json | denormalized display data (project title, actor name, etc.) captured at creation time |
 | read | bool | |
 | created_at | timestamp | |
@@ -205,23 +234,25 @@ A reported conversation. Same reasons, statuses and review fields as `Report`, b
 
 ## Auth
 
-Students authenticate via U of T email verification (Google/Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca` domains). Non-U of T visitors can browse public projects without an account.
+Two ways in, both at `/session`:
 
-Open question: exact mechanism for verifying student status (domain-restricted OAuth is the leading option for MVP).
+- **Microsoft OAuth**, restricted to `@mail.utoronto.ca` / `@utoronto.ca` accounts. A brand-new account's Graph photo becomes its avatar.
+- **Email + password** (`passwordHash`, scrypt), also restricted to U of T addresses. This is the one that works in local development, since OAuth needs real credentials.
+
+The session is a JWT in an HTTP-only, `SameSite=Lax` cookie, valid for 7 days. Visitors without an account can browse public projects, and a public project, profile or collection can be opened by anyone with the link.
 
 ---
 
 ## Visibility model
 
-Projects have three visibility levels:
+Projects have four visibility levels:
 
-| Level | Who can see |
-|---|---|
-| `private` | Owner and invited collaborators only |
-| `uoft` | Any authenticated U of T user |
-| `public` | Anyone on the internet |
-
-`unlisted` opens for anyone with the link but is never listed.
+| Level | Shown as | Who can see |
+|---|---|---|
+| `private` | Draft | Owner and accepted collaborators only |
+| `uoft` | U of T | Any signed-in U of T user |
+| `public` | Public | Anyone on the internet |
+| `unlisted` | Unlisted | Anyone with the link; never listed, never announced to followers |
 
 Default: `private`. Students must explicitly open visibility up.
 
@@ -255,11 +286,17 @@ Both halves report to [Clueline](https://clueline.dev), and both degrade to noth
 
 **What is deliberately not sent:** the signed-in student is identified by `userId` alone. The SDK accepts `email` and `name`, which is what would let Clueline contact the person directly, and that is an opt-in we have not taken — mailing a student's U of T address to a third party by default contradicts what `/about` and `/privacy` promise. Taking it later means editing `IdentifyViewer` **and** the third-party list on the privacy page in the same commit.
 
+---
+
+## Moderation
+
 Anyone signed in can report a project whose visibility is `uoft` or `public`. A `private` project is unreportable — nobody outside the owner and its accepted collaborators can see it, so there is nothing for a moderator to act on. Self-reports are rejected, as is a second open report on a project the same person has already reported.
 
 `POST /projects/:id/report` is rate-limited to 5 per hour, **keyed by session cookie rather than by IP**. This is the one place that deviates from the IP-keyed default the upload routes use: campus wifi puts thousands of students behind a handful of NAT addresses, and an IP budget would let one abuser exhaust reporting for everyone on the same network. The limiter runs in `onRequest`, before `authenticate` has verified the JWT, so the raw cookie — not `request.user` — is what's available as a key.
 
-Moderators are `User.is_admin` accounts. The flag is checked against the database on every admin request (`lib/admin.ts`), not read from the JWT: sessions last 7 days, so a token minted while the flag was set would otherwise keep moderator powers until it expired. It is granted only from the database — `pnpm --filter @uofthub/api grant-admin <email>` — because the first moderator has to come from outside the app and no route should be able to hand out the flag. This is the same gate Phase 3's org-verification portal will register behind.
+Moderators are `User.is_admin` accounts. The flag is checked against the database on every admin request (`lib/admin.ts`), not read from the JWT: sessions last 7 days, so a token minted while the flag was set would otherwise keep moderator powers until it expired. It is granted only from the database — `pnpm --filter @uofthub/api grant-admin <email>` — because the first moderator has to come from outside the app and no route should be able to hand out the flag. Every admin route sits behind this one gate.
+
+The `/admin` page (Moderation, in the account menu for moderators only) has four tabs: **Project reports**, **Message reports**, **Groups** (create a group, decide any left over from the old verification flow) and **Spotlight** (pick the week's project).
 
 `GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide). `POST /admin/reports/:id/decision` takes one of three decisions:
 
@@ -272,6 +309,8 @@ Moderators are `User.is_admin` accounts. The flag is checked against the databas
 A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, and `POST /projects/:id/fork` refuses to copy the project at all — a fork would otherwise come back with a clean `taken_down_at` and be one click from public again. Only a moderator can clear it.
 
 Deciding a take-down also closes every other open report on the same project with the same decision. A project that drew one report usually drew several, and without this the owner is notified once per duplicate.
+
+Message reports work the same way, about a person rather than a project: `GET /admin/message-reports`, and a decision of dismiss, warn, or suspend messaging (`User.messaging_suspended_at`), which sends `MESSAGING_MODERATED`. See [MessageReport](#messagereport).
 
 ---
 
@@ -358,15 +397,16 @@ The two that existed before — the verification sweep (`sweep-orgs`) and term s
 | ORM | Prisma | Clean migrations, generated TS types, good Postgres support |
 | Database | PostgreSQL | Relational model fits the social graph; Prisma handles migrations |
 | Routing (web) | React Router v7 | Standard choice, no SSR complexity needed at MVP |
+| Styling (web) | Tailwind CSS v4 | Design tokens as a `@theme` in `src/index.css`, redefined for dark mode; components style themselves with utilities, and shared shapes live in `src/components/ui`. See [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-appsweb) |
 | Data fetching | TanStack Query | Server state management, caching, background refetch |
-| Auth | Google/Microsoft OAuth (domain-restricted) | Easiest student verification for `@mail.utoronto.ca` / `@utoronto.ca` |
+| Auth | Microsoft OAuth (domain-restricted) + email/password | Microsoft is what every U of T account already has; password sign-in covers local development and anyone who prefers it. Both are restricted to `@mail.utoronto.ca` / `@utoronto.ca` |
 | Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
 | File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
 | AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `apps/api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
 | Email | Resend | Simple API, generous free tier; `apps/api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 | Error monitoring | [Clueline](https://clueline.dev) — `@clueline/core` in the API, `@clueline/react` in the web app | Ships 5xx failures and front-end crashes with the context to act on them, and shows students a calm fallback instead of a white screen. No-ops with a warning when `CLUELINE_API_KEY` / `VITE_CLUELINE_API_KEY` are unset |
-| Tests | Vitest + `app.inject()` against a real Postgres | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
-| CI | GitHub Actions | `typecheck` + API tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
+| Tests | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
+| CI | GitHub Actions | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
 | Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `apps/api/` |
 | Hosting (web) | Cloudflare Pages | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard |
 
@@ -374,7 +414,7 @@ The two that existed before — the verification sweep (`sweep-orgs`) and term s
 
 ## Deployment
 
-Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck` → tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
+Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck` → API and web tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
 
 | Piece | Where | How |
 |---|---|---|
@@ -400,7 +440,7 @@ Environment variables in production — see `apps/api/.env.example` for the full
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
 
-There are no scheduled jobs to deploy alongside the web service.
+There are no scheduled jobs to deploy separately: the one sweep runs inside the API process (see [Scheduled jobs](#scheduled-jobs)).
 
 ---
 

@@ -14,7 +14,7 @@ This extends [ARCHITECTURE.md](ARCHITECTURE.md) and [redesign.md](redesign.md).
 
 - **`lib/visibility.ts` is the security boundary.** Every new read goes through `canViewProject` / `canViewProjectId` / `visibleProjectWhere`. The show-from date is enforced there and nowhere else (see Phase 1, which also moves three existing checks *into* it).
 - **`ProjectFile` and `ProjectLink`** stay as they are. Outputs are a layer over them, not a replacement.
-- **Tags**, **`Markdown.tsx`** (section bodies are Markdown, rendered by it), **the CSS and the `components/ui` kit**.
+- **Tags**, **`Markdown.tsx`** (section bodies are Markdown, rendered by it), **the `components/ui` kit** (styling has since moved to Tailwind CSS v4; see [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-appsweb)).
 - **`searchVector`** stays a `STORED` generated column, extended to cover the new text.
 - **`description`** stays, and becomes the optional *Overview*.
 
@@ -109,7 +109,7 @@ model ProjectReference {
 }
 ```
 
-`lib/referenceKey.ts` normalizes the identity and is unit-tested case by case:
+`lib/referenceKey.ts` (built as `referenceKey()` in `lib/references.ts`) normalizes the identity and is unit-tested case by case:
 
 - **DOIs** (`doi:`, `https://doi.org/…`, `dx.doi.org`): bare and lower-cased (DOIs are case-insensitive), with trailing punctuation trimmed. arXiv DOIs (`10.48550/arXiv.X`) map to `arxiv:X`.
 - **arXiv**: `abs/` and `pdf/` URLs map to `arxiv:<id>` with the version and `.pdf` stripped.

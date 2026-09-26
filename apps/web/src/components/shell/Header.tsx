@@ -9,7 +9,8 @@ import { ThemeToggle } from './ThemeToggle'
 
 /**
  * The desktop header: logo, search, then the student's own things — theme,
- * messages, bell, post, account. Where to go lives in the sidebar (SideNav).
+ * messages, bell, post, account. Where to go lives in the feed's left rail
+ * and the account menu.
  */
 export function Header() {
   const { user, maybeSignedIn } = useAuth()

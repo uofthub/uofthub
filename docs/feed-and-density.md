@@ -1,6 +1,6 @@
 # Feed, density and feedback
 
-> **Partly superseded by [redesign.md](redesign.md).** Likes are gone (folded into reactions), there are now three reaction kinds, trending ranks this week's activity rather than all-time views, and a view is counted once per person per day. The feed and density reasoning below still stands.
+> **Partly superseded by [redesign.md](redesign.md).** Likes are gone (folded into reactions), there are now three reaction kinds, trending ranks this week's activity rather than all-time views, and a view is counted once per person per day. The feed and density reasoning below still stands, but several names have moved: the directory is `/explore` (`ExplorePage.tsx`; `/projects` and `/courses/:tag` redirect there), the feed is `/feed` (`FeedPage.tsx`; `/` is the landing page and sends a signed-in student on), and `Layout.tsx` became `AppShell.tsx`, with navigation in the feed's left rail and the account menu rather than a sidebar.
 
 This document records why `/` shows a student a feed instead of a sales pitch, why the project directory is a list instead of a grid of cards, and why a project page has a row of one-tap reactions under the Like button. It extends [ARCHITECTURE.md](ARCHITECTURE.md).
 

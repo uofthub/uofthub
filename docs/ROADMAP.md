@@ -9,7 +9,7 @@ Based on [prd.md](prd.md). Phases are ordered; items within a phase are not. Unc
 Goal: a working platform that a real U of T student can use to publish and share a project.
 
 **Auth**
-- [x] U of T email verification (Google/Microsoft OAuth, domain-restricted)
+- [x] U of T email verification (Microsoft OAuth or email + password, both domain-restricted)
 
 **Profiles**
 - [x] Basic profile: name, faculty, program, class year
@@ -57,7 +57,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Project view counts and engagement metrics (visible to owner) — daily view chart + totals panel
 
 **Pages**
-- [x] Course pages (aggregate all projects tagged to a course) — `/courses/:tag`
+- [x] Course pages (aggregate all projects tagged to a course) — `/courses/:tag`, now a redirect to Explore's course filter (`/explore?course=`)
 - [x] Club pages — `/orgs/:slug` with CLUB type
 - [x] Research lab pages — `/orgs/:slug` with LAB type
 
@@ -70,7 +70,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Backend — emit at each previously-silent trigger via `lib/notifications.ts`: collaborator invited, invite accepted/declined, TA/professor access requested, and access request approved/denied (denial is the `DELETE .../collaborators/:userId` path, not a PATCH)
 - [x] `GET /users/me/notifications` (returns `unreadCount` alongside the list), `POST /users/me/notifications/:id/read`, plus `POST .../read-all` for the bell's open-to-clear behaviour
 - [x] `PATCH /projects/:id/collaborators/:userId` extended — previously only the invitee could respond about themselves, so the owner had no way to approve a TA/professor access request that `POST /request-access` had created. The owner may now decide a pending `VIEWER` row; everything else is still self-only
-- [x] Frontend — notification bell + dropdown in `AppBar.tsx` with an unread dot, polling every 30s (no WebSocket infrastructure — deliberately deferred, see Later / Exploratory). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
+- [x] Frontend — notification bell + dropdown in the header (`components/shell/NotificationBell.tsx`) with an unread dot, polling every 30s (no WebSocket infrastructure — deliberately deferred, see Later / Exploratory). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
 - [x] Frontend — accept/decline lives *in the notification row*, not on the project page: a pending collaborator can't open a `PRIVATE` project yet, so a link there would 404 until they accept
 - [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
 - [x] Phase 3's org-verification emails — `lib/orgEmails.ts`; `emailAdminsOfSubmission` on `POST /orgs/:slug/verify`, `emailContactOfDecision` on all three admin decisions. Best-effort: `sendEmail` no-ops without `RESEND_API_KEY`, so a missing key degrades rather than failing the request
@@ -139,7 +139,7 @@ Goal: a group page stops being "anyone can claim it" and becomes something verif
 Goal: make the site worth opening a second time. Not scoped from [prd.md](prd.md) — it came out of using what Phases 1–3 built and finding two things wrong with it: everything was shown as a wall of small cards, which is unreadable at any real volume, and publishing a project produced no observable consequence for anybody. Full rationale: [feed-and-density.md](feed-and-density.md).
 
 **Density**
-- [x] `/projects` defaults to the **list**, not the card grid. A card grid only earns its vertical space when the cover image is what you are choosing by, and most projects here have never had a file uploaded — `ProjectCard`'s own comment already said so, which meant every tile spent 124px drawing a coloured letter of the alphabet. A list also *ranks*, which a grid cannot: row one is unambiguously first, where twelve tiles all read as equally important. The grid is still one click away and the choice is remembered per browser
+- [x] `/projects` (now `/explore`) defaults to the **list**, not the card grid. A card grid only earns its vertical space when the cover image is what you are choosing by, and most projects here have never had a file uploaded — `ProjectCard`'s own comment already said so, which meant every tile spent 124px drawing a coloured letter of the alphabet. A list also *ranks*, which a grid cannot: row one is unambiguously first, where twelve tiles all read as equally important. The grid is still one click away and the choice is remembered per browser
 - [x] List mode narrows the page to a 920px reading column, header and filters included — a 76px thumbnail and a 14px description stretched across a 1600px monitor is its own kind of unreadable. Grid mode keeps full width
 - [x] `/courses/:tag` and `/discover` use the list too: they are the same directory filtered differently, and `/discover` is a *ranked* result set where a grid says nothing about which answer came first
 - [x] Schema — `Project.pinnedAt`; `POST /projects/:id/pin` (owner only, capped at six with an error that says how to make room), `GET /users/:id/pinned`. Its own endpoint rather than a flag on the paged list, since the list is newest-first and a project pinned a year ago would not be on page one
@@ -149,7 +149,7 @@ Goal: make the site worth opening a second time. Not scoped from [prd.md](prd.md
 - [x] Schema — `Project.publishedAt`, stamped once by `lib/publishing.ts` at the transition out of `PRIVATE`, from both `POST /projects` and the `PATCH` that opens a draft up. The feed orders by it rather than `createdAt`: a capstone drafted in January and opened up in March belongs in March. Idempotent, so `UOFT → PRIVATE → UOFT` is not a second publication; the migration backfills it for everything already visible so the feed is not empty on day one
 - [x] `GET /feed` — projects from people you follow, from courses you have published in, and from your campus, ordered by publish time, with a trending top-up once that runs out so a brand-new account does not land on an empty page. Each row carries the **reason** it reached you, assigned strongest-first; a top-up row is labelled `TRENDING` even when it also happens to be from your campus, since saying otherwise would make the feed look better connected than it is. Nothing in it is manufactured activity — every row is a real project that was really published
 - [x] `GET /feed/activity` — this week's views against last week's, plus likes, comments and reactions on your own work (excluding your own), and recent comments with names and text. A view counter that only moves when you reload your own page is exactly the "nobody interacts with it" feeling; a name and a sentence is not. Only rendered to students who have published something
-- [x] Frontend — `/` is a feed to a student and the marketing page to a visitor, with `Layout.tsx` switching the surrounding chrome on the same condition. Previously somebody who had been publishing here for a month still landed on "Get started" and a product screenshot every visit
+- [x] Frontend — `/` is a feed to a student and the marketing page to a visitor (since split: the feed lives at `/feed` and `/` sends a signed-in student there; `AppShell.tsx` picks the chrome). Previously somebody who had been publishing here for a month still landed on "Get started" and a product screenshot every visit
 
 **Social notifications**
 - [x] Six new `NotificationType`s — `PROJECT_LIKED`, `PROJECT_COMMENTED`, `PROJECT_FORKED`, `PROJECT_REACTED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. Every previous type was administrative, so a like or a comment was only ever discoverable by reopening the project and reading a counter, and following somebody was a button that did nothing observable
@@ -185,8 +185,8 @@ Deliberately last — these either need infrastructure the earlier phases don't 
 
 Not phase-scoped — these are gaps in build/ship confidence rather than user-facing features, and belong alongside whichever phase is currently active rather than after it.
 
-- [x] Tests — Vitest, `pnpm --filter @uofthub/api test` and `pnpm --filter @uofthub/web test`. API: 19 files covering the routes that carry real logic (fork, versioning, visibility filtering, org verification, moderation decisions, the feed and its reasons, social-notification deduplication, pinning, reactions) plus the pure rules they lean on (`visibility.ts`, `terms.ts`, `url.ts`). Web: the pieces with logic rather than layout — the project card and row, markdown rendering, file-type inference, notification copy, and the reactions bar. Route tests go through `app.inject()` against a **real Postgres**, not a mock — the rules being tested are Prisma queries, and a mock would only prove the query builder was called. The suite creates and migrates its own database, whose name must end in `_test`, so a stray `DATABASE_URL` can't point the truncate-between-tests at development data
-- [x] CI — `.github/workflows/ci.yml` runs install, `prisma generate`, `typecheck`, the API tests (against a Postgres service container), `build` and `lint` on every PR and every push to `main`
+- [x] Tests — Vitest, `pnpm --filter @uofthub/api test` and `pnpm --filter @uofthub/web test`. API: 29 files covering the routes that carry real logic (fork, versioning, visibility filtering and show-from dates, project content, references, outputs, moderation decisions, the feed and its reasons, social-notification deduplication, pinning, reactions) plus the pure rules they lean on (`visibility.ts`, `projectContent.ts`, `references.ts`, `search.ts`, `url.ts`). Web: 19 files on the pieces with logic rather than layout — the project card, markdown rendering, file-type inference, notification copy, the reactions bar, the editor's draft/compose/save rules, sections, outputs and thumbnails. Route tests go through `app.inject()` against a **real Postgres**, not a mock — the rules being tested are Prisma queries, and a mock would only prove the query builder was called. The suite creates and migrates its own database, whose name must end in `_test`, so a stray `DATABASE_URL` can't point the truncate-between-tests at development data
+- [x] CI — `.github/workflows/ci.yml` runs install, `prisma generate`, `typecheck`, the API tests (against a Postgres service container), the web tests, `build` and `lint` on every PR and every push to `main`
 - [x] Error monitoring — [Clueline](https://clueline.dev) on both halves (`lib/monitoring.ts`, `lib/monitoring.tsx`). The API reports 5xx only, since a 401/404/429 is the API working; the web app gets a root boundary so a crash is a calm fallback rather than a white screen. Students are identified by id alone — see [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring) for why email is deliberately withheld
 - [x] Legal pages — `/terms` (ownership, acceptable use, moderation) and `/privacy` (what is collected, and every third party that sees any of it). The privacy page's third-party list mirrors the real integrations; adding another one means editing that page in the same commit
 - [x] Deployment/hosting — **Railway** for the API and Postgres, **Cloudflare Pages** for the web build, recorded in [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md#stack-decisions) with the setup in [§ Deployment](ARCHITECTURE.md#deployment). `apps/api/Dockerfile` + `railway.json` build the API and apply migrations at boot; `apps/web/public/_redirects` gives Pages the SPA fallback React Router needs. Nothing is deployed yet — the config exists and the image is verified to build and boot, but the accounts, domains and cron jobs still have to be set up by hand
@@ -219,5 +219,16 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Import a project from a link — GitHub via its API, any page via its own metadata, guarded against reaching private addresses
 - [x] "Open to" and personal links on profiles — GitHub and LinkedIn links must point at those sites
 - [x] Messages: block and report a conversation — blocking closes it both ways without telling the blocked person; a report files the last 30 messages, blocks by default, and a moderator can warn or suspend the sender's messaging
+- [x] Feed at its own address — `/feed` for a signed-in student, `/` stays the landing page; the header keeps search and the student's own things, and navigation lives in the feed's left rail, the account menu and the phone's bottom bar
+- [x] Styling moved to Tailwind CSS v4 — tokens as a `@theme` in `index.css`, no per-component stylesheets
 - [ ] Messages and notifications: push instead of polling
+
+## Structured projects (see docs/structured-projects.md)
+
+- [x] Show-from date — a project stays hidden from everyone but its makers until then
+- [x] Optional sections and short details, with anything empty left out of the page
+- [x] References — what a project drew on, and which other projects used the same thing
+- [x] Outputs — what a project produced, with the primary one as its image everywhere
+- [x] Filed under a real course (`courseCode`), with course templates, and every maker's faculty credited
+- [x] One page to make and edit a project, publishing last
 
