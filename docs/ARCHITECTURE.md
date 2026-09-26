@@ -181,7 +181,7 @@ A meeting, event, workshop or recap — lighter than a Project, rendered only on
 | created_at | timestamp | |
 
 ### Notification
-The bell's feed, polled every 30 seconds. No email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
+The bell's feed, pushed to open tabs as it is written — see [Live updates](#live-updates). No email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -264,6 +264,16 @@ The model is `gpt-5.6-luna` unless `OPENAI_MODEL` overrides it, so pinning a dif
 The interpreted filters are returned to the client and rendered as chips. This is a UX decision worth keeping: a student who sees "about machine learning · faculty Engineering" understands why they got nothing back, where a black box returning an empty grid just looks broken.
 
 ---
+
+## Live updates
+
+The bell and Messages are pushed, not polled. Each signed-in tab holds one Server-Sent Events stream, `GET /events`, and the API sends a bare event name down it — `notification` or `message` — when a row for that student is written (`lib/live.ts`, called from `lib/notifications.ts` and the send-message route). An event carries no data: the tab refetches through the ordinary routes, so the stream can never show anything those routes wouldn't.
+
+SSE rather than WebSockets because the traffic only goes one way, it rides the same session cookie as every other request, and the browser's `EventSource` reconnects by itself.
+
+- **Across instances.** Events travel through Postgres `NOTIFY` on the `live` channel, not an in-memory emitter, because the write and the stream are often on different replicas. Each instance opens one extra `LISTEN` connection (with `pg`, since Prisma cannot listen) the first time a stream connects to it.
+- **Best-effort.** A failed publish never fails the request, and whatever is published while a listener is reconnecting is lost. A listener that comes back sends `resync` to its streams, and a tab whose stream reconnects refetches both; window focus is the last backstop.
+- **Session checks.** The cookie is verified when the stream opens. Streams end after 30 minutes so the browser reconnects and proves it again; a 25-second heartbeat keeps proxies from closing an idle one.
 
 ## Error monitoring
 
@@ -420,6 +430,8 @@ Environment variables in production — see `api/.env.example` for the full list
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
 `PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
+
+Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Railway may buffer them.
 
 There are no scheduled jobs to deploy separately: the one sweep runs inside the API process (see [Scheduled jobs](#scheduled-jobs)).
 

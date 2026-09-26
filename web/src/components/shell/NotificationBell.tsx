@@ -23,8 +23,7 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
     queryKey: ['notifications'],
     queryFn: () => api.notifications.list(),
     enabled: !!user,
-    // Polling, not push — see ROADMAP.md § Later.
-    refetchInterval: 30_000,
+    // Kept current by the live stream — see lib/live.ts.
   })
 
   const respond = useMutation({

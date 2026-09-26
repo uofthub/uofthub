@@ -70,7 +70,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Backend — emit at each previously-silent trigger via `lib/notifications.ts`: collaborator invited, invite accepted/declined, TA/professor access requested, and access request approved/denied (denial is the `DELETE .../collaborators/:userId` path, not a PATCH)
 - [x] `GET /users/me/notifications` (returns `unreadCount` alongside the list), `POST /users/me/notifications/:id/read`, plus `POST .../read-all` for the bell's open-to-clear behaviour
 - [x] `PATCH /projects/:id/collaborators/:userId` extended — previously only the invitee could respond about themselves, so the owner had no way to approve a TA/professor access request that `POST /request-access` had created. The owner may now decide a pending `VIEWER` row; everything else is still self-only
-- [x] Frontend — notification bell + dropdown in the header (`components/shell/NotificationBell.tsx`) with an unread dot, polling every 30s (no WebSocket infrastructure — deliberately deferred, see Later / Exploratory). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
+- [x] Frontend — notification bell + dropdown in the header (`components/shell/NotificationBell.tsx`) with an unread dot, polling every 30s at first (since replaced by a pushed stream — see Redesign). Opening it marks everything read but keeps the just-seen items highlighted, so the feed doesn't grey out the moment you look at it
 - [x] Frontend — accept/decline lives *in the notification row*, not on the project page: a pending collaborator can't open a `PRIVATE` project yet, so a link there would 404 until they accept
 - [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
 - [x] Phase 3's org-verification emails — `lib/orgEmails.ts`; `emailAdminsOfSubmission` on `POST /orgs/:slug/verify`, `emailContactOfDecision` on all three admin decisions. Best-effort: `sendEmail` no-ops without `RESEND_API_KEY`, so a missing key degrades rather than failing the request
@@ -221,7 +221,7 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Messages: block and report a conversation — blocking closes it both ways without telling the blocked person; a report files the last 30 messages, blocks by default, and a moderator can warn or suspend the sender's messaging
 - [x] Feed at its own address — `/feed` for a signed-in student, `/` stays the landing page; the header keeps search and the student's own things, and navigation lives in the feed's left rail, the account menu and the phone's bottom bar
 - [x] Styling moved to Tailwind CSS v4 — tokens as a `@theme` in `index.css`, no per-component stylesheets
-- [ ] Messages and notifications: push instead of polling
+- [x] Messages and notifications: push instead of polling — a Server-Sent Events stream per tab, fanned out across instances through Postgres `NOTIFY`. See [ARCHITECTURE.md § Live updates](ARCHITECTURE.md#live-updates)
 
 ## Structured projects (see docs/structured-projects.md)
 

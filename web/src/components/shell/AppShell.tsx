@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
+import { useLiveUpdates } from '../../lib/live'
 import { cx } from '../ui'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
 import { CommandPalette } from './CommandPalette'
@@ -21,6 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, maybeSignedIn } = useAuth()
   const phone = useMediaQuery(PHONE)
   const wide = useMediaQuery(RAIL)
+  useLiveUpdates()
 
   // A new page starts at the top — unless the link was to a spot on it.
   // Instantly: the page is already easing in, and the page smooth-scrolls by

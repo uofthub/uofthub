@@ -17,6 +17,7 @@ import { spotlightRoutes } from './routes/spotlight.js'
 import { collectionRoutes } from './routes/collections.js'
 import { messageRoutes } from './routes/messages.js'
 import { courseRoutes } from './routes/courses.js'
+import { eventRoutes } from './routes/events.js'
 
 export async function buildApp() {
   // A default secret is fine for local work but would silently ship forgeable
@@ -103,6 +104,7 @@ export async function buildApp() {
   await app.register(collectionRoutes, { prefix: '/collections' })
   await app.register(messageRoutes, { prefix: '/messages' })
   await app.register(courseRoutes, { prefix: '/courses' })
+  await app.register(eventRoutes, { prefix: '/events' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

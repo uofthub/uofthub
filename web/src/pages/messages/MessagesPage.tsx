@@ -37,7 +37,6 @@ function Conversations({ active }: { active?: string }) {
   const { data = [], isLoading } = useQuery({
     queryKey: ['messages', 'conversations'],
     queryFn: () => api.messages.conversations(),
-    refetchInterval: 30_000,
   })
   if (isLoading) return <Spinner />
   if (data.length === 0)
@@ -139,7 +138,6 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
     initialPageParam: undefined as string | undefined,
     // Each page is older than the one before; its first message is where the next starts.
     getNextPageParam: (last) => (last.hasMore ? last.messages[0]?.createdAt : undefined),
-    refetchInterval: 10_000,
   })
   const first = thread.data?.pages[0]
   const messages: Message[] = (thread.data?.pages ?? [])

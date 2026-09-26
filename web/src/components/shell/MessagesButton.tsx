@@ -11,8 +11,7 @@ export function MessagesButton({ bare = false }: { bare?: boolean }) {
     queryKey: ['messages', 'unread'],
     queryFn: () => api.messages.unread(),
     enabled: !!user,
-    // Polling, like the bell — see ROADMAP.md § Later.
-    refetchInterval: 30_000,
+    // Kept current by the live stream, like the bell — see lib/live.ts.
   })
   if (!user) return null
   const unread = data?.count ?? 0

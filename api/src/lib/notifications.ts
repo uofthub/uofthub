@@ -1,5 +1,6 @@
 import type { NotificationType, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
+import { publish } from './live.js'
 
 /**
  * Writing to somebody's notification feed.
@@ -27,6 +28,7 @@ export async function notify(
   await db.notification.create({
     data: { userId, type, key, payload: payload as Prisma.InputJsonValue },
   })
+  await publish([userId], 'notification')
 }
 
 /**
@@ -102,12 +104,14 @@ export async function notifyMany(
   key?: string
 ): Promise<void> {
   if (userIds.length === 0) return
+  const audience = userIds.slice(0, FANOUT_LIMIT)
   await db.notification.createMany({
-    data: userIds.slice(0, FANOUT_LIMIT).map((userId) => ({
+    data: audience.map((userId) => ({
       userId,
       type,
       key,
       payload: payload as Prisma.InputJsonValue,
     })),
   })
+  await publish(audience, 'notification')
 }

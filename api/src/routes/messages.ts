@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
+import { publish } from '../lib/live.js'
 import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 
@@ -243,6 +244,8 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
         data: { senderId: me, recipientId: other.id, body },
         select: { id: true, senderId: true, body: true, createdAt: true, readAt: true },
       })
+      // The sender too: their other tabs list this conversation as well.
+      await publish([other.id, me], 'message')
       return reply.code(201).send({ ...message, fromMe: true })
     }
   )

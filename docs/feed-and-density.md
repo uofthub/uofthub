@@ -146,5 +146,5 @@ Deliberate boundaries:
 
 - **No email delivery.** Still the open item from [ROADMAP.md](ROADMAP.md) § Notifications. The in-app bell is the only channel, and the fan-out cap above is sized for that — an email fan-out would need a different ceiling and a per-student preference.
 - **No per-viewer view tracking.** "3 people from Engineering looked at this" would need viewer identity on every view, which is a privacy decision rather than a feature decision, and the honest version of it — names on likes, a week-over-week view trend — turned out to answer the same question.
-- **No realtime.** The bell still polls every 30 seconds. WebSockets remain deferred, for the reason recorded in the roadmap.
+- **Realtime since.** The bell polled every 30 seconds when this was written; it is now pushed over a Server-Sent Events stream — see [ARCHITECTURE.md § Live updates](ARCHITECTURE.md#live-updates).
 - **No algorithmic ranking.** The connected feed is ordered by publish time, and the top-up by view count. Nothing is scored, weighted or personalised beyond the four reasons above, all of which a student can explain to themselves from the row.
