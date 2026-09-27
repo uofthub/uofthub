@@ -87,6 +87,6 @@ databases:
     user: uofthub
     plan: basic-256mb
     region: ohio
-    postgresMajorVersion: '16'
+    postgresMajorVersion: '18'
     # Private network only: the API reaches it internally, nothing else should.
     ipAllowList: []
