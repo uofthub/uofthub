@@ -25,6 +25,7 @@ export async function onRequest({ request, env }) {
     entry('/help-wanted'),
     entry('/orgs'),
     entry('/about'),
+    entry('/docs'),
     ...projects.map((p) => entry(`/@${p.owner.handle}/${p.slug}`, p.updatedAt)),
     ...orgs.map((o) => entry(`/orgs/${encodeURIComponent(o.slug)}`)),
     ...users.map((u) => entry(`/@${u.handle}`, u.updatedAt)),

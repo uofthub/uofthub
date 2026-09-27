@@ -27,7 +27,7 @@ const PRINCIPLES: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'code',
     title: 'Open source',
-    text: 'The whole thing is on GitHub. Read the code, file an issue, or send a pull request.',
+    text: 'The whole thing is on GitHub. Read the code, follow the roadmap, or send a pull request.',
   },
   {
     icon: 'shieldCheck',
@@ -78,12 +78,15 @@ export default function AboutPage() {
       <section className="flex flex-col gap-3">
         <Heading>Get in touch</Heading>
         <p className="text-15 text-muted">
-          Found a bug, want a feature, or want to help build it? A GitHub issue is the fastest
-          route.
+          Found a bug, want a feature, or want to help build it? Tell us — every message is read by
+          a person.
         </p>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button variant="primary" icon="branch" href={`${GITHUB_URL}/issues`}>
-            Open an issue
+          <Button variant="primary" icon="megaphone" to="/feedback">
+            Send feedback
+          </Button>
+          <Button icon="branch" href={GITHUB_URL}>
+            uofthub on GitHub
           </Button>
           <Button icon="mail" href={`mailto:${CONTACT_EMAIL}`}>
             {CONTACT_EMAIL}

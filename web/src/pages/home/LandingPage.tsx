@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useDocumentTitle } from '../../lib/hooks'
-import { GITHUB_URL } from '../../lib/site'
 import Logo from '../../components/brand/Logo'
 import Mark from '../../components/brand/Mark'
 import { ProjectCard } from '../../components/project'
@@ -292,10 +291,10 @@ export default function LandingPage() {
           </h2>
           <p className="mx-auto max-w-175 text-16 leading-[1.6] text-navy-text">
             uofthub is early and shaped by the people using it. If something you need is missing — a
-            file type, an integration, a way to show your work — open an issue and tell us.
+            file type, an integration, a way to show your work — tell us.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button variant="gold" icon="sparkle" href={`${GITHUB_URL}/issues/new`}>
+            <Button variant="gold" icon="sparkle" to="/feedback?type=feature">
               Request a feature
             </Button>
             <Button

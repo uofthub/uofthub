@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { GITHUB_URL } from '../../lib/site'
 import { useTheme } from '../../lib/theme'
 import { Card, cx, dialogPanel, Eyebrow, Icon, Scrim, type IconName } from '../ui'
 import { Kbd } from './Kbd'
@@ -124,6 +123,14 @@ function Palette({
           ]
         : []),
       { id: 'about', label: 'About', icon: 'info', group: 'Pages', run: go('/about') },
+      { id: 'docs', label: 'Docs & help', icon: 'file', group: 'Pages', run: go('/docs') },
+      {
+        id: 'feedback',
+        label: 'Feedback & report',
+        icon: 'megaphone',
+        group: 'Pages',
+        run: go('/feedback'),
+      },
       {
         id: 'terms',
         label: 'Terms & ownership',
@@ -142,16 +149,6 @@ function Palette({
         run: () => {
           setDarkMode(!darkMode)
           close()
-        },
-      },
-      {
-        id: 'source',
-        label: 'Source code on GitHub',
-        icon: 'branch',
-        group: 'Actions',
-        run: () => {
-          close()
-          window.open(GITHUB_URL, '_blank', 'noopener')
         },
       },
       user

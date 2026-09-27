@@ -28,6 +28,8 @@ export const APP_ROUTES = [
   '/about',
   '/terms',
   '/privacy',
+  '/docs',
+  '/feedback',
   '/saved',
   '/collections',
   '/collections/:id',

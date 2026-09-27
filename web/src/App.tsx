@@ -13,6 +13,8 @@ import OrgPage from './pages/orgs/OrgPage'
 import AboutPage from './pages/info/AboutPage'
 import TermsPage from './pages/info/TermsPage'
 import PrivacyPage from './pages/info/PrivacyPage'
+import DocsPage from './pages/info/DocsPage'
+import FeedbackPage from './pages/info/FeedbackPage'
 import NotFoundPage from './pages/info/NotFoundPage'
 import { HelpWantedPage, SavedPage } from './pages/lists/ListPages'
 import { PersonRoute, ProjectRoute } from './pages/paths/PathPages'
@@ -78,6 +80,8 @@ export default function App() {
             <Route path="/about" element={<AboutPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             <Route path="/saved" element={<SavedPage />} />
             <Route path="/collections" element={<CollectionsPage />} />
             <Route path="/collections/:id" element={<CollectionPage />} />

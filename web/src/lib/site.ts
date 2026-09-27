@@ -1,4 +1,5 @@
-export const GITHUB_URL = 'https://github.com/renfrrd-ai/uofthub'
+/** The uofthub organization on GitHub — its repositories, issues and roadmap. */
+export const GITHUB_URL = 'https://github.com/uofthub'
 
 /**
  * Where students reach a human: About, Terms, Privacy and the take-down and

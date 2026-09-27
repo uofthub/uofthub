@@ -17,9 +17,13 @@ export function FooterNote({ className }: { className?: string }) {
         About
       </Link>{' '}
       ·{' '}
-      <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={noteLink}>
-        Open source
-      </a>{' '}
+      <Link to="/docs" className={noteLink}>
+        Docs
+      </Link>{' '}
+      ·{' '}
+      <Link to="/feedback" className={noteLink}>
+        Feedback
+      </Link>{' '}
       ·{' '}
       <Link to="/terms" className={noteLink}>
         Community guidelines
@@ -42,7 +46,8 @@ const COLUMNS: { heading: string; links: FooterLink[] }[] = [
     heading: 'Community',
     links: [
       { label: 'About', to: '/about' },
-      { label: 'Feedback & Report', to: `${GITHUB_URL}/issues`, external: true },
+      { label: 'Feedback & Report', to: '/feedback' },
+      { label: 'GitHub', to: GITHUB_URL, external: true },
     ],
   },
   {
@@ -59,8 +64,7 @@ const COLUMNS: { heading: string; links: FooterLink[] }[] = [
     links: [
       { label: 'Terms & Ownership', to: '/terms' },
       { label: 'Privacy', to: '/privacy' },
-      { label: 'Source Code', to: GITHUB_URL, external: true },
-      { label: 'Read the Docs', to: `${GITHUB_URL}#readme`, external: true },
+      { label: 'Read the Docs', to: '/docs' },
     ],
   },
 ]
@@ -160,10 +164,10 @@ export function LandingFooter() {
  */
 const APP_LINKS: FooterLink[] = [
   { label: 'About', to: '/about' },
-  { label: 'Feedback & Report', to: `${GITHUB_URL}/issues`, external: true },
+  { label: 'Docs', to: '/docs' },
+  { label: 'Feedback & Report', to: '/feedback' },
   { label: 'Terms & Ownership', to: '/terms' },
   { label: 'Privacy', to: '/privacy' },
-  { label: 'Source Code', to: GITHUB_URL, external: true },
 ]
 
 const appLink = 'text-ink-3 hover:text-navy-ink'
