@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { setBadgePart } from '../../lib/push'
 import { Button, Icon } from '../ui'
 import { UnreadDot } from './UnreadDot'
 
@@ -13,8 +15,9 @@ export function MessagesButton({ bare = false }: { bare?: boolean }) {
     enabled: !!user,
     // Kept current by the live stream, like the bell — see lib/live.ts.
   })
-  if (!user) return null
   const unread = data?.count ?? 0
+  useEffect(() => setBadgePart('messages', user ? unread : 0), [user, unread])
+  if (!user) return null
   return (
     <Button
       iconOnly

@@ -438,6 +438,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         where: { id: request.user.sub },
         data: { sessionVersion: { increment: 1 } },
       })
+      // A device that is signed out should stop showing this account's pushes.
+      await db.pushSubscription.deleteMany({ where: { userId: request.user.sub } })
       reply.clearCookie('token', { path: '/' }).send({ ok: true })
     }
   )
@@ -463,6 +465,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         courses: true,
         allowMessages: true,
         emailNotifications: true,
+        pushMessages: true,
+        pushAnswers: true,
+        pushActivity: true,
         isAdmin: true,
         suspendedAt: true,
         passwordHash: true,

@@ -3,6 +3,7 @@ import { db } from '../db/client.js'
 import { publish } from '../lib/live.js'
 import { block } from '../lib/blocks.js'
 import { emailNewMessage } from '../lib/notificationEmails.js'
+import { sendPush } from '../lib/push.js'
 import { bySession } from '../lib/rateLimit.js'
 import { isReportReason, reportDetails, reportRateLimit } from '../lib/reports.js'
 
@@ -235,10 +236,22 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
         data: { senderId: me, recipientId: other.id, body },
         select: { id: true, senderId: true, body: true, createdAt: true, readAt: true },
       })
-      if (waiting === 0) {
-        const sender = await db.user.findUnique({ where: { id: me }, select: { name: true } })
-        emailNewMessage(other.id, sender?.name ?? 'Someone')
-      }
+      const sender = await db.user.findUnique({ where: { id: me }, select: { name: true } })
+      const senderName = sender?.name ?? 'Someone'
+      if (waiting === 0) emailNewMessage(other.id, senderName)
+      // Every message is pushed, unlike email, but under one tag per sender:
+      // a burst replaces itself on the lock screen instead of stacking up. The
+      // text stays off it — a lock screen is not a private place.
+      sendPush(
+        [{ userId: other.id }],
+        {
+          title: senderName,
+          body: waiting === 0 ? 'Sent you a message' : `Sent you ${waiting + 1} messages`,
+          url: `/messages/${me}`,
+          tag: `message:${me}`,
+        },
+        'messages'
+      )
       // The sender too: their other tabs list this conversation as well.
       await publish([other.id, me], 'message')
       return reply.code(201).send({ ...message, fromMe: true })

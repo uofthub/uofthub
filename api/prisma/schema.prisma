@@ -216,6 +216,14 @@ model User {
   /// moderation decisions, a new conversation) are also emailed. Off leaves
   /// the in-app bell as the only channel.
   emailNotifications   Boolean   @default(true)
+  /// Which push notifications reach this student's subscribed browsers
+  /// (lib/push.ts `PUSH_CATEGORY`). Per account, not per device: turning
+  /// push on is per browser, but what is worth a buzz is the person's call.
+  pushMessages         Boolean   @default(true)
+  /// Invitations, access requests, group requests and moderation decisions.
+  pushAnswers          Boolean   @default(true)
+  /// Comments, replies, reactions, follows and "want to collab".
+  pushActivity         Boolean   @default(true)
   /// Set by a moderator deciding a message report; while set, the student can
   /// read their conversations but not send. Cleared to lift it.
   messagingSuspendedAt DateTime?
@@ -257,6 +265,7 @@ model User {
   authTokens             AuthToken[]
   emailInvitesSent       ProjectEmailInvite[]  @relation("EmailInvitesSent")
   versionsAuthored       ProjectVersion[]
+  pushSubscriptions      PushSubscription[]
 }
 
 enum AuthTokenKind {
@@ -797,6 +806,25 @@ model Notification {
   @@index([userId, read, createdAt])
   /// The `notifyOnce` existence check.
   @@index([userId, type, key])
+}
+
+/// A browser that asked for push notifications (lib/push.ts): one row per
+/// device, as handed over by the browser's PushManager. Removed when the push
+/// service says the subscription is gone, when the student turns push off or
+/// signs out on that device, and when they sign out everywhere.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  /// The push service's URL for this browser. Unique: a browser signing into
+  /// another account moves its subscription rather than keeping both.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model OrgProject {

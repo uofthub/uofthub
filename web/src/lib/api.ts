@@ -67,6 +67,10 @@ export type MeUser = User & {
   /** False for an account that only signs in with Microsoft. */
   hasPassword: boolean
   emailNotifications: boolean
+  /** Which push notifications reach this account's subscribed browsers. */
+  pushMessages: boolean
+  pushAnswers: boolean
+  pushActivity: boolean
   /** Set while a moderator has suspended the account. */
   suspendedAt: string | null
 }
@@ -903,6 +907,9 @@ export const api = {
         courses: string[]
         allowMessages: boolean
         emailNotifications: boolean
+        pushMessages: boolean
+        pushAnswers: boolean
+        pushActivity: boolean
       }>
     ) => request<MeUser>('/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
     /** A top-level download: the browser saves the JSON the API sends. */
@@ -984,6 +991,17 @@ export const api = {
     markRead: (id: string) =>
       request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, post()),
     markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', post()),
+  },
+  push: {
+    /** Null when the API has no VAPID keys, so push is off for everybody. */
+    key: () => request<{ publicKey: string | null }>('/push/key'),
+    subscribe: (subscription: PushSubscriptionJSON) =>
+      request<{ ok: boolean }>('/push/subscriptions', post(subscription)),
+    unsubscribe: (endpoint: string) =>
+      request<{ ok: boolean }>('/push/subscriptions', {
+        method: 'DELETE',
+        body: JSON.stringify({ endpoint }),
+      }),
   },
   email: {
     /** The link in a notification email's footer; works signed out. */

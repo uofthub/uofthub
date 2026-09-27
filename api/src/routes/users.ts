@@ -14,6 +14,7 @@ import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { isFaculty } from '../lib/faculties.js'
 import { parseCampus } from '../lib/campus.js'
 import { notifyOnce } from '../lib/notifications.js'
+import { publish } from '../lib/live.js'
 import { blockedBetween } from '../lib/blocks.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 import { PIN_LIMIT } from '../lib/pins.js'
@@ -43,6 +44,9 @@ const ME_SELECT = {
   courses: true,
   allowMessages: true,
   emailNotifications: true,
+  pushMessages: true,
+  pushAnswers: true,
+  pushActivity: true,
   createdAt: true,
 } as const
 
@@ -327,6 +331,9 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       courses?: string[]
       allowMessages?: boolean
       emailNotifications?: boolean
+      pushMessages?: boolean
+      pushAnswers?: boolean
+      pushActivity?: boolean
     }
   }>('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
     const body = request.body ?? {}
@@ -376,7 +383,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: `Up to ${COURSES_MAX} course codes, like CSC343, CSCA08 or MAT137Y1` })
       courses = parsed
     }
-    for (const flag of ['allowMessages', 'emailNotifications'] as const) {
+    for (const flag of [
+      'allowMessages',
+      'emailNotifications',
+      'pushMessages',
+      'pushAnswers',
+      'pushActivity',
+    ] as const) {
       if (body[flag] !== undefined && typeof body[flag] !== 'boolean')
         return reply.code(400).send({ error: `${flag} must be true or false` })
     }
@@ -439,6 +452,9 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         ...(body.emailNotifications !== undefined && {
           emailNotifications: body.emailNotifications,
         }),
+        ...(body.pushMessages !== undefined && { pushMessages: body.pushMessages }),
+        ...(body.pushAnswers !== undefined && { pushAnswers: body.pushAnswers }),
+        ...(body.pushActivity !== undefined && { pushActivity: body.pushActivity }),
         ...links,
       },
       select: ME_SELECT,
@@ -752,6 +768,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         data: { read: true },
       })
       if (count === 0) return reply.code(404).send({ error: 'Not found' })
+      // Read from a push, with no tab open: the student's other tabs catch up.
+      await publish([request.user.sub], 'notification')
       return { ok: true }
     }
   )

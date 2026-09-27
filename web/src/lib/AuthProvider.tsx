@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type MeUser } from './api'
 import { AuthContext } from './auth'
+import { disablePush, setBadgePart } from './push'
 
 const SIGNED_IN_HINT = 'signed-in'
 
@@ -78,7 +79,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(load, [])
 
   const logout = async () => {
+    // First, while this browser's subscription can still be named: whoever
+    // uses it next must not get this student's notifications.
+    await disablePush()
     await api.auth.logout()
+    setBadgePart('notifications', 0)
+    setBadgePart('messages', 0)
     setUser(null)
     remember(false)
     // Everything cached was fetched as this student — saved projects, their

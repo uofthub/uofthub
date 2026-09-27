@@ -26,7 +26,7 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Collaboration** — invite collaborators (by the U of T email they signed up with) who then edit the project with you; TAs and instructors can ask for read access to a draft
 - **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, and one-to-one messages; block and report
 - **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
-- **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer, data export and account deletion at `/settings`
+- **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer (one-click unsubscribe), push notifications on any device that turns them on, data export and account deletion at `/settings`
 - **Moderation** — reports on projects, comments, collections, profiles, group events and conversations, reviewed at `/admin`, with account suspension
 
 The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.

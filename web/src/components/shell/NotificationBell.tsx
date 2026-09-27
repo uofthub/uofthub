@@ -1,12 +1,74 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { messageFor } from '../../lib/notifications'
+import {
+  closeShownNotifications,
+  dismissNudge,
+  enablePush,
+  isInstalled,
+  isIos,
+  nudgeDismissed,
+  pushState,
+  setBadgePart,
+} from '../../lib/push'
 import { timeAgo } from '../../lib/projectView'
 import { Button, cx, Heading, Icon, Menu } from '../ui'
 import { UnreadDot } from './UnreadDot'
+
+/**
+ * "Get these on this device?" — once, at the top of the bell, for a browser
+ * that could have push but hasn't. The bell is where somebody already cares
+ * about notifications; a setting three menus deep is where nobody finds it.
+ * On an iPhone not yet running uofthub from its home screen, it says how.
+ */
+function PushNudge() {
+  const qc = useQueryClient()
+  const [hidden, setHidden] = useState(nudgeDismissed)
+  const state = useQuery({
+    queryKey: ['push-state'],
+    queryFn: pushState,
+    staleTime: Infinity,
+    enabled: !hidden,
+  })
+  const enable = useMutation({
+    mutationFn: enablePush,
+    onSuccess: (next) => qc.setQueryData(['push-state'], next),
+  })
+  const iphone = state.data === 'unsupported' && isIos() && !isInstalled()
+  if (hidden || (state.data !== 'off' && !iphone)) return null
+  const dismiss = () => {
+    dismissNudge()
+    setHidden(true)
+  }
+
+  return (
+    <section className="mx-1 mb-2 flex flex-col gap-2 rounded-lg bg-fill p-2.5">
+      <span className="text-14 leading-[1.4]">
+        {iphone
+          ? 'Get notifications on this iPhone: tap Share, then “Add to Home Screen”, and open uofthub from there.'
+          : 'Get messages, comments and invitations on this device, even with uofthub closed.'}
+      </span>
+      <span className="flex gap-2">
+        {!iphone && (
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => enable.mutate()}
+            disabled={enable.isPending}
+          >
+            {enable.isPending ? 'Turning on…' : 'Turn on'}
+          </Button>
+        )}
+        <Button size="sm" onClick={dismiss}>
+          {iphone ? 'Got it' : 'Not now'}
+        </Button>
+      </span>
+    </section>
+  )
+}
 
 /** The header bell: a red dot for unread, and the list under it. */
 export function NotificationBell({ bare = false }: { bare?: boolean }) {
@@ -57,13 +119,18 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
     },
   })
 
+  const unread = data?.pages[0]?.unreadCount ?? 0
+  useEffect(() => setBadgePart('notifications', user ? unread : 0), [user, unread])
+
   if (!user) return null
 
   const notifications = data?.pages.flatMap((p) => p.notifications) ?? []
-  const unread = data?.pages[0]?.unreadCount ?? 0
 
   const onOpen = async () => {
     setWasUnread(new Set(notifications.filter((n) => !n.read).map((n) => n.id)))
+    // Seen here now, so the copies on the lock screen can go — not messages,
+    // which are read in Messages.
+    closeShownNotifications((n) => !n.tag.startsWith('message:'))
     if (unread === 0) return
     await api.notifications.markAllRead()
     qc.invalidateQueries({ queryKey: ['notifications', 'list'] })
@@ -96,6 +163,7 @@ export function NotificationBell({ bare = false }: { bare?: boolean }) {
               Notifications
             </Heading>
           </div>
+          <PushNudge />
           {(invites.length > 0 || orgInvites.length > 0) && (
             <section className="mx-1 mb-2 flex flex-col gap-2 rounded-lg bg-navy-wash p-2.5">
               <span className="text-13 font-semibold text-navy-ink">Waiting for your answer</span>

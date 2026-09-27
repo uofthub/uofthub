@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
+import { disablePush, enablePush, isIos, pushState } from '../../lib/push'
 import {
   Button,
   Dialog,
@@ -137,6 +138,104 @@ function DeleteAccountDialog({ email, onClose }: { email: string; onClose: () =>
   )
 }
 
+/**
+ * Push notifications on this device. Per browser, so it asks the browser —
+ * not the account — whether it is on.
+ */
+/** The account-wide switches: what is worth a buzz, on every device that has push on. */
+const PUSH_CATEGORIES = [
+  { key: 'pushMessages', label: 'Messages', hint: 'Who wrote, never what they said.' },
+  {
+    key: 'pushAnswers',
+    label: 'Things that need an answer',
+    hint: 'Invitations, access and group requests, moderation decisions.',
+  },
+  {
+    key: 'pushActivity',
+    label: 'Activity on your work',
+    hint: 'Comments, replies, reactions, follows and “want to collab”.',
+  },
+] as const
+
+function PushPanel() {
+  const qc = useQueryClient()
+  const { user, refetch } = useAuth()
+  const category = useMutation({
+    mutationFn: (change: Partial<Record<(typeof PUSH_CATEGORIES)[number]['key'], boolean>>) =>
+      api.users.updateMe(change),
+    onSuccess: () => refetch(),
+  })
+  const state = useQuery({ queryKey: ['push-state'], queryFn: pushState, staleTime: Infinity })
+  const toggle = useMutation({
+    mutationFn: async (on: boolean) =>
+      on ? enablePush() : disablePush().then(() => 'off' as const),
+    onSuccess: (next) => qc.setQueryData(['push-state'], next),
+  })
+
+  let body
+  if (state.isPending) body = <Spinner />
+  else if (state.data === 'unsupported')
+    body = (
+      <p className="text-15 text-ink-3">
+        {isIos()
+          ? 'On an iPhone or iPad, add uofthub to your home screen first: tap Share, then “Add to Home Screen”, and open it from there.'
+          : 'This browser can’t show notifications from websites.'}
+      </p>
+    )
+  else if (state.data === 'unavailable' || state.isError)
+    body = <p className="text-15 text-ink-3">Push notifications aren’t available right now.</p>
+  else if (state.data === 'blocked')
+    body = (
+      <p className="text-15 text-ink-3">
+        Notifications are blocked for uofthub in this browser. Allow them in the browser’s site
+        settings, then come back here.
+      </p>
+    )
+  else
+    body = (
+      <>
+        <Toggle
+          checked={state.data === 'on'}
+          onChange={(on) => !toggle.isPending && toggle.mutate(on)}
+        >
+          Notify me on this device
+        </Toggle>
+        <p className="text-13 text-muted">
+          Even with uofthub closed. Only on this device — turn it on on each one you want them on.
+          Nothing buzzes while you have uofthub open in front of you.
+        </p>
+        {state.data === 'on' && user && (
+          <>
+            <hr />
+            <p className="text-13 text-muted">What to push, on every device:</p>
+            {PUSH_CATEGORIES.map((c) => (
+              <div key={c.key} className="flex flex-col gap-0.5">
+                <Toggle
+                  checked={user[c.key]}
+                  onChange={(on) => !category.isPending && category.mutate({ [c.key]: on })}
+                >
+                  {c.label}
+                </Toggle>
+                <p className="text-13 text-muted">{c.hint}</p>
+              </div>
+            ))}
+            <p className="text-13 text-muted">
+              Updates to projects you follow stay in the bell, however many there are.
+            </p>
+          </>
+        )}
+      </>
+    )
+
+  return (
+    <Panel title="Push notifications" size="main">
+      {body}
+      {toggle.isError && <ErrorText>{toggle.error.message}</ErrorText>}
+      {category.isError && <ErrorText>{category.error.message}</ErrorText>}
+    </Panel>
+  )
+}
+
 /** /settings — the account itself, as opposed to the public profile. */
 export default function SettingsPage() {
   useDocumentTitle('Settings')
@@ -150,7 +249,8 @@ export default function SettingsPage() {
     onSuccess: () => refetch(),
   })
   const everywhere = useMutation({
-    mutationFn: () => api.auth.logoutEverywhere(),
+    // The API forgets every subscription; this browser's is unsubscribed too.
+    mutationFn: () => disablePush().then(() => api.auth.logoutEverywhere()),
     onSuccess: () => {
       qc.clear()
       refetch()
@@ -206,6 +306,8 @@ export default function SettingsPage() {
         </p>
         {prefs.isError && <ErrorText>{prefs.error.message}</ErrorText>}
       </Panel>
+
+      <PushPanel />
 
       <Panel title="Sessions" size="main">
         <p className="text-15 text-ink-3">

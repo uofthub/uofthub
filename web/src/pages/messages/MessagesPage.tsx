@@ -9,6 +9,7 @@ import {
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Conversation, type Message } from '../../lib/api'
+import { closeShownNotifications } from '../../lib/push'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
 import { PHONE, useDocumentTitle, useMediaQuery } from '../../lib/hooks'
@@ -146,12 +147,14 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
     .flatMap((p) => p.messages)
   const newest = messages[messages.length - 1]?.id
 
-  // Opening a conversation reads it; the badges should agree.
+  // Opening a conversation reads it; the badges should agree, and so should
+  // the lock screen.
   useEffect(() => {
     if (!first) return
     qc.invalidateQueries({ queryKey: ['messages', 'unread'] })
     qc.invalidateQueries({ queryKey: ['messages', 'conversations'] })
-  }, [first, qc])
+    closeShownNotifications((n) => n.tag === `message:${userId}`)
+  }, [first, qc, userId])
 
   // Keep the newest message in view as they arrive.
   useEffect(() => {

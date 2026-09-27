@@ -2,6 +2,7 @@ import type { NotificationType, Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { publish } from './live.js'
 import { emailNotification } from './notificationEmails.js'
+import { pushNotification } from './push.js'
 
 /**
  * Writing to somebody's notification feed.
@@ -26,11 +27,13 @@ export async function notify(
   payload: Record<string, unknown>,
   key?: string
 ): Promise<void> {
-  await db.notification.create({
+  const row = await db.notification.create({
     data: { userId, type, key, payload: payload as Prisma.InputJsonValue },
+    select: { id: true, userId: true },
   })
   await publish([userId], 'notification')
   emailNotification([userId], type, payload)
+  pushNotification([row], type, payload)
 }
 
 /**
@@ -107,14 +110,17 @@ export async function notifyMany(
 ): Promise<void> {
   if (userIds.length === 0) return
   const audience = userIds.slice(0, FANOUT_LIMIT)
-  await db.notification.createMany({
+  // With the rows back, so each push can name the one it announces.
+  const rows = await db.notification.createManyAndReturn({
     data: audience.map((userId) => ({
       userId,
       type,
       key,
       payload: payload as Prisma.InputJsonValue,
     })),
+    select: { id: true, userId: true },
   })
   await publish(audience, 'notification')
   emailNotification(audience, type, payload)
+  pushNotification(rows, type, payload)
 }

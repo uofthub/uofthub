@@ -14,3 +14,7 @@
 # Hashed build output never changes under the same name.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The service worker is checked for updates on every visit; never serve a stale one.
+/sw.js
+  Cache-Control: no-cache

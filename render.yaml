@@ -58,6 +58,14 @@ services:
       - key: EMAIL_FROM
         value: uofthub <notifications@notifications.uofthub.com>
 
+      # `npx web-push generate-vapid-keys`; unset disables push notifications.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:hello@uofthub.com
+
       - key: MICROSOFT_CLIENT_ID
         sync: false
       - key: MICROSOFT_CLIENT_SECRET

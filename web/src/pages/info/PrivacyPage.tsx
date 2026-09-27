@@ -122,6 +122,13 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             message.
           </li>
           <li>
+            <strong>Your browser’s push service</strong> — only if you turn on push notifications in
+            Settings. Google (Chrome, Android), Apple (Safari, iPhone), Mozilla (Firefox) or
+            Microsoft (Edge) delivers each one to your device. It sees the notification’s short text
+            — who did what, never a message’s contents — and it is encrypted for your device on the
+            way.
+          </li>
+          <li>
             <strong>OpenAI</strong> — receives the text of a search you type into{' '}
             <Link to="/discover">Discover</Link>, and the public page (or repository README) behind
             a link you import when starting a post, to fill in the form. Nothing else: not your

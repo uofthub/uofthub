@@ -178,7 +178,7 @@ A meeting, event, workshop or recap — lighter than a Project, rendered only on
 | created_at | timestamp | |
 
 ### Notification
-The bell's feed, pushed to open tabs as it is written — see [Live updates](#live-updates). No email is sent for these yet. See [ROADMAP.md § Notifications](ROADMAP.md).
+The bell's feed, pushed to open tabs as it is written — see [Live updates](#live-updates). The ones that need an answer are also emailed (`lib/notificationEmails.ts`), and all but the broadcasts go out as [push notifications](#push-notifications). See [ROADMAP.md § Notifications](ROADMAP.md).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -283,6 +283,20 @@ SSE rather than WebSockets because the traffic only goes one way, it rides the s
 - **Across instances.** Events travel through Postgres `NOTIFY` on the `live` channel, not an in-memory emitter, because the write and the stream are often on different replicas. Each instance opens one extra `LISTEN` connection (with `pg`, since Prisma cannot listen) the first time a stream connects to it.
 - **Best-effort.** A failed publish never fails the request, and whatever is published while a listener is reconnecting is lost. A listener that comes back sends `resync` to its streams, and a tab whose stream reconnects refetches both; window focus is the last backstop.
 - **Session checks.** The cookie is verified when the stream opens. Streams end after 30 minutes so the browser reconnects and proves it again; a 25-second heartbeat keeps proxies from closing an idle one.
+
+## Push notifications
+
+A browser can subscribe to Web Push from `/settings` (`web/src/lib/push.ts`), which registers the service worker `web/public/sw.js` and hands its subscription to `POST /push/subscriptions`. From then on `lib/notifications.ts` pushes each notification through `lib/push.ts`, and the send-message route pushes each message, collapsed per sender under one tag and without its text.
+
+- **What is pushed.** Every type maps to one of three switches in `PUSH_CATEGORY`, or to null: *messages*, *answers* (invitations, access and group requests, moderation), *activity* (comments, replies, reactions, follows, want-to-collab). The map is exhaustive, so a new `NotificationType` does not compile until someone decides whether it is worth a buzz. The switches are `User.pushMessages` / `pushAnswers` / `pushActivity`. They are per account, while turning push on is per browser. The broadcasts, `FOLLOWING_PUBLISHED` and `PROJECT_UPDATED` (every logged edit), map to null: they scale with somebody else's activity, and a phone buzzing for them is how push gets turned off. The push text is written in `pushFor` and is shorter than the bell's, since a lock screen shows two lines; the API cannot import the web app's copy.
+- **Not twice.** The worker shows nothing when a uofthub tab is focused and visible, since the bell and Messages already update live. Safari is the exception: it revokes a subscription whose pushes show nothing, so on Apple devices every push is shown.
+- **Read state follows.** Each push names its bell row (`notificationId`). Clicking it marks that row read, and the read routes publish a live event so open tabs agree. Opening the bell closes the notifications still on screen, and so does opening a conversation for that sender's.
+- **Badge.** Each push carries unread notifications plus unread messages, which the worker sets on the installed app's icon (`setAppBadge`). The header's bell and Messages buttons keep it current while the app is open.
+- **Asking.** A one-time line at the top of the bell offers push on a browser that could have it; on an iPhone not yet running from the home screen, it says how. Dismissing it is remembered per browser.
+- **Per device.** One `PushSubscription` row per browser, keyed by endpoint, so the same browser signing in as somebody else moves its subscription rather than keeping both. At most 10 per account. Signing out removes this browser's subscription; signing out everywhere removes them all. A push the service answers with 404 or 410 deletes its row.
+- **Endpoints are allow-listed.** The API POSTs to whatever endpoint a browser registered, so it accepts only the push services of Chrome, Firefox, Safari and Edge (`isPushEndpoint`). Anything else would let a crafted subscription make the API send requests to any host.
+- **iPhone.** Safari only offers push to a site added to the home screen, which `public/manifest.webmanifest` makes possible; Settings says so instead of showing a toggle that can't work.
+- **Keys.** `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`), and `VAPID_SUBJECT` (defaults to `mailto:hello@uofthub.com`). Without them `GET /push/key` returns null, Settings says push is unavailable, and nothing is sent. Changing the keys invalidates every subscription.
 
 ## Email deliverability
 
@@ -454,6 +468,7 @@ Environment variables in production — see `api/.env.example` for the full list
 - `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly. `MICROSOFT_ALLOWED_TENANT_IDS` (U of T's directory id) is required: the `organizations` authority accepts any directory, and any directory can claim any address, so without it every Microsoft sign-in is refused in production (`src/lib/microsoftTenant.ts`).
 - `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks. `EMAIL_FROM` is on the `notifications.uofthub.com` subdomain, which needs its SPF, DKIM and DMARC records verified in Resend — see [Email deliverability](#email-deliverability).
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — push notifications; off, with a warning, when the keys are unset. See [Push notifications](#push-notifications).
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
 `PORT` is provided by Render and read by `src/index.ts`; the server binds `0.0.0.0`.

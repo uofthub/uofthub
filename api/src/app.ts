@@ -19,6 +19,7 @@ import { messageRoutes } from './routes/messages.js'
 import { courseRoutes } from './routes/courses.js'
 import { eventRoutes } from './routes/events.js'
 import { emailRoutes } from './routes/email.js'
+import { pushRoutes } from './routes/push.js'
 import { sessionAccount } from './lib/session.js'
 
 export async function buildApp() {
@@ -150,6 +151,7 @@ export async function buildApp() {
   await app.register(courseRoutes, { prefix: '/courses' })
   await app.register(eventRoutes, { prefix: '/events' })
   await app.register(emailRoutes, { prefix: '/email' })
+  await app.register(pushRoutes, { prefix: '/push' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

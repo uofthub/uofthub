@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "pushMessages" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "pushAnswers" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "pushActivity" BOOLEAN NOT NULL DEFAULT true;
