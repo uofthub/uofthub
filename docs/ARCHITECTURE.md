@@ -440,7 +440,7 @@ Environment variables in production — see `api/.env.example` for the full list
 - `JWT_SECRET` — required; `buildApp()` refuses to boot in production without it rather than silently signing forgeable sessions.
 - `WEB_URL` — the site's origin. Drives both the CORS allowlist and the post-OAuth redirect, so a wrong value looks like "sign-in does nothing".
 - `API_URL` — this API's own public base, used to build avatar URLs.
-- `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly.
+- `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly. `MICROSOFT_ALLOWED_TENANT_IDS` (U of T's directory id) is required: the `organizations` authority accepts any directory, and any directory can claim any address, so without it every Microsoft sign-in is refused in production (`src/lib/microsoftTenant.ts`).
 - `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.

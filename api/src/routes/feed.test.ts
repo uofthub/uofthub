@@ -237,6 +237,24 @@ describe('GET /feed', () => {
 
     expect(titles((await feed(me, '?skip=20')).json())).toEqual([])
   })
+
+  it('leaves out link-only and private projects the student only collaborates on', async () => {
+    const me = await createUser()
+    const owner = await createUser()
+    await createProject(owner.id, { title: 'listed', visibility: 'PUBLIC' })
+    const unlisted = await createProject(owner.id, { title: 'link only', visibility: 'UNLISTED' })
+    // Published once, then taken back to a draft.
+    const private_ = await createProject(owner.id, {
+      title: 'back to draft',
+      visibility: 'PRIVATE',
+      publishedAt: new Date(),
+    })
+    await db.projectCollaborator.createMany({
+      data: [unlisted, private_].map((p) => ({ projectId: p.id, userId: me.id, accepted: true })),
+    })
+
+    expect(titles((await feed(me)).json())).toEqual(['listed'])
+  })
 })
 
 describe('GET /feed/activity', () => {

@@ -476,6 +476,22 @@ describe('the weekly spotlight', () => {
     expect(body).toMatchObject({ curated: false, project: { title: 'busy' } })
   })
 
+  it('never falls back to the caller’s own unlisted or draft work', async () => {
+    const me = await createUser()
+    const other = await createUser()
+    await createProject(other.id, { title: 'listed', visibility: 'PUBLIC' })
+    await createProject(me.id, { title: 'my link-only', visibility: 'UNLISTED', recentViews: 50 })
+    await createProject(me.id, {
+      title: 'my old draft',
+      visibility: 'PRIVATE',
+      publishedAt: new Date(),
+      recentViews: 50,
+    })
+
+    const body = (await call('GET', '/spotlight', me)).json()
+    expect(body).toMatchObject({ curated: false, project: { title: 'listed' } })
+  })
+
   it('shows a moderator’s pick, with their note', async () => {
     const admin = await createUser({ isAdmin: true })
     const owner = await createUser()

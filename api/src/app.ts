@@ -94,24 +94,33 @@ export async function buildApp() {
   // callback in routes/auth.ts, not here.
   const tenant = process.env.MICROSOFT_TENANT_ID || 'organizations'
 
-  await app.register(oauth2, {
-    name: 'microsoftOAuth2',
-    credentials: {
-      client: {
-        id: process.env.MICROSOFT_CLIENT_ID!,
-        secret: process.env.MICROSOFT_CLIENT_SECRET!,
+  // Optional locally: without credentials the button would send the student
+  // to a Microsoft error page about `client_id=undefined`, so it comes
+  // straight back to the sign-in page saying so instead.
+  if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+    await app.register(oauth2, {
+      name: 'microsoftOAuth2',
+      credentials: {
+        client: {
+          id: process.env.MICROSOFT_CLIENT_ID,
+          secret: process.env.MICROSOFT_CLIENT_SECRET,
+        },
+        auth: {
+          authorizeHost: 'https://login.microsoftonline.com',
+          authorizePath: `/${tenant}/oauth2/v2.0/authorize`,
+          tokenHost: 'https://login.microsoftonline.com',
+          tokenPath: `/${tenant}/oauth2/v2.0/token`,
+        },
       },
-      auth: {
-        authorizeHost: 'https://login.microsoftonline.com',
-        authorizePath: `/${tenant}/oauth2/v2.0/authorize`,
-        tokenHost: 'https://login.microsoftonline.com',
-        tokenPath: `/${tenant}/oauth2/v2.0/token`,
-      },
-    },
-    startRedirectPath: '/auth/microsoft',
-    callbackUri: process.env.MICROSOFT_REDIRECT_URI ?? 'http://localhost:3001/auth/callback',
-    scope: ['openid', 'profile', 'email', 'https://graph.microsoft.com/User.Read'],
-  })
+      startRedirectPath: '/auth/microsoft',
+      callbackUri: process.env.MICROSOFT_REDIRECT_URI ?? 'http://localhost:3001/auth/callback',
+      scope: ['openid', 'profile', 'email', 'https://graph.microsoft.com/User.Read'],
+    })
+  } else {
+    app.get('/auth/microsoft', async (_request, reply) =>
+      reply.redirect(`${process.env.WEB_URL ?? 'http://localhost:5173'}/session?error=unavailable`)
+    )
+  }
 
   app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     const account = await sessionAccount(request)
