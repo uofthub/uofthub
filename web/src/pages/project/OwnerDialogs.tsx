@@ -573,6 +573,11 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
           </p>
 
           {data.dailyViews.length > 0 && <ViewsChart days={data.dailyViews} />}
+          {/* Without this, an owner testing their own page sees a number that
+              never moves and reads it as broken — see api/src/lib/views.ts. */}
+          <p className="text-13 text-muted">
+            A view is one person in a day, signed in or not. Your own visits aren’t counted.
+          </p>
 
           {said.length > 0 && (
             <p className="text-14 text-muted">
