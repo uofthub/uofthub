@@ -5,8 +5,12 @@ import {
   decodeEntities,
   githubRepo,
   isPublicAddress,
+  mergeEnriched,
   readPageMeta,
+  readPageText,
+  type Imported,
 } from '../lib/linkImport.js'
+import { clampEnriched } from '../lib/linkEnrich.js'
 import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/helpers.js'
 
 beforeEach(resetDb)
@@ -420,17 +424,72 @@ describe('import from a link', () => {
       <meta content="Seatfinder &amp; friends" property="og:title">
       <meta name='description' content='Live map of open study seats'>
       <meta property="og:image" content="/img/cover.png">
+      <meta name="keywords" content="Maps, study spaces, maps, ">
+      <meta property="article:tag" content="UofT">
     </head></html>`
     expect(readPageMeta(html, new URL('https://seatfinder.app/about'))).toEqual({
       title: 'Seatfinder & friends',
       pitch: 'Live map of open study seats',
       image: 'https://seatfinder.app/img/cover.png',
+      tags: ['uoft', 'maps', 'study spaces'],
     })
     expect(readPageMeta('<title> Just a title </title>', new URL('https://x.dev'))).toMatchObject({
       title: 'Just a title',
       pitch: undefined,
     })
     expect(decodeEntities('&#x27;hi&#39; &lt;3')).toBe("'hi' <3")
+  })
+
+  it('reads the words on a page, not its scripts or navigation', () => {
+    const html = `<html><head><title>T</title><style>p{}</style></head><body>
+      <nav><a href="/">Home</a> <a href="/login">Log in</a></nav>
+      <h1>Seatfinder</h1><p>Finds an open seat in  Robarts &amp; Gerstein.</p>
+      <script>track()</script><!-- hidden -->
+      <script type="application/ld+json">{"@type":"SoftwareApplication"}</script>
+      <footer>© 2026</footer></body></html>`
+    const text = readPageText(html)
+    expect(text).toContain('Seatfinder\nFinds an open seat in Robarts & Gerstein.')
+    expect(text).toContain('Structured data:\n{"@type":"SoftwareApplication"}')
+    for (const gone of ['Log in', 'track()', 'hidden', '© 2026', 'p{}'])
+      expect(text).not.toContain(gone)
+    expect(readPageText(`<p>${'a'.repeat(50)}</p>`, 10)).toHaveLength(10)
+  })
+
+  it('keeps the page’s own words and lets AI fill only what they leave out', () => {
+    const base: Imported = {
+      url: 'https://seatfinder.app',
+      title: 'Seatfinder | Devpost',
+      pitch: 'Live map of open study seats',
+      tags: ['maps'],
+      details: [],
+      links: [],
+      ai: false,
+    }
+    const ai = clampEnriched({
+      title: '  Seatfinder ',
+      pitch: 'A different pitch',
+      description: 'It reads the library sensors.',
+      type: 'APP',
+      status: 'SHIPPED',
+      tags: ['#Maps', 'React', 'react', 'x'.repeat(41)],
+      details: [
+        { label: 'Built with', value: 'React' },
+        { label: 'Team', value: '  ' },
+      ],
+    })
+    expect(mergeEnriched(base, ai)).toEqual({
+      ...base,
+      title: 'Seatfinder',
+      pitch: 'Live map of open study seats',
+      description: 'It reads the library sensors.',
+      type: 'APP',
+      status: 'SHIPPED',
+      tags: ['maps', 'react'],
+      details: [{ label: 'Built with', value: 'React' }],
+      ai: true,
+    })
+    // No AI: exactly what the page said.
+    expect(mergeEnriched(base, null)).toBe(base)
   })
 
   it('recognises a GitHub repository link', () => {

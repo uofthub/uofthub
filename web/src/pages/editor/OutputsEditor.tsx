@@ -77,7 +77,7 @@ export function OutputsEditor({
     setProblem(null)
     setFetching(key)
     api.projects
-      .importLink(url)
+      .importLink(url, { fill: false })
       .then((got) => {
         if (got.image) thumbnailFor(key, importedImageFile(got.image), true)
         else setProblem('That link’s page has no preview image — set a thumbnail by hand')

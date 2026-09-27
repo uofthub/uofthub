@@ -269,7 +269,7 @@ The model's only job is to fill six fields: `search`, `faculty`, `campus`, `tag`
 
 Without `OPENAI_API_KEY` the route runs the raw query as a keyword search and returns `interpreted: false`, which the page shows as a one-line note. Same degradation as email: nothing breaks, the feature is just less clever. Cost control is a session-keyed 20/hour limit (`lib/rateLimit.ts`), a 300-character query cap, a 2048-token output ceiling, and the endpoint requiring a session at all — an anonymous visitor can still use the free keyword search on `/projects`.
 
-The model is `gpt-5.6-luna` unless `OPENAI_MODEL` overrides it, so pinning a different model is a deployment variable rather than a code change. The provider lives entirely inside `lib/discovery.ts` — the route only ever sees `parseQuery()` returning filters or null, so swapping providers touches one function.
+The model is `gpt-5.6-luna` unless `OPENAI_MODEL` overrides it, so pinning a different model is a deployment variable rather than a code change. The client is shared with link import in `lib/openai.ts`; the discovery prompt and schema live in `lib/discovery.ts` — the route only ever sees `parseQuery()` returning filters or null, so swapping providers touches one function.
 
 The interpreted filters are returned to the client and rendered as chips. This is a UX decision worth keeping: a student who sees "about machine learning · faculty Engineering" understands why they got nothing back, where a black box returning an empty grid just looks broken.
 
@@ -370,6 +370,10 @@ A student or group that needs more than the per-file size or file-count cap (e.g
 ## Link import
 
 `POST /projects/import` is the only route where the server fetches a URL a user chose. `lib/linkImport.ts` resolves every hostname through a DNS lookup that refuses the connection if any address is private, loopback, link-local, CGNAT, multicast or otherwise not public — checked on the address actually dialled, so DNS rebinding cannot slip past a pre-check. IP literals are checked directly; only http(s) on ports 80/443; at most three redirects, each re-checked; a 6-second timeout and byte caps (768 KB HTML, 4 MB image). Images come back as bytes (PNG/JPEG/WebP/GIF, never SVG) and go through the normal upload validation when the project is posted. Rate-limited to 20 per 10 minutes per session.
+
+A page's metadata only covers a title, a summary and a picture, so the import also reads the page's visible text (scripts, styles, nav and footer stripped; JSON-LD kept) or a repository's README, and `lib/linkEnrich.ts` asks the model to fill the type, status, tags, a Markdown write-up and up to six details — only from what the source states. Like discovery, its output is untrusted: a closed Zod schema, then clamped to the post form's limits, and it only ever becomes a draft the student edits. The page's own summary and a README win over the model's; the model's title wins, since page titles usually carry the site name. Without `OPENAI_API_KEY`, or when the call fails or passes 20 seconds, the import is the metadata alone and `ai: false`. `fill: false` skips the model — the output editor uses it when it only wants a link's preview image.
+
+Model credits are spent as sparingly as the feature allows: no call when the source already gave a title, summary, write-up and three tags; one call per link per day (an in-memory cache, since a team pastes the same page); at most `AI_IMPORT_PER_STUDENT_DAY` (5) calls per student and `AI_IMPORT_PER_DAY` (200) for the whole site per UTC day; about 4,000 characters of input, a 120-word write-up (none when a README already is one) and a 1,500-token output cap. The counters live in memory, so a restart resets them — at worst one extra day's budget.
 
 ## Search
 

@@ -47,6 +47,7 @@ import {
   draftFromProject,
   emptyDraft,
   keepRemoved,
+  mergeImportedDetails,
   newId,
   removeExisting,
   settle,
@@ -281,9 +282,16 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
           target: { type: 'newLink', label: l.label, url: l.url },
         }))
         const image = got.image ? importedImageFile(got.image) : null
+        // Rows the type suggests, when the student has none yet, so an
+        // imported "Runtime" fills the suggested row rather than a second one.
+        const baseDetails = d.details.length === 0 && type ? suggestedDetails(type) : d.details
         return {
           ...d,
           type,
+          // In progress is the form's default, not a choice, so the link's
+          // answer replaces it; anything the student picked stays.
+          status: got.status && d.status === 'IN_PROGRESS' ? got.status : d.status,
+          details: mergeImportedDetails(baseDetails, got.details),
           title: d.title || got.title?.slice(0, 120) || '',
           pitch:
             d.pitch ||
@@ -462,7 +470,10 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               <ErrorText>{(importLink.error as Error).message}</ErrorText>
             ) : importLink.isSuccess ? (
               <p className="flex items-center gap-1.5 text-13 text-green">
-                <Icon name="check" size={15} /> Filled in from the link — check it over below.
+                <Icon name="check" size={15} />{' '}
+                {importLink.data.ai
+                  ? 'Filled in from the link with AI — check it over below.'
+                  : 'Filled in from the link — check it over below.'}
               </p>
             ) : (
               <p className="text-13 text-muted">

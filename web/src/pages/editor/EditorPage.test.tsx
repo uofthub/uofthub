@@ -123,7 +123,9 @@ describe('a link output', () => {
     const importLink = vi.spyOn(api.projects, 'importLink').mockResolvedValue({
       url: 'https://youtu.be/x',
       tags: [],
+      details: [],
       links: [],
+      ai: false,
       image: { name: 'cover.png', contentType: 'image/png', dataBase64: btoa('png') },
     })
     open('/projects/new')
@@ -136,7 +138,7 @@ describe('a link output', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use the link’s preview image' }))
 
     expect(await screen.findByRole('button', { name: 'Remove thumbnail' })).toBeTruthy()
-    expect(importLink).toHaveBeenCalledWith('https://youtu.be/x')
+    expect(importLink).toHaveBeenCalledWith('https://youtu.be/x', { fill: false })
     expect(screen.queryByRole('button', { name: 'Use the link’s preview image' })).toBeNull()
   })
 })

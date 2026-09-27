@@ -393,7 +393,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   // POST /projects/import — { url } → what the post form can be filled with.
   // Nothing is saved: the student edits the result and posts it as usual. See
   // lib/linkImport.ts for what stops this being used to reach inside our network.
-  app.post<{ Body: { url?: string } }>(
+  // `fill: false` skips the AI fill-in, for when only the preview image is wanted.
+  app.post<{ Body: { url?: string; fill?: boolean } }>(
     '/import',
     { preHandler: [app.authenticate], config: importRateLimit },
     async (request, reply) => {
@@ -401,7 +402,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (typeof url !== 'string' || !url.trim())
         return reply.code(400).send({ error: 'Paste a link to import' })
       try {
-        return await importFromLink(url)
+        return await importFromLink(url, {
+          userId: request.user.sub,
+          fill: request.body?.fill !== false,
+        })
       } catch (err) {
         if (err instanceof ImportError) return reply.code(422).send({ error: err.message })
         request.log.warn({ err }, 'link import failed')

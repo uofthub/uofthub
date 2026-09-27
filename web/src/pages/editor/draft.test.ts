@@ -6,6 +6,7 @@ import {
   draftFromProject,
   emptyDraft,
   keepRemoved,
+  mergeImportedDetails,
   outputsPayload,
   removeExisting,
   sectionsPayload,
@@ -224,5 +225,26 @@ describe('removing a file or link already on the project', () => {
     })
     const led = { ...gone, outputs: gone.outputs.map((o) => ({ ...o, primary: true })) }
     expect(keepRemoved(led).outputs.filter((o) => o.primary).map((o) => o.key)).toEqual(['o2'])
+  })
+})
+
+describe('mergeImportedDetails', () => {
+  it('fills an empty row with the same label and adds the rest', () => {
+    const rows = [
+      { key: 'd1', label: 'Runtime', value: '', placeholder: 'e.g. 6:12' },
+      { key: 'd2', label: 'Credits', value: 'Me' },
+    ]
+    const merged = mergeImportedDetails(rows, [
+      { label: 'runtime', value: '6:12' },
+      { label: 'Credits', value: 'Someone else' },
+      { label: 'Festival', value: 'Hot Docs' },
+    ])
+    expect(merged.map(({ label, value }) => [label, value])).toEqual([
+      ['Runtime', '6:12'],
+      ['Credits', 'Me'],
+      ['Festival', 'Hot Docs'],
+    ])
+    // The rows passed in are left as they were.
+    expect(rows[0].value).toBe('')
   })
 })

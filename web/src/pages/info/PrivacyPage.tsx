@@ -123,9 +123,10 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           </li>
           <li>
             <strong>OpenAI</strong> — receives the text of a search you type into{' '}
-            <Link to="/discover">Discover</Link>, and nothing else. Not your projects, not your
-            files, not your identity. Ordinary search on <Link to="/explore">Explore</Link> involves
-            no third party at all.
+            <Link to="/discover">Discover</Link>, and the public page (or repository README) behind
+            a link you import when starting a post, to fill in the form. Nothing else: not your
+            projects, not your files, not your identity. Ordinary search on{' '}
+            <Link to="/explore">Explore</Link> involves no third party at all.
           </li>
         </ul>
         <p>

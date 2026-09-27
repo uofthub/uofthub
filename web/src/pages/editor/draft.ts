@@ -258,6 +258,30 @@ export function suggestedDetails(type: ProjectType): DraftDetail[] {
   )
 }
 
+/** The most detail rows a project has — the API's limit. */
+const DETAILS_MAX = 12
+
+/**
+ * Details from a link import, laid over the rows already there: an empty row
+ * with the same label is filled, anything else is added. A value the student
+ * wrote is never replaced.
+ */
+export function mergeImportedDetails(
+  details: DraftDetail[],
+  imported: { label: string; value: string }[]
+): DraftDetail[] {
+  const merged = details.map((d) => ({ ...d }))
+  for (const { label, value } of imported) {
+    const same = merged.find((d) => d.label.trim().toLowerCase() === label.trim().toLowerCase())
+    if (same) {
+      if (!same.value.trim()) same.value = value
+    } else if (merged.length < DETAILS_MAX) {
+      merged.push({ key: newId('d'), label, value })
+    }
+  }
+  return merged
+}
+
 /**
  * Pre-fill a draft from a course template. It only ever fills what is still
  * empty and adds what is missing — it never overwrites a word the student

@@ -1,8 +1,8 @@
-import OpenAI from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 import { CAMPUSES } from './campus.js'
 import { FACULTIES } from './faculties.js'
+import { aiModel, DEFAULT_MODEL, openaiClient } from './openai.js'
 
 /**
  * Turns "AI projects from Engineering students this year" into the filters the
@@ -13,9 +13,9 @@ import { FACULTIES } from './faculties.js'
  * That is the whole security model here: its output is untrusted input, so the
  * schema below is what stops a creative answer from becoming a creative query.
  *
- * Provider is OpenAI, model configurable per deployment (`OPENAI_MODEL`).
- * Nothing outside this module knows which provider is behind it — swapping one
- * in is a change to `parseQuery`, not to the route.
+ * Provider is OpenAI (the shared client in lib/openai.ts), model configurable
+ * per deployment (`OPENAI_MODEL`). The route only sees `parseQuery` — swapping
+ * providers is a change here, not to the route.
  */
 
 /**
@@ -82,25 +82,11 @@ Examples:
 - "what are Scarborough students building" → campus: "UTSC"
 - "what's popular right now" → sort: "trending"`
 
-/** Overridable per deployment; this is the default when `OPENAI_MODEL` is unset. */
-export const DEFAULT_MODEL = 'gpt-5.6-luna'
+export { DEFAULT_MODEL }
 
-export const discoveryModel = (): string => process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL
+export const discoveryModel = aiModel
 
-let client: OpenAI | null | undefined
-
-function getClient(): OpenAI | null {
-  if (client === undefined) {
-    // Same degradation as lib/email.ts: no key means the feature quietly
-    // becomes its non-AI equivalent rather than the route 503ing. Local dev
-    // and a deploy without an AI budget both keep working.
-    client = process.env.OPENAI_API_KEY ? new OpenAI() : null
-    if (!client) console.warn('OPENAI_API_KEY is not set — /discover falls back to keyword search')
-  }
-  return client
-}
-
-export const isAiConfigured = (): boolean => getClient() !== null
+export const isAiConfigured = (): boolean => openaiClient() !== null
 
 /**
  * Parses one query. Returns null when there is no API key, or when the call
@@ -108,7 +94,7 @@ export const isAiConfigured = (): boolean => getClient() !== null
  * a search that returns something imperfect beats an error page.
  */
 export async function parseQuery(query: string): Promise<DiscoverFilters | null> {
-  const openai = getClient()
+  const openai = openaiClient()
   if (!openai) return null
 
   const response = await openai.responses.parse({

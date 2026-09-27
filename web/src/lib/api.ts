@@ -286,9 +286,13 @@ export type ImportedLink = {
   pitch?: string
   description?: string
   type?: ProjectType
+  status?: ProjectStatus
   tags: string[]
+  details: { label: string; value: string }[]
   links: { label: string; url: string }[]
   image?: { name: string; contentType: string; dataBase64: string }
+  /** True when AI filled in part of it, rather than only the page's metadata. */
+  ai: boolean
 }
 
 /** The picture a link import brought back, as a file the browser can use. */
@@ -627,7 +631,9 @@ export const api = {
     save: (id: string) => request<{ saved: boolean }>(`/projects/${id}/save`, post()),
     followUpdates: (id: string) =>
       request<{ following: boolean }>(`/projects/${id}/follow`, post()),
-    importLink: (url: string) => request<ImportedLink>('/projects/import', post({ url })),
+    /** `fill: false` reads only the page's own metadata — no AI, for a thumbnail. */
+    importLink: (url: string, { fill = true }: { fill?: boolean } = {}) =>
+      request<ImportedLink>('/projects/import', post({ url, fill })),
     pin: (id: string) => request<{ pinned: boolean }>(`/projects/${id}/pin`, post()),
     react: (id: string, kind: ReactionKind) =>
       request<{ kind: ReactionKind; reacted: boolean }>(

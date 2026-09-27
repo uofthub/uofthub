@@ -2,6 +2,7 @@ import { lookup as dnsLookup, type LookupAddress } from 'node:dns'
 import http from 'node:http'
 import https from 'node:https'
 import { BlockList, isIP, type LookupFunction } from 'node:net'
+import { enrichImport, type Enriched } from './linkEnrich.js'
 
 /**
  * "Start from a link": read a page a student pasted and fill in the post form.
@@ -21,6 +22,11 @@ import { BlockList, isIP, type LookupFunction } from 'node:net'
  *
  * What comes back is only ever text for the form and an image the student
  * then uploads as their cover through the normal validated upload.
+ *
+ * A page's metadata only covers a title, a summary and a picture, so what it
+ * read — metadata plus the page's text, or a repo's README — then goes to
+ * lib/linkEnrich.ts, which fills the type, status, tags, write-up and details
+ * when AI is configured. Without it the import is the metadata alone.
  */
 
 export class ImportError extends Error {}
@@ -36,6 +42,8 @@ const USER_AGENT = 'uofthub-link-import/1.0 (+https://uofthub.com)'
 const TITLE_MAX = 120
 const PITCH_MAX = 280
 const DESCRIPTION_MAX = 20_000
+const TAGS_MAX = 10
+const TAG_MAX = 40
 
 // ── Address checks ────────────────────────────────────────────────────────────
 
@@ -230,11 +238,14 @@ const clean = (s: string | undefined, max: number) => {
 /** The title, description and image a page advertises about itself. */
 export function readPageMeta(html: string, base: URL) {
   const meta = new Map<string, string>()
+  // article:tag is the one key a page repeats, once per tag.
+  const articleTags: string[] = []
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
     const attrs: Record<string, string> = {}
     for (const a of tag.matchAll(/([a-zA-Z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g))
       attrs[a[1].toLowerCase()] = a[2] ?? a[3] ?? a[4] ?? ''
     const key = (attrs.property ?? attrs.name ?? '').toLowerCase()
+    if (key === 'article:tag' && attrs.content) articleTags.push(attrs.content)
     if (key && attrs.content !== undefined && !meta.has(key)) meta.set(key, attrs.content)
   }
   const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]
@@ -255,7 +266,48 @@ export function readPageMeta(html: string, base: URL) {
       // A malformed image URL just means no cover.
     }
   }
-  return { title, pitch, image }
+  const seen = new Set<string>()
+  const tags = [...articleTags, ...(meta.get('keywords') ?? '').split(',')]
+    .map((t) => clean(t, Infinity)?.toLowerCase())
+    .filter((t): t is string => !!t && t.length <= TAG_MAX && !seen.has(t) && !!seen.add(t))
+    .slice(0, TAGS_MAX)
+  return { title, pitch, image, tags }
+}
+
+const BLOCK_TAGS =
+  /<\/?(?:p|div|section|article|main|aside|h[1-6]|li|ul|ol|tr|td|th|table|br|hr|blockquote|pre|figure|figcaption|dt|dd)\b[^>]*>/gi
+
+/**
+ * The words a person would read on the page, for the AI fill-in: no scripts,
+ * no styles, no navigation or footer, one line per block. Structured data a
+ * page embeds (JSON-LD) is kept, since a page built in the browser often has
+ * little else in its HTML.
+ */
+export function readPageText(html: string, max = 4_000): string {
+  const jsonLd = [
+    ...html.matchAll(
+      /<script[^>]*type=["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi
+    ),
+  ]
+    .map((m) => m[1].trim())
+    .join('\n')
+    .slice(0, 1000)
+  const body = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html
+  const text = decodeEntities(
+    body
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(script|style|noscript|svg|template|nav|footer|iframe|form)\b[\s\S]*?<\/\1>/gi, '')
+      .replace(BLOCK_TAGS, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  )
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+  // The structured data is kept whole and the text gives way, since for a page
+  // built in the browser it is the only description there is.
+  const data = jsonLd && `\n\nStructured data:\n${jsonLd}`
+  return (text.slice(0, Math.max(0, max - data.length)) + data).trim().slice(0, max)
 }
 
 // ── GitHub ────────────────────────────────────────────────────────────────────
@@ -270,18 +322,25 @@ export function githubRepo(url: URL): { owner: string; repo: string } | null {
   return { owner, repo: repo.replace(/\.git$/, '') }
 }
 
-type Imported = {
+export type Imported = {
   url: string
   title?: string
   pitch?: string
   description?: string
-  type?: 'APP'
+  type?: NonNullable<Enriched['type']>
+  status?: NonNullable<Enriched['status']>
   tags: string[]
+  details: { label: string; value: string }[]
   links: { label: string; url: string }[]
   image?: { name: string; contentType: string; dataBase64: string }
+  /** True when AI filled in any of it, so the form can ask for a check. */
+  ai: boolean
 }
 
-async function fromGithub(owner: string, repo: string, url: URL): Promise<Imported | null> {
+/** What a link's own data says, and the text the AI fill-in reads. */
+type Read = { imported: Imported; text?: string }
+
+async function fromGithub(owner: string, repo: string, url: URL): Promise<Read | null> {
   const api = `https://api.github.com/repos/${owner}/${repo}`
   let info: {
     name?: string
@@ -325,14 +384,20 @@ async function fromGithub(owner: string, repo: string, url: URL): Promise<Import
   }
 
   return {
-    url: repoUrl,
-    title: clean(info.name, TITLE_MAX),
-    pitch: clean(info.description ?? undefined, PITCH_MAX),
-    description,
-    type: 'APP',
-    tags: (info.topics ?? []).slice(0, 8),
-    links,
-    image: await fetchImage(`https://opengraph.githubassets.com/1/${owner}/${repo}`),
+    imported: {
+      url: repoUrl,
+      title: clean(info.name, TITLE_MAX),
+      pitch: clean(info.description ?? undefined, PITCH_MAX),
+      description,
+      // A repository is usually software; the AI fill-in can say otherwise.
+      type: 'APP',
+      tags: (info.topics ?? []).slice(0, 8),
+      details: [],
+      links,
+      image: await fetchImage(`https://opengraph.githubassets.com/1/${owner}/${repo}`),
+      ai: false,
+    },
+    text: description,
   }
 }
 
@@ -363,9 +428,31 @@ async function fetchImage(url: string | undefined): Promise<Imported['image']> {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 /** Everything the post form can be pre-filled with from one link. */
-export async function importFromLink(raw: string): Promise<Imported> {
-  const url = checkUrl(raw)
+export async function importFromLink(
+  raw: string,
+  { userId, fill = true }: { userId: string; fill?: boolean }
+): Promise<Imported> {
+  const read = await readLink(checkUrl(raw))
+  const ai = fill
+    ? await enrichImport(
+        {
+          url: read.imported.url,
+          title: read.imported.title,
+          pitch: read.imported.pitch,
+          description: read.imported.description,
+          tags: read.imported.tags,
+          text: read.text,
+        },
+        userId
+      )
+    : null
+  const imported = mergeEnriched(read.imported, ai)
+  if (!imported.title && !imported.pitch)
+    throw new ImportError('That page does not say anything about itself')
+  return imported
+}
 
+async function readLink(url: URL): Promise<Read> {
   const repo = githubRepo(url)
   if (repo) {
     const fromRepo = await fromGithub(repo.owner, repo.repo, url)
@@ -379,15 +466,47 @@ export async function importFromLink(raw: string): Promise<Imported> {
   if (!/html|xml/.test(page.contentType))
     throw new ImportError('That link is not a web page — attach it as a link instead')
 
-  const { title, pitch, image } = readPageMeta(page.body.toString('utf8'), page.url)
-  if (!title && !pitch) throw new ImportError('That page does not say anything about itself')
+  const html = page.body.toString('utf8')
+  const { title, pitch, image, tags } = readPageMeta(html, page.url)
+  const text = readPageText(html)
+  if (!title && !pitch && !text)
+    throw new ImportError('That page does not say anything about itself')
 
   return {
-    url: page.url.toString(),
-    title,
-    pitch,
-    tags: [],
-    links: [{ label: repo ? 'Source code' : 'Website', url: page.url.toString() }],
-    image: await fetchImage(image),
+    imported: {
+      url: page.url.toString(),
+      title,
+      pitch,
+      tags,
+      details: [],
+      links: [{ label: repo ? 'Source code' : 'Website', url: page.url.toString() }],
+      image: await fetchImage(image),
+      ai: false,
+    },
+    text,
+  }
+}
+
+/**
+ * The page's own words where it has them — its summary, a README — and the AI
+ * fill-in for what it leaves out. The title is the exception: a page's title
+ * usually carries the site's name ("Seatfinder | Devpost"), which the AI drops.
+ */
+export function mergeEnriched(base: Imported, ai: Enriched | null): Imported {
+  if (!ai) return base
+  const seen = new Set<string>()
+  const tags = [...base.tags, ...ai.tags]
+    .filter((t) => !seen.has(t.toLowerCase()) && !!seen.add(t.toLowerCase()))
+    .slice(0, TAGS_MAX)
+  return {
+    ...base,
+    title: ai.title ?? base.title,
+    pitch: base.pitch ?? ai.pitch ?? undefined,
+    description: base.description ?? ai.description ?? undefined,
+    type: ai.type ?? base.type,
+    status: ai.status ?? base.status,
+    tags,
+    details: [...base.details, ...ai.details],
+    ai: true,
   }
 }
