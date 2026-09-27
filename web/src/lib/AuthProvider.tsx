@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type MeUser } from './api'
 import { AuthContext } from './auth'
-import { disablePush, setBadgePart } from './push'
+import { disablePush, resetPushSync, setBadgePart, syncPush } from './push'
 
 const SIGNED_IN_HINT = 'signed-in'
 
@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((me) => {
         settle(me)
         remember(true)
+        void syncPush()
       })
       .catch(() => {
         settle(null)
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // First, while this browser's subscription can still be named: whoever
     // uses it next must not get this student's notifications.
     await disablePush()
+    resetPushSync()
     await api.auth.logout()
     setBadgePart('notifications', 0)
     setBadgePart('messages', 0)

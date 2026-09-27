@@ -12,7 +12,8 @@ import { db } from '../db/client.js'
  * the bell still shows it.
  *
  * Generate the keys once with `npx web-push generate-vapid-keys`. Changing
- * them invalidates every subscription.
+ * them invalidates every subscription; each browser re-subscribes with the
+ * new key the next time it loads the app.
  */
 
 let configured: boolean | undefined
@@ -287,8 +288,12 @@ export function sendPush(
           )
         } catch (err) {
           const status = (err as { statusCode?: number }).statusCode
-          // The browser unsubscribed or the subscription expired: forget it.
-          if (status === 404 || status === 410)
+          // The browser unsubscribed or the subscription expired (404, 410),
+          // or it was made with VAPID keys this server no longer has (401,
+          // 403): forget it. A browser still subscribed hands it back, made
+          // with the current key, the next time it loads the app
+          // (web/src/lib/push.ts, syncPush).
+          if (status === 401 || status === 403 || status === 404 || status === 410)
             await db.pushSubscription.deleteMany({ where: { id: sub.id } })
           else console.error('Push failed:', status ?? err)
         }

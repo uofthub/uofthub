@@ -4,13 +4,15 @@ type Sent = { endpoint: string; body: Record<string, unknown> }
 const sent = vi.hoisted(() => {
   process.env.VAPID_PUBLIC_KEY = 'test-public'
   process.env.VAPID_PRIVATE_KEY = 'test-private'
-  return { list: [] as Sent[], gone: new Set<string>() }
+  return { list: [] as Sent[], gone: new Set<string>(), rejected: new Set<string>() }
 })
 vi.mock('web-push', () => ({
   default: {
     setVapidDetails: () => {},
     sendNotification: async (sub: { endpoint: string }, body: string) => {
       if (sent.gone.has(sub.endpoint)) throw Object.assign(new Error('gone'), { statusCode: 410 })
+      if (sent.rejected.has(sub.endpoint))
+        throw Object.assign(new Error('wrong VAPID key'), { statusCode: 403 })
       sent.list.push({ endpoint: sub.endpoint, body: JSON.parse(body) })
     },
   },
@@ -25,6 +27,7 @@ beforeEach(async () => {
   await resetDb()
   sent.list.length = 0
   sent.gone.clear()
+  sent.rejected.clear()
 })
 
 /** The sends are fire-and-forget; give them a moment to land. */
@@ -94,6 +97,14 @@ describe('pushing notifications', () => {
   it('forgets a subscription the push service says is gone', async () => {
     const { user, endpoint } = await subscribed()
     sent.gone.add(endpoint)
+    await notify(user.id, 'FOLLOWED_YOU', { actorName: 'Ada' })
+    await settle()
+    expect(await db.pushSubscription.count()).toBe(0)
+  })
+
+  it('forgets a subscription made with VAPID keys the server no longer has', async () => {
+    const { user, endpoint } = await subscribed()
+    sent.rejected.add(endpoint)
     await notify(user.id, 'FOLLOWED_YOU', { actorName: 'Ada' })
     await settle()
     expect(await db.pushSubscription.count()).toBe(0)

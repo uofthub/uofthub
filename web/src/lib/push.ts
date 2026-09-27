@@ -34,7 +34,53 @@ export async function pushState(): Promise<PushState> {
   if (Notification.permission === 'denied') return 'blocked'
   const { publicKey } = await api.push.key()
   if (!publicKey) return 'unavailable'
+  await syncPush()
   return (await currentSubscription()) ? 'on' : 'off'
+}
+
+let synced: Promise<void> | undefined
+
+/**
+ * Once per page load, signed in: make this browser's subscription one the API
+ * can still send to. A subscription made with VAPID keys the API no longer
+ * has is rejected by the push service, so it is swapped for one made with the
+ * current key — rotating the keys then costs nobody their notifications. The
+ * subscription is also handed to the API again, which restores a row the API
+ * dropped. Never throws.
+ */
+export function syncPush(): Promise<void> {
+  synced ??= (async () => {
+    if (!supported() || Notification.permission !== 'granted') return
+    const subscription = await currentSubscription()
+    if (!subscription) return
+    const { publicKey } = await api.push.key()
+    if (!publicKey) return
+    const key = keyBytes(publicKey)
+    const current = subscription.options.applicationServerKey
+    if (current && !sameBytes(new Uint8Array(current), key)) {
+      await api.push.unsubscribe(subscription.endpoint).catch(() => {})
+      await subscription.unsubscribe()
+      const registration = await navigator.serviceWorker.ready
+      const fresh = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      })
+      await api.push.subscribe(fresh.toJSON())
+    } else await api.push.subscribe(subscription.toJSON())
+  })().catch(() => {
+    // Offline, or the browser refused: Settings shows whatever is left, and
+    // the next page load tries again.
+  })
+  return synced
+}
+
+/** Forget the last sync, so the next account signed in on this tab gets its own. */
+export function resetPushSync(): void {
+  synced = undefined
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i])
 }
 
 /** The VAPID key as the bytes PushManager wants. */
