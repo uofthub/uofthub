@@ -18,6 +18,7 @@ import { collectionRoutes } from './routes/collections.js'
 import { messageRoutes } from './routes/messages.js'
 import { courseRoutes } from './routes/courses.js'
 import { eventRoutes } from './routes/events.js'
+import { emailRoutes } from './routes/email.js'
 import { sessionAccount } from './lib/session.js'
 
 export async function buildApp() {
@@ -148,6 +149,7 @@ export async function buildApp() {
   await app.register(messageRoutes, { prefix: '/messages' })
   await app.register(courseRoutes, { prefix: '/courses' })
   await app.register(eventRoutes, { prefix: '/events' })
+  await app.register(emailRoutes, { prefix: '/email' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

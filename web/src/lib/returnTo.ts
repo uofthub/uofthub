@@ -8,7 +8,7 @@
  */
 
 /** Pages drawn without the app's chrome, and never worth returning to. */
-export const BARE_PAGES = new Set(['/session', '/verify', '/reset'])
+export const BARE_PAGES = new Set(['/session', '/verify', '/reset', '/unsubscribe'])
 
 const KEY = 'return-to'
 

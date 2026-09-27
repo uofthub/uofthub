@@ -377,9 +377,8 @@ export function PeopleDialog({
         </Button>
       </form>
       <Intro>
-        They confirm before they appear on the project. Someone without an account yet gets an
-        email, and the invitation waits for them. Collaborators can edit the project’s content; only
-        you choose who can see it.
+        They need a uofthub account first, and they confirm before they appear on the project.
+        Collaborators can edit the project’s content; only you choose who can see it.
       </Intro>
       {invite.isSuccess && <SuccessText>Invitation sent.</SuccessText>}
       {error && <ErrorText>{error.message}</ErrorText>}

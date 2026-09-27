@@ -1,12 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const sentInvites = vi.hoisted(() => [] as string[])
-vi.mock('../lib/authEmails.js', async (original) => ({
-  ...(await original<object>()),
-  sendProjectInviteEmail: async (to: string) => {
-    sentInvites.push(to)
-  },
-}))
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { db } from '../db/client.js'
 import { onEmailVerified } from '../lib/accounts.js'
@@ -14,7 +6,6 @@ import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/h
 
 beforeEach(async () => {
   await resetDb()
-  sentInvites.length = 0
 })
 
 type User = { id: string; email: string }
@@ -101,14 +92,26 @@ describe('inviting collaborators', () => {
     expect(await db.projectCollaborator.count()).toBe(0)
   })
 
-  it('invites an address with no account, and hands it over once the address is proven', async () => {
+  it('refuses an address with no account, and emails nobody', async () => {
     const { owner, project } = await seed()
     const res = await call('POST', `/projects/${project.id}/collaborators`, owner, {
       email: 'new.person@mail.utoronto.ca',
       title: 'Writer',
     })
-    expect(res.statusCode).toBe(201)
-    expect(sentInvites).toEqual(['new.person@mail.utoronto.ca'])
+    expect(res.statusCode).toBe(404)
+    expect(await db.projectEmailInvite.count()).toBe(0)
+  })
+
+  it('hands over an invitation sent before invites needed an account', async () => {
+    const { owner, project } = await seed()
+    await db.projectEmailInvite.create({
+      data: {
+        projectId: project.id,
+        email: 'new.person@mail.utoronto.ca',
+        title: 'Writer',
+        invitedById: owner.id,
+      },
+    })
 
     const newcomer = await createUser({ email: 'new.person@mail.utoronto.ca' })
     await onEmailVerified(newcomer.id)
@@ -120,12 +123,12 @@ describe('inviting collaborators', () => {
     expect(await db.projectEmailInvite.count()).toBe(0)
   })
 
-  it('refuses to email an invitation outside U of T', async () => {
+  it('refuses an address outside U of T', async () => {
     const { owner, project } = await seed()
     const res = await call('POST', `/projects/${project.id}/collaborators`, owner, {
       email: 'x@gmail.com',
     })
-    expect(res.statusCode).toBe(400)
+    expect(res.statusCode).toBe(404)
   })
 })
 

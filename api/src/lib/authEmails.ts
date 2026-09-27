@@ -68,20 +68,3 @@ ${button(link, 'Sign in')}`,
     link
   )
 }
-
-/** To an address with no account: somebody wants to credit you on their project. */
-export async function sendProjectInviteEmail(
-  to: string,
-  inviterName: string,
-  projectTitle: string
-) {
-  const link = `${webUrl()}/session`
-  await deliver(
-    to,
-    `${inviterName} invited you to collaborate on uofthub`,
-    `<p><b>${escapeHtml(inviterName)}</b> invited you to be credited as a collaborator on <b>${escapeHtml(projectTitle)}</b> on uofthub, where U of T students share what they build.</p>
-<p>Sign up with this address and the invitation will be waiting for you to accept.</p>
-${button(link, 'Sign up')}`,
-    link
-  )
-}

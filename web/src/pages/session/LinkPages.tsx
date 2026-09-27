@@ -115,3 +115,52 @@ export function ResetPage() {
     </Frame>
   )
 }
+
+/**
+ * /unsubscribe?token= — the link in a notification email's footer. Works
+ * signed out. A button rather than on load: mail scanners open every link in
+ * an email, and would otherwise unsubscribe the student before they read it.
+ */
+export function UnsubscribePage() {
+  useDocumentTitle('Unsubscribe')
+  const [params] = useSearchParams()
+  const token = params.get('token') ?? ''
+  const unsubscribe = useMutation({ mutationFn: () => api.email.unsubscribe(token) })
+
+  return (
+    <Frame title="Stop notification emails">
+      {unsubscribe.isSuccess ? (
+        <>
+          <p className="text-15">
+            Done — uofthub won’t email you about notifications any more. They still show in the
+            bell, and you can turn emails back on in Settings.
+          </p>
+          <Button variant="primary" to="/settings">
+            Go to Settings
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-15 text-ink-3">
+            No more emails about invitations, access requests, new conversations or moderation
+            decisions. Emails you ask for, like a password reset, still arrive.
+          </p>
+          {(!token || unsubscribe.isError) && (
+            <ErrorText>
+              {unsubscribe.error?.message ??
+                'That link is missing its token — open it from the email.'}
+            </ErrorText>
+          )}
+          <Button
+            variant="primary"
+            block
+            disabled={!token || unsubscribe.isPending}
+            onClick={() => unsubscribe.mutate()}
+          >
+            {unsubscribe.isPending ? 'Unsubscribing…' : 'Unsubscribe'}
+          </Button>
+        </>
+      )}
+    </Frame>
+  )
+}

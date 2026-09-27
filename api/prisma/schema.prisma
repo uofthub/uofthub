@@ -511,7 +511,8 @@ model ProjectCollaborator {
 
 /// An invitation to collaborate sent to an address with no account yet. It
 /// becomes an ordinary pending collaborator invitation the moment an account
-/// with that address is confirmed (lib/accounts.ts).
+/// with that address is confirmed (lib/accounts.ts). No longer created —
+/// invitations now need an account — so this only drains the ones sent before.
 model ProjectEmailInvite {
   projectId   String
   /// Lower-cased, and always a U of T address.

@@ -125,7 +125,7 @@ One direct message (sender, recipient, body, read_at). A conversation is just th
 | title | string? | what they did, as the owner put it ("Designer") |
 | accepted | bool | false while an invitation or a TA's access request waits; a no deletes the row |
 
-An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited. An invitation to an address with no account waits in `ProjectEmailInvite` and becomes a pending row once that address is proven (`lib/accounts.ts`).
+An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited. Invitations go only to addresses that already have an account: emailing an address nobody signed up with is unasked-for mail, and a typo in one is a bounce, both of which count against the sender reputation every other email depends on. `ProjectEmailInvite` holds invitations sent before that rule, which still become a pending row once their address is proven (`lib/accounts.ts`).
 
 ### ProjectFile
 | Field | Type | Notes |
@@ -283,6 +283,14 @@ SSE rather than WebSockets because the traffic only goes one way, it rides the s
 - **Across instances.** Events travel through Postgres `NOTIFY` on the `live` channel, not an in-memory emitter, because the write and the stream are often on different replicas. Each instance opens one extra `LISTEN` connection (with `pg`, since Prisma cannot listen) the first time a stream connects to it.
 - **Best-effort.** A failed publish never fails the request, and whatever is published while a listener is reconnecting is lost. A listener that comes back sends `resync` to its streams, and a tab whose stream reconnects refetches both; window focus is the last backstop.
 - **Session checks.** The cookie is verified when the stream opens. Streams end after 30 minutes so the browser reconnects and proves it again; a 25-second heartbeat keeps proxies from closing an idle one.
+
+## Email deliverability
+
+Mail goes out from `notifications@notifications.uofthub.com`, a subdomain whose sending reputation is kept separate from `hello@uofthub.com`. Replies go to `hello@`. U of T mail is on Microsoft 365, which weighs bounces and "Report spam" clicks heavily, so:
+
+- **Only addresses with an account get mail**, apart from sign-up confirmation and the already-registered note. Collaborator invitations need an account for this reason (see [ProjectCollaborator](#projectcollaborator)).
+- **Every email has a plain-text part** (`htmlToText` in `lib/email.ts`).
+- **Notification emails carry one-click unsubscribe.** `List-Unsubscribe` / `List-Unsubscribe-Post` (RFC 8058) headers point at `POST /email/unsubscribe?token=`, which puts an Unsubscribe button beside the sender in Gmail and Outlook. The footer links to `/unsubscribe`, which works signed out. The token is the user id plus an HMAC of it under `JWT_SECRET`. It turns off notification email and nothing else, so it never expires. Both paths only act on a POST, because Outlook's Safe Links opens every URL in a message and would otherwise unsubscribe everybody on delivery. Account email (confirm, reset) has no unsubscribe: nobody can opt out of it.
 
 ## Error monitoring
 
@@ -445,7 +453,7 @@ Environment variables in production — see `api/.env.example` for the full list
 - `API_URL` — this API's own public base, used to build avatar URLs.
 - `MICROSOFT_*` — the redirect URI must also be registered on the Azure app registration; they have to match exactly. `MICROSOFT_ALLOWED_TENANT_IDS` (U of T's directory id) is required: the `organizations` authority accepts any directory, and any directory can claim any address, so without it every Microsoft sign-in is refused in production (`src/lib/microsoftTenant.ts`).
 - `STORAGE_*` — R2 bucket and token. The bucket stays private; nothing is served from a public bucket URL.
-- `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
+- `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks. `EMAIL_FROM` is on the `notifications.uofthub.com` subdomain, which needs its SPF, DKIM and DMARC records verified in Resend — see [Email deliverability](#email-deliverability).
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
 `PORT` is provided by Render and read by `src/index.ts`; the server binds `0.0.0.0`.

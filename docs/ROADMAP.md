@@ -75,6 +75,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 - [x] Frontend — owner-only "Access requests" panel on `ProjectPage.tsx` with approve/deny. The `GET /projects/:id/access-requests` endpoint already existed but nothing rendered it, so requests were invisible to the owner in the UI
 - [x] Phase 3's org-verification emails — `lib/orgEmails.ts`; `emailAdminsOfSubmission` on `POST /orgs/:slug/verify`, `emailContactOfDecision` on all three admin decisions. Best-effort: `sendEmail` no-ops without `RESEND_API_KEY`, so a missing key degrades rather than failing the request
 - [x] Email the notifications that need an answer — invitations, access requests, a new conversation, moderation decisions — with an opt-out in Settings (`lib/notificationEmails.ts`)
+- [x] Deliverability — send from the `notifications.uofthub.com` subdomain with replies to `hello@`, a plain-text part on every email, and one-click unsubscribe (`List-Unsubscribe` headers plus a signed-out `/unsubscribe` page). Collaborator invitations need an existing account, so nothing is mailed to an address nobody signed up with. See [ARCHITECTURE.md § Email deliverability](ARCHITECTURE.md#email-deliverability)
 
 **Trust & Safety**
 "Moderation policy for public projects" was an open question from prd.md's first draft ([prd.md § 12](prd.md#12-open-questions)) until the report → review → decision mechanism below shipped. What counts as a violation, and what happens on repeat offenses, is still a policy question rather than a code one.

@@ -959,6 +959,10 @@ export const api = {
       request<{ ok: boolean }>(`/users/me/notifications/${id}/read`, post()),
     markAllRead: () => request<{ ok: boolean }>('/users/me/notifications/read-all', post()),
   },
+  email: {
+    /** The link in a notification email's footer; works signed out. */
+    unsubscribe: (token: string) => request<{ ok: boolean }>('/email/unsubscribe', post({ token })),
+  },
 }
 
 /**

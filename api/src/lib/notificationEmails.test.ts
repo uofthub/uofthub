@@ -1,15 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const outbox = vi.hoisted(() => [] as { to: string; subject: string }[])
+const lastEmail = vi.hoisted(() => ({ html: '', unsubscribeUserId: '' as string | undefined }))
 vi.mock('./email.js', async (original) => ({
   ...(await original<object>()),
   isEmailConfigured: () => true,
-  sendEmail: async (m: { to: string; subject: string }) => {
+  sendEmail: async (m: {
+    to: string
+    subject: string
+    html: string
+    unsubscribeUserId?: string
+  }) => {
     outbox.push({ to: m.to, subject: m.subject })
+    Object.assign(lastEmail, m)
   },
 }))
 
 import { db } from '../db/client.js'
+import { htmlToText, readUnsubscribeToken, unsubscribeToken } from './email.js'
 import { notify } from './notifications.js'
 import { cookieFor, createUser, getApp, resetDb } from '../test/helpers.js'
 
@@ -49,5 +57,46 @@ describe('emailed notifications', () => {
       await app.inject({ method: 'POST', url: `/messages/${b.id}`, cookies, payload: { body } })
     await settle()
     expect(outbox).toEqual([{ to: b.email, subject: 'Ada sent you a message on uofthub' }])
+  })
+})
+
+describe('unsubscribing', () => {
+  it('carries a working unsubscribe link and header', async () => {
+    const user = await createUser()
+    await notify(user.id, 'COLLABORATOR_INVITED', { inviterName: 'Ada', projectTitle: 'Rover' })
+    await settle()
+    expect(lastEmail.unsubscribeUserId).toBe(user.id)
+    expect(lastEmail.html).toContain(`/unsubscribe?token=${unsubscribeToken(user.id)}`)
+
+    const app = await getApp()
+    // What Gmail and Outlook send for the List-Unsubscribe-Post header.
+    const res = await app.inject({
+      method: 'POST',
+      url: `/email/unsubscribe?token=${unsubscribeToken(user.id)}`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'List-Unsubscribe=One-Click',
+    })
+    expect(res.statusCode).toBe(200)
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailNotifications).toBe(
+      false
+    )
+  })
+
+  it('refuses a token made up for somebody else', async () => {
+    const user = await createUser()
+    expect(readUnsubscribeToken(`${user.id}.forged`)).toBeNull()
+    const app = await getApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/email/unsubscribe',
+      payload: { token: `${user.id}.${unsubscribeToken('someone-else').split('.')[1]}` },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('writes a plain-text part', () => {
+    expect(htmlToText('<p><b>Ada</b> &amp; co</p><p><a href="https://x.test/a">Open</a></p>')).toBe(
+      'Ada & co\n\nOpen (https://x.test/a)'
+    )
   })
 })

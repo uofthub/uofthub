@@ -16,7 +16,8 @@ const RAIL = '(width >= 75rem)'
 
 /**
  * The chrome around every page: the desktop header, or on a phone the compact
- * header and the bottom bar. /session, /verify and /reset are drawn bare.
+ * header and the bottom bar. /session, /verify, /reset and /unsubscribe are
+ * drawn bare.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { pathname, hash, search } = useLocation()

@@ -1,6 +1,6 @@
 import type { NotificationType } from '@prisma/client'
 import { db } from '../db/client.js'
-import { escapeHtml, isEmailConfigured, layout, sendEmail } from './email.js'
+import { escapeHtml, isEmailConfigured, layout, sendEmail, unsubscribeToken } from './email.js'
 
 /**
  * The notifications that are also emailed: the ones asking the student to
@@ -76,8 +76,13 @@ const EMAILS: Partial<
   }),
 }
 
-const footer = () =>
-  `<p style="color:#767676;font-size:13px">You get these because they need an answer. <a href="${webUrl()}/settings">Turn them off</a>.</p>`
+/**
+ * Why this arrived and how to stop it, in every notification email. The link
+ * works without signing in: a student who has to log in to unsubscribe marks
+ * the email as spam instead, and that costs every other recipient.
+ */
+const footer = (userId: string) =>
+  `<p style="color:#767676;font-size:13px">You get these because they need an answer from you on uofthub. <a href="${webUrl()}/unsubscribe?token=${unsubscribeToken(userId)}">Unsubscribe</a> or choose in <a href="${webUrl()}/settings">Settings</a>.</p>`
 
 const button = (href: string) =>
   `<p><a href="${href}" style="display:inline-block;background:#1E3765;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Open uofthub</a></p>`
@@ -94,13 +99,14 @@ export function emailNotification(
   void (async () => {
     const people = await db.user.findMany({
       where: { id: { in: userIds }, emailNotifications: true },
-      select: { email: true },
+      select: { id: true, email: true },
     })
-    for (const { email } of people)
+    for (const { id, email } of people)
       await sendEmail({
         to: email,
         subject,
-        html: layout(`<p>${line}</p>${button(`${webUrl()}${path}`)}${footer()}`),
+        html: layout(`<p>${line}</p>${button(`${webUrl()}${path}`)}${footer(id)}`),
+        unsubscribeUserId: id,
       })
   })().catch((err) => console.error('Notification email failed:', err))
 }
@@ -121,8 +127,9 @@ export function emailNewMessage(recipientId: string, senderName: string): void {
       to: recipient.email,
       subject: `${senderName} sent you a message on uofthub`,
       html: layout(
-        `<p><b>${escapeHtml(senderName)}</b> sent you a message.</p>${button(`${webUrl()}/messages`)}${footer()}`
+        `<p><b>${escapeHtml(senderName)}</b> sent you a message.</p>${button(`${webUrl()}/messages`)}${footer(recipientId)}`
       ),
+      unsubscribeUserId: recipientId,
     })
   })().catch((err) => console.error('Message email failed:', err))
 }

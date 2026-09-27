@@ -23,7 +23,7 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Visibility** — Draft / U of T / Public / Unlisted, defaulting to Draft, plus an optional show-from date that keeps course work hidden until after grading
 - **Profiles** — name, faculty, campus, program, year, courses, "Open to" and personal links; pinned projects above the rest
 - **Discovery** — Explore (search and filter by faculty, course, type, campus or topic), a feed at `/feed` with Following, Campus and Your program tabs, this week's trending, a weekly spotlight, Looking for help, collections, and AI search at `/discover`
-- **Collaboration** — invite collaborators (by U of T email, with or without an account yet) who then edit the project with you; TAs and instructors can ask for read access to a draft
+- **Collaboration** — invite collaborators (by the U of T email they signed up with) who then edit the project with you; TAs and instructors can ask for read access to a draft
 - **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, and one-to-one messages; block and report
 - **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
 - **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer, data export and account deletion at `/settings`

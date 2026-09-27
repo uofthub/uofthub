@@ -56,7 +56,6 @@ import { PIN_LIMIT } from '../lib/pins.js'
 import { searchProjectIds } from '../lib/search.js'
 import { notify, notifyMany, notifyOnce, notifyProjectOwner } from '../lib/notifications.js'
 import { announcePublish } from '../lib/publishing.js'
-import { sendProjectInviteEmail } from '../lib/authEmails.js'
 import { bySession } from '../lib/rateLimit.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 import { blockedBetween } from '../lib/blocks.js'
@@ -1212,9 +1211,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /projects/:id/collaborators — { email, title? } invite
   //
-  // To an account, it is a pending collaborator row and a notification. To a
-  // U of T address with no account yet, it waits as an email invitation and
-  // becomes a pending row once that address signs up (lib/accounts.ts).
+  // A pending collaborator row and a notification, to an existing account
+  // only. Mail to an address nobody has signed up with is mail its owner never
+  // asked for, and a typo in one is a bounce: both count against the sender
+  // reputation every other email depends on. The owner asks them to sign up
+  // first instead.
   app.post<{ Params: { id: string }; Body: { email?: string; title?: string } }>(
     '/:id/collaborators',
     { preHandler: [app.authenticate], config: inviteRateLimit },
@@ -1239,21 +1240,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: `A role is at most ${COLLABORATOR_TITLE_MAX} characters` })
 
       const invitee = await db.user.findUnique({ where: { email }, select: { id: true } })
-      if (!invitee) {
-        if (!/@(mail\.)?utoronto\.ca$/.test(email))
-          return reply.code(400).send({ error: 'Invite someone by their U of T email address' })
-        if (
-          await db.projectEmailInvite.findUnique({
-            where: { projectId_email: { projectId: project.id, email } },
-          })
-        )
-          return reply.code(409).send({ error: 'Already invited' })
-        await db.projectEmailInvite.create({
-          data: { projectId: project.id, email, title, invitedById: request.user.sub },
+      if (!invitee)
+        return reply.code(404).send({
+          error:
+            'Nobody has signed up to uofthub with that address yet. Ask them to join, then invite them.',
         })
-        await sendProjectInviteEmail(email, project.owner.name, project.title)
-        return reply.code(201).send({ email, title, pending: true, hasAccount: false })
-      }
 
       const existing = await db.projectCollaborator.findUnique({
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
@@ -1284,7 +1275,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   )
 
   // DELETE /projects/:id/email-invites/:email — the owner withdraws an
-  // invitation to an address that has no account yet
+  // invitation to an address that has no account yet. None are made any more
+  // (see the invite route above); this clears the ones sent before that.
   app.delete<{ Params: { id: string; email: string } }>(
     '/:id/email-invites/:email',
     { preHandler: [app.authenticate] },

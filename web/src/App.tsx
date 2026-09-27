@@ -7,7 +7,7 @@ import ExplorePage from './pages/explore/ExplorePage'
 import ProjectPage from './pages/project/ProjectPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SessionPage from './pages/session/SessionPage'
-import { ResetPage, VerifyPage } from './pages/session/LinkPages'
+import { ResetPage, UnsubscribePage, VerifyPage } from './pages/session/LinkPages'
 import OrgsPage from './pages/orgs/OrgsPage'
 import OrgPage from './pages/orgs/OrgPage'
 import AboutPage from './pages/info/AboutPage'
@@ -68,6 +68,7 @@ export default function App() {
             <Route path="/session" element={<SessionPage />} />
             <Route path="/verify" element={<VerifyPage />} />
             <Route path="/reset" element={<ResetPage />} />
+            <Route path="/unsubscribe" element={<UnsubscribePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/orgs" element={<OrgsPage />} />
