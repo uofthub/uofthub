@@ -107,14 +107,19 @@ describe('pushing notifications', () => {
     for (const body of ['hi', 'there'])
       await app.inject({ method: 'POST', url: `/messages/${user.id}`, cookies, payload: { body } })
     await settle()
-    expect(sent.list.map((s) => s.body)).toEqual([
-      expect.objectContaining({
-        title: 'Ada',
-        body: 'Sent you a message',
-        tag: `message:${sender.id}`,
-      }),
-      expect.objectContaining({ body: 'Sent you 2 messages', tag: `message:${sender.id}` }),
-    ])
+    // Each send is fire-and-forget, so the two can reach the push service in
+    // either order.
+    expect(sent.list).toHaveLength(2)
+    expect(sent.list.map((s) => s.body)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Ada',
+          body: 'Sent you a message',
+          tag: `message:${sender.id}`,
+        }),
+        expect.objectContaining({ body: 'Sent you 2 messages', tag: `message:${sender.id}` }),
+      ])
+    )
 
     sent.list.length = 0
     await db.user.update({ where: { id: user.id }, data: { pushMessages: false } })
