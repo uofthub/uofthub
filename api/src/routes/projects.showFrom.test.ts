@@ -88,7 +88,6 @@ describe('reading one hidden project', () => {
       call('POST', `/projects/${hidden.id}/reactions`, stranger, { kind: 'USEFUL' }),
       call('POST', `/projects/${hidden.id}/follow`, stranger),
       call('POST', `/projects/${hidden.id}/save`, stranger),
-      call('POST', `/projects/${hidden.id}/fork`, stranger),
     ]
     for (const res of await Promise.all(reads)) expect(res.statusCode).toBe(404)
   })

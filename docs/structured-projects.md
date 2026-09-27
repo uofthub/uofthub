@@ -203,7 +203,7 @@ Link outputs (a YouTube video, a demo site) can get a thumbnail from the existin
 **Changes to `visibility.ts`.**
 
 - `canViewProject` checks membership first, then the date, then visibility. It takes `now = new Date()` as a parameter for the tests.
-- Its argument type makes `showFrom: Date | null` **required**, so the compiler finds every call site with a hand-written `select`: follow, fork, versions, and the update fan-out.
+- Its argument type makes `showFrom: Date | null` **required**, so the compiler finds every call site with a hand-written `select`: follow, versions, and the update fan-out.
 - `visibleProjectWhere` puts the date condition on the non-member branch:
   `OR: [{ visibility in [PUBLIC, UOFT], OR: [{ showFrom: null }, { showFrom: { lte: now } }] }, owner…, collaborator…]`.
   `users.ts` spreads this fragment next to other keys, so its top level must stay a single `OR`. I'll check each call site.
@@ -287,14 +287,13 @@ A project matches a faculty when its owner's faculty matches, **or any accepted 
 |---|---|
 | `POST /projects` | Also accepts `sections`, `details`, `courseCode`, `showFrom`, `references[]`. |
 | `PATCH /projects/:id` | Same fields plus `outputs[]`, all written in **one transaction**. `references` and `outputs` replace the whole list when present. Outputs are rewritten whole (deleted and recreated in order, keeping each kept output's id and thumbnail), because the one-target CHECK allows no intermediate state for moving unique targets between rows. Removing an output leaves its file or link in place. Outputs aren't accepted on `POST`: files are uploaded after the draft exists. |
-| List routes | Never carry `sections` or `details`: a card draws none of it and sections can run to 100 KB. `decorate` drops them, and the single-project routes (`GET`, `POST`, `PATCH`, fork) put them back. |
+| List routes | Never carry `sections` or `details`: a card draws none of it and sections can run to 100 KB. `decorate` drops them, and the single-project routes (`GET`, `POST`, `PATCH`) put them back. |
 | `GET /projects/:id` | Returns `sections`, `details`, `courseCode`, `showFrom` (only ever in the future for the project's makers, who are the only ones who can load it then), `references`, and `outputs` with signed `thumbnailUrl`s. |
 | `GET /projects?course=` | New course filter; the faculty filter now also matches collaborators. |
 | `PUT /projects/:id/outputs/:outputId/thumbnail` | New. Multipart, owner only, validated as above. |
 | `GET /projects/:id/shared-references` | New. `[{ reference, projects[] }]` for references with a `key`, visibility-filtered, at most 3 projects each. |
 | `GET /courses/:code/template` | New. |
 | `POST /projects/:id/versions` | Snapshots `sections`, `details`, `courseCode`, `references` and `outputs` too. |
-| `POST /projects/:id/fork` | Copies sections, details and references. It doesn't copy outputs (the files aren't copied), `courseCode`, or `showFrom`: being filed under someone else's course is the original author's claim, not the forker's. |
 
 An output in `outputs[]` is `{ id?, kind, label?, primary?, fileId }` or `{ id?, kind, label?, primary?, link: { label, url } }`. A new link target creates a `ProjectLink`, so the plain links list stays complete. `id` keeps an existing output, and its thumbnail, across a reorder.
 
@@ -377,7 +376,7 @@ Each is its own Prisma migration, landing with its phase:
 Each phase is independently shippable, and the old post form keeps working until Phase 6 replaces it.
 
 1. **Show-from date and the visibility boundary.** Migration 1; the `visibility.ts` changes; moving the facets, collections and spotlight checks into it; fixing the report and request-access existence leak; publish and announce with the sweep; tests. It's first because it's the security-sensitive change, and it's small enough to review on its own.
-2. **Sections and details.** Migration 2; the Zod schema and stripping; the API fields; versions and fork; rendering and the contents list on the project page. `compose.ts` sends free-text answers as `details` instead of Markdown. Tests: schema stripping and limits, the round trip through the routes, the details backfill run against fixture rows, search matching section text.
+2. **Sections and details.** Migration 2; the Zod schema and stripping; the API fields; versions; rendering and the contents list on the project page. `compose.ts` sends free-text answers as `details` instead of Markdown. Tests: schema stripping and limits, the round trip through the routes, the details backfill run against fixture rows, search matching section text.
 3. **References.** Migration 3; `referenceKey.ts` with a case-by-case unit test table; the API; `shared-references`; search; the rendering.
 4. **Outputs and covers.** Migration 4; the outputs API; the thumbnail endpoint; `covers.ts`; the gallery and main action; `lib/thumbnails.ts` on the web side, with unit tests for the pure parts (sizing, format fallback, kind guessing); pdf.js loaded lazily.
 5. **Courses and faculties.** Migration 5; the `course=` filter; facets, Related and the feed reading `courseCode`; the template endpoint and CSC211H5; faculty matching collaborators.

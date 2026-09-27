@@ -216,14 +216,6 @@ const PATHS = {
     </>
   ),
   flag: <path d="M5 21V4M5 4h11l-2 4 2 4H5" />,
-  fork: (
-    <>
-      <circle cx="6" cy="5" r="2.5" />
-      <circle cx="18" cy="5" r="2.5" />
-      <circle cx="12" cy="19" r="2.5" />
-      <path d="M6 7.5v1a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-1M12 11.5v5" />
-    </>
-  ),
   pin: (
     <>
       <path d="M9 3h6l-1 6 3 3H7l3-3z" />

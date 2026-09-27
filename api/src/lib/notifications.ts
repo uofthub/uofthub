@@ -10,7 +10,7 @@ import { emailNotification } from './notificationEmails.js'
  * each one is also a way to pester somebody. The rules that keep that in check
  * live in this file rather than at the call sites:
  *
- *   - `notify` announces something genuinely new each time (a comment, a fork).
+ *   - `notify` announces something genuinely new each time (a comment, a reply).
  *   - `notifyOnce` announces a state a person can toggle (a like, a follow, a
  *     reaction) and fires only the first time. Un-liking and re-liking a
  *     project twenty times is otherwise twenty pings.

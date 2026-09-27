@@ -1811,75 +1811,6 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
-  // ── FORK / REMIX ────────────────────────────────────────────────────────────
-
-  // POST /projects/:id/fork
-  app.post<{ Params: { id: string } }>(
-    '/:id/fork',
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const original = await db.project.findUnique({
-        where: { id: request.params.id },
-        include: {
-          links: true,
-          references: { orderBy: { position: 'asc' } },
-          collaborators: { select: { userId: true, accepted: true } },
-        },
-      })
-      if (!original) return reply.code(404).send({ error: 'Not found' })
-
-      // Same rule as reading it, so collaborators can fork and a private id is
-      // not confirmed by a 403.
-      if (!canViewProject(original, request.user.sub)) {
-        return reply.code(404).send({ error: 'Not found' })
-      }
-
-      // The owner can still see a taken-down project, and a fork of it would
-      // come back with a clean `takenDownAt` — a one-click way around the
-      // moderation decision.
-      if (original.takenDownAt) {
-        return reply.code(403).send({ error: 'This project was taken down and cannot be forked.' })
-      }
-
-      const fork = await db.project.create({
-        data: {
-          ownerId: request.user.sub,
-          title: `${original.title} (fork)`,
-          pitch: original.pitch,
-          description: original.description,
-          sections: original.sections ?? Prisma.DbNull,
-          details: original.details ?? Prisma.DbNull,
-          type: original.type,
-          // A fork starts its own life: it is not "shipped" because the
-          // original was.
-          status: 'IN_PROGRESS',
-          tags: original.tags,
-          visibility: 'PRIVATE',
-          forkedFromId: original.id,
-          links: original.links.length
-            ? { create: original.links.map((l) => ({ label: l.label, url: l.url })) }
-            : undefined,
-          references: original.references.length
-            ? {
-                create: original.references.map(({ id: _id, projectId: _p, ...r }) => r),
-              }
-            : undefined,
-        },
-        include: { ...CARD_INCLUDE, ...CONTENT_INCLUDE },
-      })
-
-      // Against the original, not the fork — the fork has no audience yet, and
-      // it is the original's owner who wants to know their work was picked up.
-      // Unkeyed: forking the same project twice is two real events.
-      await notifyProjectOwner(original.id, request.user.sub, 'PROJECT_FORKED', {
-        extra: { forkId: fork.id },
-      })
-
-      const [shaped] = await decorate([fork], request.user.sub)
-      return reply.code(201).send(await withContent(shaped, fork))
-    }
-  )
-
   // ── ANALYTICS ───────────────────────────────────────────────────────────────
 
   // GET /projects/:id/analytics — owner-only engagement metrics
@@ -1892,7 +1823,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         select: {
           ownerId: true,
           viewCount: true,
-          _count: { select: { comments: true, forks: true, saves: true, followers: true } },
+          _count: { select: { comments: true, saves: true, followers: true } },
         },
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
@@ -1940,7 +1871,6 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         // Unique viewers per day, summed — see lib/views.ts.
         totalViews: project.viewCount,
         comments: project._count.comments,
-        forks: project._count.forks,
         // How many people bookmarked it. Never who: a save is private.
         saves: project._count.saves,
         followers: project._count.followers,

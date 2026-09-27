@@ -39,7 +39,7 @@ Long-term, a student's presence on the platform becomes a living portfolio gener
 
 - Give every U of T student (any faculty, not just CS) a place to publish and preserve their projects.
 - Make student work discoverable by peers, TAs, and professors.
-- Build a lightweight social graph around student projects (follow, like, comment, fork/remix, collaborate).
+- Build a lightweight social graph around student projects (follow, like, comment, collaborate).
 - Stay open-source and independent of official university infrastructure at first, while designing so U of T could later adopt/host it.
 - Lay groundwork for an HCI/social-computing research angle (how students discover, share, and collaborate on peer-created work).
 
@@ -107,7 +107,7 @@ Clubs and research labs get org pages (`/orgs/:slug`) distinct from individual p
 
 ### Phase 2 (Semester 2+)
 - Project versioning (v1 → v2 → v3)
-- Fork/remix ("Built from X's project")
+- ~~Fork/remix~~ — removed; remixing is [not decided yet](not-decided-yet.md#remixing)
 - Project analytics (views, engagement)
 - Course pages, club pages, research lab pages
 - TA/Professor invite-to-view workflow, formalized

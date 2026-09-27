@@ -13,7 +13,7 @@ import type {
  *
  * The page renders a section only when it has something in it, and so an
  * empty one must never reach the database — otherwise every reader of the row
- * (the page, search, a fork, a version) would have to agree on what "empty"
+ * (the page, search, a version) would have to agree on what "empty"
  * means. Stripping happens once, here, on the way in. The web app's renderer
  * checks again only because rows can be written outside these routes.
  *

@@ -82,7 +82,6 @@ enum NotificationType {
   PROJECT_MODERATED
   PROJECT_LIKED
   PROJECT_COMMENTED
-  PROJECT_FORKED
   PROJECT_REACTED
   FOLLOWED_YOU
   FOLLOWING_PUBLISHED
@@ -310,7 +309,6 @@ model Project {
   templateVersion Int?
   visibility      Visibility     @default(PRIVATE)
   viewCount       Int            @default(0)
-  forkedFromId    String?
   /// When the project first stopped being PRIVATE. Distinct from createdAt: a
   /// capstone drafted in January and published in March belongs in March's
   /// feed, not January's. Null while it has never been visible to anyone but
@@ -364,8 +362,6 @@ model Project {
   followers       ProjectFollow[]
   collectionItems CollectionItem[]
   emailInvites    ProjectEmailInvite[]
-  forkedFrom      Project?              @relation("ProjectForks", fields: [forkedFromId], references: [id])
-  forks           Project[]             @relation("ProjectForks")
 
   /// The directory's default read: visible projects, newest first.
   @@index([visibility, createdAt])
@@ -777,7 +773,7 @@ model Notification {
   /// only ever fire once — `like:<projectId>:<actorId>`, `follow:<actorId>`.
   /// Without it, un-liking and re-liking a project is an unlimited way to ping
   /// its owner. Null for the announcements that are genuinely new every time
-  /// (each comment, each fork).
+  /// (each comment).
   key       String?
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())

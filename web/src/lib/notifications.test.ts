@@ -138,12 +138,6 @@ describe('messageFor — social notifications', () => {
     expect(n.to).toBe('/projects/p1#comments')
   })
 
-  it('names who forked it', () => {
-    expect(messageFor(notification('PROJECT_FORKED', { ...PROJECT, actorName: 'Wei' })).text).toBe(
-      'Wei forked "Autonomous gripper"'
-    )
-  })
-
   it('sends a new follower to their profile, not to a project', () => {
     const { text, to } = messageFor(
       notification('FOLLOWED_YOU', { actorId: 'u9', actorName: 'Ada' })
@@ -186,7 +180,6 @@ describe('messageFor — malformed payloads', () => {
       'PROJECT_MODERATED',
       'PROJECT_LIKED',
       'PROJECT_COMMENTED',
-      'PROJECT_FORKED',
       'PROJECT_REACTED',
       'FOLLOWED_YOU',
       'FOLLOWING_PUBLISHED',

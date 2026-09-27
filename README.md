@@ -24,14 +24,14 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Profiles** — name, faculty, campus, program, year, courses, "Open to" and personal links; pinned projects above the rest
 - **Discovery** — Explore (search and filter by faculty, course, type, campus or topic), a feed at `/feed` with Following, Campus and Your program tabs, this week's trending, a weekly spotlight, Looking for help, collections, and AI search at `/discover`
 - **Collaboration** — invite collaborators (by U of T email, with or without an account yet) who then edit the project with you; TAs and instructors can ask for read access to a draft
-- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, forks, and one-to-one messages; block and report
+- **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, and one-to-one messages; block and report
 - **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
 - **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer, data export and account deletion at `/settings`
 - **Moderation** — reports on projects, comments, collections, profiles, group events and conversations, reviewed at `/admin`, with account suspension
 
 The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.
 
-See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond.
+See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond, and [not-decided-yet.md](docs/not-decided-yet.md) for ideas still being weighed.
 
 ---
 
@@ -111,7 +111,7 @@ The API tests create their own `_test` database and refuse to run against any da
 | `web/src/App.tsx` | Every route in the web app |
 | `web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
 | `web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |
-| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md) |
+| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md), [not decided yet](docs/not-decided-yet.md) |
 
 ---
 

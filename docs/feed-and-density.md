@@ -107,13 +107,13 @@ Views stay anonymous — no per-viewer identity is recorded, and the `ProjectDai
 
 Before this, every `NotificationType` was administrative — invites, access requests, moderation. Nothing told you that somebody liked, commented on or forked your work, or that somebody you follow had published. Following a person was a button that did nothing observable.
 
-Six types were added: `PROJECT_LIKED`, `PROJECT_COMMENTED`, `PROJECT_FORKED`, `PROJECT_REACTED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`.
+Six types were added: `PROJECT_LIKED`, `PROJECT_COMMENTED`, `PROJECT_FORKED`, `PROJECT_REACTED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. (`PROJECT_FORKED` was later removed along with fork.)
 
 ### Not being able to pester somebody is part of the design
 
 Every social notification is triggered by another student's action, which means every one of them is also a way to annoy somebody. The rules live in `lib/notifications.ts` rather than at the call sites:
 
-- **`notify`** — for announcements that are genuinely new each time: a comment, a fork.
+- **`notify`** — for announcements that are genuinely new each time: a comment, a reply.
 - **`notifyOnce`** — for states a person can *toggle*: a like, a follow, a reaction. `Notification.key` holds the identity of the thing announced (`like:<projectId>:<actorId>`), so un-liking and re-liking a project twenty times is one notification, not twenty. Two different people liking the same project are two different keys and both get through.
 - **`notifyMany`** — the follower fan-out on publish, capped at `FANOUT_LIMIT` (500). This is the one notification that scales with somebody else's popularity rather than their own actions, so it gets a ceiling. The publish still succeeds and the feed still shows the project to every follower; only the bell stops short.
 - **Nobody is ever notified about their own action.** That check belongs to the caller, which is the only place that knows who the actor is.

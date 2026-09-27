@@ -79,7 +79,7 @@ const STEPS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'users',
     title: '3. Collaborate',
-    text: 'Invite teammates, fork someone else’s work, leave feedback that says something.',
+    text: 'Invite teammates, find people who want to build with you, leave feedback that says something.',
   },
   {
     icon: 'globe',

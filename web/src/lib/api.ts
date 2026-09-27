@@ -332,7 +332,6 @@ export type Analytics = {
   /** Unique viewers per day, summed. */
   totalViews: number
   comments: number
-  forks: number
   /** How many people saved it — never who. */
   saves: number
   /** How many people follow its updates. */
@@ -680,7 +679,6 @@ export const api = {
       ),
     createVersion: (id: string, note?: string) =>
       request<ProjectVersion>(`/projects/${id}/versions`, post({ note })),
-    fork: (id: string) => request<ProjectSummary>(`/projects/${id}/fork`, post()),
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
     requestAccess: (id: string) =>
       request<{ ok: boolean }>(`/projects/${id}/request-access`, post()),

@@ -6,7 +6,7 @@ beforeEach(resetDb)
 
 /**
  * Engagement that reaches the person who made the thing: the notifications
- * behind likes, comments, forks, reactions and publishing, plus the pinning
+ * behind likes, comments, reactions and publishing, plus the pinning
  * and reaction endpoints those hang off.
  *
  * The rule under test throughout is that a notification fires for real
@@ -132,37 +132,6 @@ describe('comment notifications', () => {
     await post(`/projects/${project.id}/comments`, owner, { body: 'note to self' })
 
     expect(await notificationsFor(owner.id)).toEqual([])
-  })
-})
-
-describe('fork notifications', () => {
-  it('tells the original’s owner, not the forker', async () => {
-    const owner = await createUser()
-    const forker = await createUser({ name: 'Wei' })
-    const original = await createProject(owner.id, { title: 'Telemetry', visibility: 'PUBLIC' })
-
-    const fork = (await post(`/projects/${original.id}/fork`, forker)).json()
-
-    const [notification] = await notificationsFor(owner.id)
-    expect(notification.type).toBe('PROJECT_FORKED')
-    expect(notification.payload).toMatchObject({
-      projectId: original.id,
-      projectTitle: 'Telemetry',
-      actorName: 'Wei',
-      forkId: fork.id,
-    })
-    expect(await notificationsFor(forker.id)).toEqual([])
-  })
-
-  it('announces a second fork too — each one is a real event', async () => {
-    const owner = await createUser()
-    const forker = await createUser()
-    const original = await createProject(owner.id, { visibility: 'PUBLIC' })
-
-    await post(`/projects/${original.id}/fork`, forker)
-    await post(`/projects/${original.id}/fork`, forker)
-
-    expect(await notificationsFor(owner.id)).toHaveLength(2)
   })
 })
 

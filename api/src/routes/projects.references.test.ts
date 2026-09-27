@@ -69,23 +69,6 @@ describe('references on a project', () => {
     expect(row.references).toHaveLength(1)
   })
 
-  it('are copied by a fork', async () => {
-    const owner = await createUser()
-    const forker = await createUser()
-    const original = (
-      await call('POST', '/projects', owner, {
-        title: 'Commute study',
-        visibility: 'PUBLIC',
-        references: [census, paper],
-      })
-    ).json()
-    const fork = (await call('POST', `/projects/${original.id}/fork`, forker)).json()
-    expect(fork.references.map((r: { title: string }) => r.title)).toEqual([
-      'Canadian Census 2021',
-      'Attention is all you need',
-    ])
-  })
-
   it('make a project findable by what it cited', async () => {
     const owner = await createUser()
     await call('POST', '/projects', owner, {

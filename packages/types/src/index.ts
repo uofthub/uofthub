@@ -131,7 +131,6 @@ export interface Project {
   visibility: Visibility
   /** Unique views, lifetime. Sent to the project's owner only. */
   viewCount?: number
-  forkedFromId?: string
   /** Set only when a moderator has taken the project down. */
   takenDownAt?: string
   /** When it first stopped being private. Absent while it never has been. */
@@ -167,7 +166,6 @@ export type NotificationType =
   | 'PROJECT_MODERATED'
   | 'PROJECT_LIKED'
   | 'PROJECT_COMMENTED'
-  | 'PROJECT_FORKED'
   | 'PROJECT_REACTED'
   | 'FOLLOWED_YOU'
   | 'FOLLOWING_PUBLISHED'

@@ -546,7 +546,6 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
               { label: 'Comments', value: data.comments },
               { label: 'Saves', value: data.saves },
               { label: 'Following', value: data.followers },
-              { label: 'Forks', value: data.forks },
             ].map((s) => (
               <Stat key={s.label} value={s.value} label={s.label} />
             ))}

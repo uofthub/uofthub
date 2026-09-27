@@ -103,8 +103,6 @@ export function messageFor(n: Notification): { text: string; to: string } {
         // Straight to the comments, not the top of a long project page.
         to: `${to}#comments`,
       }
-    case 'PROJECT_FORKED':
-      return { text: `${p.actorName} forked "${p.projectTitle}"`, to }
     case 'PROJECT_REACTED': {
       const say = typeof p.kind === 'string' ? REACTION_SENTENCES[p.kind] : undefined
       return {

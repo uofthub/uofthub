@@ -211,17 +211,13 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
     mutationFn: () => api.projects.delete(project.id),
     onSuccess: () => navigate(`/u/${project.ownerId}`),
   })
-  const fork = useMutation({
-    mutationFn: () => api.projects.fork(project.id),
-    onSuccess: (f) => navigate(`/projects/${f.id}`),
-  })
   // A credited collaborator can step off the project themself.
   const isCollaborator = !!user && project.collaborators.some((c) => c.user.id === user.id)
   const leave = useMutation({
     mutationFn: () => api.projects.removeCollaborator(project.id, user!.id),
     onSuccess: () => refresh(),
   })
-  const actionError = [remove, fork, leave].find((m) => m.isError)?.error
+  const actionError = [remove, leave].find((m) => m.isError)?.error
 
   return (
     <Card as="section" className="flex flex-col gap-4.5 px-4.5 py-5 md:p-6.5">
@@ -269,12 +265,6 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           {project.title}
         </h1>
         {pitch && <p className="mt-2.5 text-17 leading-normal text-ink-3">{pitch}</p>}
-        {project.forkedFromId && (
-          <p className="mt-2 flex items-center gap-1.5 text-13 text-muted">
-            <Icon name="fork" size={14} /> Forked from{' '}
-            <Link to={`/projects/${project.forkedFromId}`}>another project</Link>
-          </p>
-        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -399,9 +389,6 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
               )}
               {user && !isOwner && (
                 <>
-                  <MenuItem icon="fork" onSelect={() => fork.mutate()} close={close}>
-                    Fork a copy
-                  </MenuItem>
                   {/* A private project has no audience beyond its makers. */}
                   {project.visibility !== 'PRIVATE' && (
                     <MenuItem icon="flag" onSelect={() => setOpen('report')} close={close}>
@@ -544,7 +531,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
 
       {!user && (
         <p className="text-13 text-muted">
-          <Link to="/session">Sign in</Link> to react, comment or fork.
+          <Link to="/session">Sign in</Link> to react or comment.
         </p>
       )}
     </Card>

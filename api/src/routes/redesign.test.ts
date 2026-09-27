@@ -111,24 +111,6 @@ describe('project fields', () => {
     ])
   })
 
-  it('copies the fields into a fork but starts it over as in progress', async () => {
-    const owner = await createUser()
-    const me = await createUser()
-    const original = await createProject(owner.id, {
-      type: 'HARDWARE',
-      status: 'SHIPPED',
-      pitch: 'A sensor.',
-      visibility: 'PUBLIC',
-    })
-
-    const fork = (await call('POST', `/projects/${original.id}/fork`, me)).json()
-    expect(fork).toMatchObject({
-      type: 'HARDWARE',
-      pitch: 'A sensor.',
-      status: 'IN_PROGRESS',
-      visibility: 'PRIVATE',
-    })
-  })
 })
 
 describe('what a project card is sent', () => {

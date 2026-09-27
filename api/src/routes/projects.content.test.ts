@@ -6,8 +6,8 @@ beforeEach(resetDb)
 
 /**
  * Sections and details through the routes: stored stripped of empties,
- * returned on a single project but never on list rows, carried by versions
- * and forks, and searchable.
+ * returned on a single project but never on list rows, carried by versions,
+ * and searchable.
  */
 
 type User = { id: string; email: string }
@@ -120,9 +120,8 @@ describe('sections and details on a project', () => {
     expect(await titles('submarine')).toEqual([])
   })
 
-  it('are kept by a version and copied by a fork', async () => {
+  it('are kept by a version', async () => {
     const owner = await createUser()
-    const forker = await createUser()
     const created = (
       await call('POST', '/projects', owner, {
         title: 'Ferry times',
@@ -136,9 +135,5 @@ describe('sections and details on a project', () => {
     const version = await db.projectVersion.findFirstOrThrow({ where: { projectId: created.id } })
     expect(version.sections).toEqual(created.sections)
     expect(version.details).toEqual(created.details)
-
-    const fork = (await call('POST', `/projects/${created.id}/fork`, forker)).json()
-    expect(fork.sections).toEqual(created.sections)
-    expect(fork.details).toEqual(created.details)
   })
 })

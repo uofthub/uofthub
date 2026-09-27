@@ -68,13 +68,12 @@ A project is filed under at most one course (`course_code`) and credited to the 
 | status | enum? | `IN_PROGRESS`, `SHIPPED`, `HELP_WANTED` |
 | tags | string[] | topics |
 | visibility | enum | `private` (shown as Draft), `uoft`, `public`, `unlisted` |
-| forked_from_id | uuid? | the project it was forked from |
 | published_at | timestamp? | first time it stopped being private; the feed orders by it — see [feed-and-density.md](feed-and-density.md#publishedat) |
 | show_from | timestamp? | hidden from everyone but its makers until then, whatever its visibility |
 | announced_at | timestamp? | when followers were told; see [Scheduled jobs](#scheduled-jobs) |
 | pinned_at | timestamp? | pinned to the top of the owner's profile, at most six |
 | view_count | int | lifetime total, shown to the owner only |
-| taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility or fork the project — see [Moderation](#moderation) |
+| taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility — see [Moderation](#moderation) |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
@@ -185,7 +184,7 @@ The bell's feed, pushed to open tabs as it is written — see [Live updates](#li
 |---|---|---|
 | id | uuid | |
 | user_id | uuid | recipient |
-| type | enum | Administrative: `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED`, `MESSAGING_MODERATED`. Social: `PROJECT_COMMENTED`, `COMMENT_REPLIED`, `PROJECT_FORKED`, `PROJECT_REACTED`, `PROJECT_COLLAB_INTEREST`, `PROJECT_UPDATED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. `PROJECT_LIKED` is no longer sent; it stays for old rows |
+| type | enum | Administrative: `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED`, `MESSAGING_MODERATED`. Social: `PROJECT_COMMENTED`, `COMMENT_REPLIED`, `PROJECT_REACTED`, `PROJECT_COLLAB_INTEREST`, `PROJECT_UPDATED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. `PROJECT_LIKED` is no longer sent; it stays for old rows |
 | key | string? | identity of what is announced, so a toggled state (a reaction, a follow) notifies once — see `notifyOnce` in `lib/notifications.ts` |
 | payload | json | denormalized display data (project title, actor name, etc.) captured at creation time |
 | read | bool | |
@@ -311,7 +310,7 @@ The `/admin` page (Moderation, in the account menu for moderators only) has five
 
 Any decision can also suspend the account of whoever posted it (`suspend: true`).
 
-A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, and `POST /projects/:id/fork` refuses to copy the project at all — a fork would otherwise come back with a clean `taken_down_at` and be one click from public again. Only a moderator can clear it, with **Restore project** on the decided report (`POST /admin/projects/:id/restore`) — the appeal path.
+A take-down deletes nothing: the project, its files and its version history stay in the owner's account, and the owner can still edit it. What `taken_down_at` buys is that `PATCH /projects/:id` refuses any visibility change while it is set, so the owner can't simply make it public again. Only a moderator can clear it, with **Restore project** on the decided report (`POST /admin/projects/:id/restore`) — the appeal path.
 
 A warning or a take-down also closes every other open report about the same thing with the same decision. Something that drew one report usually drew several, and without this its author is notified once per duplicate.
 
