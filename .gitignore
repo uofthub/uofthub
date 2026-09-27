@@ -154,3 +154,6 @@ uoftindex.ca/
 
 # pnpm lockfile (committed — don't ignore)
 # pnpm-lock.yaml
+
+# Cloudflare Pages Functions, run locally with `wrangler pages dev`
+.wrangler/
