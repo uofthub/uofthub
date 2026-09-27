@@ -189,7 +189,7 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] CI — `.github/workflows/ci.yml` runs install, `prisma generate`, `typecheck`, the API tests (against a Postgres service container), the web tests, `build` and `lint` on every PR and every push to `main`
 - [ ] Error monitoring — Clueline was wired into both halves and has been removed for now; errors go to the API's logs only. See [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring)
 - [x] Legal pages — `/terms` (ownership, acceptable use, moderation) and `/privacy` (what is collected, and every third party that sees any of it). The privacy page's third-party list mirrors the real integrations; adding another one means editing that page in the same commit
-- [x] Deployment/hosting — **Railway** for the API and Postgres, **Cloudflare Pages** for the web build, recorded in [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md#stack-decisions) with the setup in [§ Deployment](ARCHITECTURE.md#deployment). `api/Dockerfile` + `railway.json` build the API and apply migrations at boot; `web/public/_redirects` gives Pages the SPA fallback React Router needs. Nothing is deployed yet — the config exists and the image is verified to build and boot, but the accounts, domains and cron jobs still have to be set up by hand
+- [x] Deployment/hosting — **Render** for the API and Postgres, **Cloudflare Pages** for the web build, recorded in [ARCHITECTURE.md § Stack decisions](ARCHITECTURE.md#stack-decisions) with the setup in [§ Deployment](ARCHITECTURE.md#deployment). `api/Dockerfile` builds the API and apply migrations at boot; `web/public/_redirects` gives Pages the SPA fallback React Router needs. Nothing is deployed yet — the config exists and the image is verified to build and boot, but the accounts, domains and cron jobs still have to be set up by hand
 
 ---
 
@@ -238,7 +238,7 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Email ownership: password sign-ups confirm their address before they can sign in; registering never touches an existing account
 - [x] Password reset and change; sessions carry a version so a reset or "sign out everywhere" ends every other session
 - [x] Account deletion, data export and email preferences at `/settings`
-- [x] `trustProxy` behind Railway, so IP rate limits are per client
+- [x] `trustProxy` behind Render's proxy, so IP rate limits are per client
 - [x] Uploads streamed to storage and served with a type decided from the checked extension; SVG is download-only
 - [x] Input limits on every free-text field, and rate limits on comments, invites and joins
 - [x] Collaborators edit content; invitations can be seen, withdrawn, declined (deleted) and sent to addresses without an account; collaborators can leave
@@ -256,4 +256,4 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [ ] Error monitoring — pick a provider (see [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring))
 - [x] Licence: proprietary, all rights reserved (`LICENSE`)
 - [x] Course templates beyond CSC211H5: CSC301H1, CSC309H1, ECE496Y1, APS112H1, STA302H1, ECO375H1, ENV461H1
-- [ ] Database backups on Railway
+- [ ] Database backups on Render

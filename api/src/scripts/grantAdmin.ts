@@ -4,8 +4,8 @@
  *   pnpm --filter @uofthub/api grant-admin someone@utoronto.ca
  *   pnpm --filter @uofthub/api grant-admin someone@utoronto.ca --revoke
  *
- * In the production image, where only the compiled output exists (Railway:
- * the service's shell, or `railway run`):
+ * In the production image, where only the compiled output exists (Render:
+ * the service's Shell tab, or `render ssh`):
  *
  *   pnpm grant-admin:prod someone@utoronto.ca
  *

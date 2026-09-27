@@ -1,6 +1,6 @@
 # API image, built from the repo root as context:
 #   docker build -f api/Dockerfile -t uofthub-api .
-# Railway builds it the same way (see railway.json).
+# Render builds it the same way (Dockerfile path api/Dockerfile, context the repo root).
 
 # Debian rather than Alpine: Prisma's schema engine links against OpenSSL, and
 # on musl it fails to load with a "Could not parse schema engine response" that

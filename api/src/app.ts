@@ -30,7 +30,7 @@ export async function buildApp() {
   // Request logs are the first thing you want in dev and production, and the
   // last thing you want interleaved with test output.
   //
-  // Behind Railway's proxy every connection comes from the proxy, so without
+  // Behind Render's proxy every connection comes from the proxy, so without
   // trusting it `request.ip` is one address for the whole site — and every
   // IP-keyed rate limit (sign-in above all) becomes one budget shared by
   // everybody. Only the nearest hop is trusted: X-Forwarded-For entries

@@ -287,7 +287,7 @@ SSE rather than WebSockets because the traffic only goes one way, it rides the s
 
 ## Error monitoring
 
-None for now — a decision still to make before launch. Errors go to the API's own logs (Railway keeps them); the web app has no error reporting. Clueline was wired into both halves and has been removed until it is needed again — its setup is in git history (`lib/monitoring.ts`, `lib/monitoring.tsx`). Adding any error reporter back means adding it to the third-party list on `/privacy` in the same commit.
+None for now — a decision still to make before launch. Errors go to the API's own logs (Render keeps them); the web app has no error reporting. Clueline was wired into both halves and has been removed until it is needed again — its setup is in git history (`lib/monitoring.ts`, `lib/monitoring.tsx`). Adding any error reporter back means adding it to the third-party list on `/privacy` in the same commit.
 
 ---
 
@@ -389,7 +389,7 @@ Two, in process. The **maintenance sweep** (`lib/maintenance.ts`) runs hourly an
 
 The two that existed before — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Other housekeeping that would need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
-`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, so there it is `pnpm grant-admin:prod <email>` from `/repo/api` (Railway: the service shell or `railway run`). See [Moderation](#moderation).
+`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, so there it is `pnpm grant-admin:prod <email>` from `/repo/api` (Render: the service's Shell tab or `render ssh`). See [Moderation](#moderation).
 
 On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update streams, closes the `LISTEN` connection and the query pool, and exits — or exits anyway after ten seconds.
 
@@ -415,7 +415,7 @@ On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update str
 | Email | Resend | Simple API, generous free tier; `api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
 | Tests | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
 | CI | GitHub Actions | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
-| Hosting (API + database) | Railway | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/` |
+| Hosting (API + database) | Render | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/` |
 | Hosting (web) | Cloudflare Pages | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard |
 
 ---
@@ -426,17 +426,17 @@ Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck`
 
 | Piece | Where | How |
 |---|---|---|
-| API | Railway service | Builds `api/Dockerfile` (repo root as context, per `railway.json`), healthcheck on `/health` |
-| Database | Railway Postgres | `DATABASE_URL` is injected by Railway; nothing else references the credentials |
+| API | Render web service (Docker) | Dockerfile path `api/Dockerfile`, Docker build context `.` (the repo root), health check path `/health` |
+| Database | Render Postgres | `DATABASE_URL` is set on the API service to the database's Internal Database URL; nothing else references the credentials |
 | Web | Cloudflare Pages | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
 
-**Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the deploy and Railway keeps the previous container serving.
+**Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the health check, and Render keeps the previous instance serving.
 
-**The API must live on a subdomain of the web domain** — `api.uofthub.com` alongside `uofthub.com`. The session cookie is `SameSite=Lax`, which browsers scope by registrable domain: a subdomain is same-site and the cookie rides along on every `credentials: 'include'` request, but an API on a different domain (a `*.railway.app` URL, say) is cross-site and the browser drops it. Every authenticated request would 401 with nothing obviously wrong in the code. Point a custom domain at the Railway service before treating auth as working.
+**The API must live on a subdomain of the web domain** — `api.uofthub.com` alongside `uofthub.com`. The session cookie is `SameSite=Lax`, which browsers scope by registrable domain: a subdomain is same-site and the cookie rides along on every `credentials: 'include'` request, but an API on a different domain (an `*.onrender.com` URL, say) is cross-site and the browser drops it. Every authenticated request would 401 with nothing obviously wrong in the code. Point a custom domain at the Render service before treating auth as working.
 
 Environment variables in production — see `api/.env.example` for the full list and shape:
 
-- `DATABASE_URL` — injected by Railway.
+- `DATABASE_URL` — the Render Postgres Internal Database URL (same region as the API).
 - `JWT_SECRET` — required; `buildApp()` refuses to boot in production without it rather than silently signing forgeable sessions.
 - `WEB_URL` — the site's origin. Drives both the CORS allowlist and the post-OAuth redirect, so a wrong value looks like "sign-in does nothing".
 - `API_URL` — this API's own public base, used to build avatar URLs.
@@ -445,15 +445,15 @@ Environment variables in production — see `api/.env.example` for the full list
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks.
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
 
-`PORT` is provided by Railway and read by `src/index.ts`; the server binds `0.0.0.0`.
+`PORT` is provided by Render and read by `src/index.ts`; the server binds `0.0.0.0`.
 
-`TRUST_PROXY_HOPS` — how many proxies sit in front of the API; defaults to 1 in production (Railway's), 0 otherwise. Without it every request appears to come from the proxy, and every IP-keyed rate limit — sign-in above all — becomes one budget for the whole site.
+`TRUST_PROXY_HOPS` — how many proxies sit in front of the API; defaults to 1 in production (Render's), 0 otherwise. Without it every request appears to come from the proxy, and every IP-keyed rate limit — sign-in above all — becomes one budget for the whole site.
 
 On Cloudflare Pages, set `VITE_API_URL` (the build reads it, and so do the Functions). `web/public/_headers` sets the Content-Security-Policy and the other response headers; the API sets its own in an `onSend` hook in `app.ts`.
 
 **Link previews** — the app is a single page, so a shared link would otherwise show the site's generic title. `web/functions/projects/[id].js`, a Pages Function, fetches `GET /projects/:id/share` (public projects only) and writes the project's title, pitch and cover into the page's head; `web/functions/sitemap.xml.js` lists every public project from `GET /projects/sitemap`. Nothing else is server-rendered.
 
-Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Railway may buffer them.
+Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Render may buffer them. It also means the API must run on a paid Render instance: free instances spin down when idle, which drops the live-update streams and stops the in-process maintenance sweep.
 
 There are no scheduled jobs to deploy separately: the one sweep runs inside the API process (see [Scheduled jobs](#scheduled-jobs)).
 

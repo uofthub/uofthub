@@ -104,7 +104,7 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         </p>
         <ul>
           <li>
-            <strong>Railway</strong> — runs the API and hosts the database. Everything above is
+            <strong>Render</strong> — runs the API and hosts the database. Everything above is
             stored there.
           </li>
           <li>
