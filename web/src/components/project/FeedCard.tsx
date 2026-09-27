@@ -6,6 +6,7 @@ import { campusShort } from '../../lib/campus'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
 import { actionTarget, cardAction } from '../../lib/outputs'
 import { courseOf, postedAt, timeShort, topicTags } from '../../lib/projectView'
+import { copyLink } from '../../lib/clipboard'
 import {
   Avatar,
   AvatarStack,
@@ -48,7 +49,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
     .filter(Boolean)
     .join(' · ')
 
-  const copy = () => navigator.clipboard?.writeText(`${window.location.origin}${href}`)
+  const copy = () => copyLink(`${window.location.origin}${href}`)
 
   return (
     <Card as="article" className="overflow-hidden">

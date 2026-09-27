@@ -28,6 +28,8 @@ import {
   Spinner,
   Stat,
   TextArea,
+  confirmAction,
+  toast,
 } from '../../components/ui'
 
 function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
@@ -53,6 +55,7 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orgs'] })
       navigate('/orgs', { replace: true })
+      toast('Group deleted.')
     },
   })
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -67,10 +70,13 @@ function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }
             variant="danger"
             className="mr-auto"
             disabled={remove.isPending}
-            onClick={() =>
-              confirm(
-                `Delete ${org.name}? Its page, events and member list go for good. Linked projects stay with their owners.`
-              ) && remove.mutate()
+            onClick={async () =>
+              (await confirmAction({
+                title: `Delete ${org.name}?`,
+                body: 'Its page, events and member list go for good. Linked projects stay with their owners.',
+                confirmLabel: 'Delete group',
+                danger: true,
+              })) && remove.mutate()
             }
           >
             Delete group
@@ -314,7 +320,13 @@ function MembersPanel({ org }: { org: OrgDetail }) {
                   <MenuItem
                     icon="trash"
                     danger
-                    onSelect={() => confirm(`Remove ${m.user.name}?`) && remove.mutate(m.userId)}
+                    onSelect={async () =>
+                      (await confirmAction({
+                        title: `Remove ${m.user.name}?`,
+                        confirmLabel: 'Remove',
+                        danger: true,
+                      })) && remove.mutate(m.userId)
+                    }
                     close={close}
                   >
                     Remove
@@ -416,7 +428,10 @@ function MembershipButton({ org }: { org: OrgDetail }) {
   })
   const leave = useMutation({
     mutationFn: () => api.orgs.removeMember(org.slug, user!.id),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh()
+      toast(`You left ${org.name}.`)
+    },
   })
   const error = [join, answer, leave].find((m) => m.isError)?.error
 
@@ -473,7 +488,12 @@ function MembershipButton({ org }: { org: OrgDetail }) {
           size="md"
           variant="ghost"
           icon="logout"
-          onClick={() => confirm(`Leave ${org.name}?`) && leave.mutate()}
+          onClick={async () =>
+            (await confirmAction({
+              title: `Leave ${org.name}?`,
+              confirmLabel: 'Leave group',
+            })) && leave.mutate()
+          }
           disabled={leave.isPending}
         >
           Leave group
@@ -648,8 +668,12 @@ export default function OrgPage() {
                                 iconOnly
                                 icon="trash"
                                 aria-label={`Delete ${a.title}`}
-                                onClick={() =>
-                                  confirm(`Delete ${a.title}?`) && removeActivity.mutate(a.id)
+                                onClick={async () =>
+                                  (await confirmAction({
+                                    title: `Delete ${a.title}?`,
+                                    confirmLabel: 'Delete',
+                                    danger: true,
+                                  })) && removeActivity.mutate(a.id)
                                 }
                               />
                             )}

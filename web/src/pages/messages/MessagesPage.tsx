@@ -28,6 +28,8 @@ import {
   Page,
   Spinner,
   TextArea,
+  confirmAction,
+  toast,
 } from '../../components/ui'
 import { ReportConversationDialog } from './ReportConversationDialog'
 
@@ -174,7 +176,15 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
     qc.invalidateQueries({ queryKey: ['messages', 'conversations'] })
     qc.invalidateQueries({ queryKey: ['messages', 'unread'] })
   }
-  const block = useMutation({ mutationFn: () => api.messages.block(userId), onSuccess: refresh })
+  const block = useMutation({
+    mutationFn: () => api.messages.block(userId),
+    onSuccess: () => {
+      refresh()
+      toast(`Blocked ${other.name}.`, {
+        action: { label: 'Undo', onClick: () => unblock.mutate() },
+      })
+    },
+  })
   const unblock = useMutation({
     mutationFn: () => api.messages.unblock(userId),
     onSuccess: refresh,
@@ -248,10 +258,13 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
               ) : (
                 <MenuItem
                   icon="eyeOff"
-                  onSelect={() =>
-                    confirm(
-                      `Block ${other.name}? Neither of you can message the other until you unblock them. They won’t be told.`
-                    ) && block.mutate()
+                  onSelect={async () =>
+                    (await confirmAction({
+                      title: `Block ${other.name}?`,
+                      body: 'Neither of you can message the other until you unblock them. They won’t be told.',
+                      confirmLabel: 'Block',
+                      danger: true,
+                    })) && block.mutate()
                   }
                   close={close}
                 >

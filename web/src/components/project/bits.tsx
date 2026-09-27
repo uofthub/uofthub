@@ -5,7 +5,7 @@ import type { ProjectStatus, ProjectType } from '@uofthub/types'
 import { api, type ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { PROJECT_STATUSES, PROJECT_TYPES } from '../../lib/projectMeta'
-import { Badge, Button, cx, Icon, Pill } from '../ui'
+import { Badge, Button, cx, Icon, Pill, toast } from '../ui'
 
 /**
  * The star and comment counts at the foot of a card. The star is the
@@ -136,7 +136,10 @@ export function SaveButton({
       setSaved(res.saved)
       qc.invalidateQueries({ queryKey: ['saved'] })
     },
-    onError: () => setSaved((s) => !s),
+    onError: () => {
+      setSaved((s) => !s)
+      toast.error('Couldn’t save that. Try again in a moment.')
+    },
   })
 
   return (

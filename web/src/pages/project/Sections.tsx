@@ -21,6 +21,8 @@ import {
   LinkButton,
   Panel,
   TextArea,
+  confirmAction,
+  toast,
 } from '../../components/ui'
 
 /* --------------------------------- updates --------------------------------- */
@@ -150,6 +152,7 @@ function VersionDialog({
       qc.invalidateQueries({ queryKey: ['project', project.id] })
       qc.invalidateQueries({ queryKey: ['versions', project.id] })
       onClose()
+      toast('Version restored.')
     },
   })
   return (
@@ -164,10 +167,12 @@ function VersionDialog({
             <Button
               variant="primary"
               disabled={restore.isPending}
-              onClick={() =>
-                confirm(
-                  'Put this version’s text, details, tags and references back? What is there now is saved as a new version first.'
-                ) && restore.mutate()
+              onClick={async () =>
+                (await confirmAction({
+                  title: 'Restore this version?',
+                  body: 'Its text, details, tags and references come back. What’s there now is saved as a new version first, so nothing is lost.',
+                  confirmLabel: 'Restore',
+                })) && restore.mutate()
               }
             >
               {restore.isPending ? 'Restoring…' : 'Restore this version'}
@@ -409,7 +414,13 @@ function CommentItem({
             <LinkButton
               className={commentAction}
               disabled={remove.isPending}
-              onClick={() => confirm('Delete this comment?') && remove.mutate()}
+              onClick={async () =>
+                (await confirmAction({
+                  title: 'Delete this comment?',
+                  confirmLabel: 'Delete',
+                  danger: true,
+                })) && remove.mutate()
+              }
             >
               Delete
             </LinkButton>

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, safeUrl, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
+import { copyLink } from '../../lib/clipboard'
 import { previewKindFor } from '../../lib/files'
 import { useFollow } from '../../lib/hooks'
 import {
@@ -29,6 +30,7 @@ import {
   Button,
   Card,
   Chip,
+  confirmAction,
   cx,
   ErrorText,
   Eyebrow,
@@ -37,6 +39,7 @@ import {
   Menu,
   MenuDivider,
   MenuItem,
+  toast,
   type AvatarPerson,
   type IconName,
 } from '../../components/ui'
@@ -213,6 +216,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
     mutationFn: () => api.projects.pin(project.id),
     onSuccess: () => {
       setPinError(null)
+      toast(project.pinnedAt ? 'Unpinned from your profile.' : 'Pinned to your profile.')
       refresh()
       qc.invalidateQueries({ queryKey: ['pinnedProjects'] })
     },
@@ -220,13 +224,19 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   })
   const remove = useMutation({
     mutationFn: () => api.projects.delete(project.id),
-    onSuccess: () => navigate(`/u/${project.ownerId}`),
+    onSuccess: () => {
+      navigate(`/u/${project.ownerId}`)
+      toast('Project deleted.')
+    },
   })
   // A credited collaborator can step off the project themself.
   const isCollaborator = !!user && project.collaborators.some((c) => c.user.id === user.id)
   const leave = useMutation({
     mutationFn: () => api.projects.removeCollaborator(project.id, user!.id),
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      refresh()
+      toast('You’ve left the project.')
+    },
   })
   const actionError = [remove, leave].find((m) => m.isError)?.error
 
@@ -350,11 +360,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         >
           {(close) => (
             <>
-              <MenuItem
-                icon="link"
-                onSelect={() => navigator.clipboard?.writeText(window.location.href)}
-                close={close}
-              >
+              <MenuItem icon="link" onSelect={() => copyLink(window.location.href)} close={close}>
                 Copy link
               </MenuItem>
               {/* Only listed work can be collected — see routes/collections.ts. */}
@@ -402,8 +408,13 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
                   <MenuItem
                     icon="trash"
                     danger
-                    onSelect={() =>
-                      confirm('Delete this project? This cannot be undone.') && remove.mutate()
+                    onSelect={async () =>
+                      (await confirmAction({
+                        title: 'Delete this project?',
+                        body: 'This can’t be undone.',
+                        confirmLabel: 'Delete project',
+                        danger: true,
+                      })) && remove.mutate()
                     }
                     close={close}
                   >
@@ -414,9 +425,12 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
               {isCollaborator && (
                 <MenuItem
                   icon="logout"
-                  onSelect={() =>
-                    confirm('Leave this project? You’ll no longer be credited on it.') &&
-                    leave.mutate()
+                  onSelect={async () =>
+                    (await confirmAction({
+                      title: 'Leave this project?',
+                      body: 'You’ll no longer be credited on it.',
+                      confirmLabel: 'Leave project',
+                    })) && leave.mutate()
                   }
                   close={close}
                 >

@@ -27,6 +27,8 @@ import {
   Spinner,
   Stat,
   UnderlineTabs,
+  confirmAction,
+  toast,
 } from '../../components/ui'
 import { AvatarEditor, EditProfileDialog, profileAvatar } from './ProfileEditors'
 
@@ -81,12 +83,26 @@ function ProfileLinks({ profile }: { profile: ProfileUser }) {
 /** Report and block, for somebody else's profile. */
 function ProfileMenu({ profile, onReport }: { profile: ProfileUser; onReport: () => void }) {
   const qc = useQueryClient()
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['profile', profile.id] })
+    qc.invalidateQueries({ queryKey: ['following'] })
+  }
   const toggle = useMutation({
     mutationFn: () =>
       profile.blockedByMe ? api.messages.unblock(profile.id) : api.messages.block(profile.id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['profile', profile.id] })
-      qc.invalidateQueries({ queryKey: ['following'] })
+      refresh()
+      if (profile.blockedByMe) return toast(`Unblocked ${profile.name}.`)
+      // Undo goes straight to unblock: the profile may not have refetched yet.
+      toast(`Blocked ${profile.name}.`, {
+        action: {
+          label: 'Undo',
+          onClick: () =>
+            api.messages
+              .unblock(profile.id)
+              .then(refresh, () => toast.error('Couldn’t unblock. Try again.')),
+        },
+      })
     },
   })
   return (
@@ -100,11 +116,14 @@ function ProfileMenu({ profile, onReport }: { profile: ProfileUser; onReport: ()
         <>
           <MenuItem
             icon="lock"
-            onSelect={() =>
+            onSelect={async () =>
               (profile.blockedByMe ||
-                confirm(
-                  `Block ${profile.name}? Neither of you will be able to message, comment on, react to or follow the other. They won’t be told.`
-                )) &&
+                (await confirmAction({
+                  title: `Block ${profile.name}?`,
+                  body: 'Neither of you will be able to message, comment on, react to or follow the other. They won’t be told.',
+                  confirmLabel: 'Block',
+                  danger: true,
+                }))) &&
               toggle.mutate()
             }
             close={close}

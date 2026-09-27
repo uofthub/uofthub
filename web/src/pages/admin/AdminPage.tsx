@@ -26,6 +26,7 @@ import {
   Spinner,
   TextArea,
   Toggle,
+  confirmAction,
 } from '../../components/ui'
 import { Decisions, QueueCard, Quote } from './QueueCard'
 
@@ -274,9 +275,13 @@ function UsersAdmin() {
                 size="sm"
                 variant="danger"
                 disabled={busy}
-                onClick={() =>
-                  confirm(`Suspend ${u.name}? They can read, but not post, comment or message.`) &&
-                  suspend.mutate(u.id)
+                onClick={async () =>
+                  (await confirmAction({
+                    title: `Suspend ${u.name}?`,
+                    body: 'They can still read, but not post, comment or message.',
+                    confirmLabel: 'Suspend',
+                    danger: true,
+                  })) && suspend.mutate(u.id)
                 }
               >
                 Suspend

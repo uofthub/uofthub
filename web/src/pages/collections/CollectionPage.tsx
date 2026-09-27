@@ -13,7 +13,17 @@ import {
   ProjectListRow,
   type CardLayout,
 } from '../../components/project'
-import { Avatar, Button, EmptyState, Page, PageLede, PageTitle, Spinner } from '../../components/ui'
+import {
+  Avatar,
+  Button,
+  EmptyState,
+  Page,
+  PageLede,
+  PageTitle,
+  Spinner,
+  confirmAction,
+  toast,
+} from '../../components/ui'
 
 /** One collection: who put it together, why, and the projects in it you can see. */
 export default function CollectionPage() {
@@ -41,6 +51,7 @@ export default function CollectionPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['collections'] })
       navigate('/collections')
+      toast('Collection deleted.')
     },
   })
 
@@ -86,10 +97,14 @@ export default function CollectionPage() {
                 variant="danger"
                 icon="trash"
                 disabled={destroy.isPending}
-                onClick={() => {
-                  if (window.confirm(`Delete “${data.title}”? The projects themselves stay.`))
-                    destroy.mutate()
-                }}
+                onClick={async () =>
+                  (await confirmAction({
+                    title: `Delete “${data.title}”?`,
+                    body: 'The projects in it stay where they are.',
+                    confirmLabel: 'Delete collection',
+                    danger: true,
+                  })) && destroy.mutate()
+                }
               >
                 Delete
               </Button>
