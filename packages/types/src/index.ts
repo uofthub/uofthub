@@ -13,6 +13,8 @@ export interface User {
   id: string
   email: string
   name: string
+  /** Their address: uofthub.com/@handle. */
+  handle: string
   faculty?: string
   campus?: Campus
   program?: string
@@ -113,6 +115,8 @@ export interface Project {
   id: string
   ownerId: string
   title: string
+  /** Its address under the owner's handle: uofthub.com/@handle/slug. Follows the title. */
+  slug: string
   /** The one line a card shows. */
   pitch?: string
   /** The overview, in Markdown. */
@@ -141,7 +145,7 @@ export interface Project {
   pinnedAt?: string
   createdAt: string
   updatedAt: string
-  owner?: Pick<User, 'id' | 'name' | 'faculty' | 'campus' | 'avatarUrl'>
+  owner?: Pick<User, 'id' | 'handle' | 'name' | 'faculty' | 'campus' | 'avatarUrl'>
 }
 
 export interface ProjectFile {
@@ -211,7 +215,13 @@ export interface OrgActivity {
 }
 
 export type ReportReason =
-  'SPAM' | 'HARASSMENT' | 'ACADEMIC_INTEGRITY' | 'INTELLECTUAL_PROPERTY' | 'PRIVACY' | 'OTHER'
+  | 'SPAM'
+  | 'HARASSMENT'
+  | 'ACADEMIC_INTEGRITY'
+  | 'INTELLECTUAL_PROPERTY'
+  | 'PRIVACY'
+  | 'IMPERSONATION'
+  | 'OTHER'
 
 /** `OPEN` until a moderator decides it; the rest are the decision taken. */
 export type ReportStatus = 'OPEN' | 'DISMISSED' | 'WARNED' | 'TAKEN_DOWN'
@@ -239,7 +249,7 @@ export interface Comment {
   editedAt?: string | null
   /** Deleted, but kept so its replies still read as a thread. Empty and anonymous. */
   deleted?: boolean
-  user?: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'> | null
+  user?: Pick<User, 'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty'> | null
   helpfulCount: number
   helpfulByMe: boolean
 }

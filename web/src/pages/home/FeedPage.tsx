@@ -23,6 +23,7 @@ import { Composer } from './Composer'
 import { RightRail } from './RightRail'
 import { LeftRail } from './LeftRail'
 import { Spotlight } from './Spotlight'
+import { profilePath } from '../../lib/paths'
 
 type FeedTab = 'following' | 'campus' | 'program'
 
@@ -127,7 +128,7 @@ export default function FeedPage() {
           icon="users"
           title="Add your faculty to see work from your program"
           action={
-            <Button variant="primary" to={`/u/${user?.id}`}>
+            <Button variant="primary" to={user ? profilePath(user) : '/session'}>
               Edit your profile
             </Button>
           }

@@ -6,6 +6,7 @@ import { api, type ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { REACTIONS } from '../../lib/reactions'
 import { cx, Icon, PillButton } from '../ui'
+import { projectPath } from '../../lib/paths'
 
 type Tally = { counts: Record<ReactionKind, number>; mine: ReactionKind[] }
 
@@ -79,7 +80,7 @@ export function ReactionBar({
       })}
       <PillButton
         as={Link}
-        to={`/projects/${project.id}#comments`}
+        to={`${projectPath(project)}#comments`}
         className={cx(compact && 'h-11')}
         aria-label={`${project._count.comments} comments`}
       >

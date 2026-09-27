@@ -48,13 +48,14 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
 const PROJECT_SELECT = {
   id: true,
+  slug: true,
   title: true,
   pitch: true,
   type: true,
   tags: true,
   publishedAt: true,
   updatedAt: true,
-  owner: { select: { id: true, name: true } },
+  owner: { select: { id: true, handle: true, name: true } },
 } as const
 
 /** A project anyone may see, or null — drafts, U of T-only and hidden alike. */
@@ -85,6 +86,9 @@ export async function projectShare(id: string) {
     tags: project.tags,
     ownerId: project.owner.id,
     ownerName: project.owner.name,
+    // Its address: /@ownerHandle/slug.
+    ownerHandle: project.owner.handle,
+    slug: project.slug,
     publishedAt: project.publishedAt,
     updatedAt: project.updatedAt,
     // The cover when there is one, through a stable address that signs a
@@ -115,6 +119,7 @@ async function confirmedUser(id: string) {
     where: { id, emailVerifiedAt: { not: null } },
     select: {
       id: true,
+      handle: true,
       name: true,
       program: true,
       faculty: true,
@@ -162,6 +167,7 @@ export async function userShare(id: string) {
   if (!user) return null
   return {
     name: user.name,
+    handle: user.handle,
     headline: headline(user) || null,
     bio: user.bio,
     campus: user.campus && CAMPUS_NAMES[user.campus],
@@ -196,7 +202,7 @@ export const userSitemap = () =>
       emailVerifiedAt: { not: null },
       ownedProjects: { some: listedProjectWhere(false) },
     },
-    select: { id: true, updatedAt: true },
+    select: { handle: true, updatedAt: true },
     orderBy: { createdAt: 'desc' },
     take: 10_000,
   })

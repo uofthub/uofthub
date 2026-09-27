@@ -62,6 +62,8 @@ const post = (body: unknown = {}): RequestInit => ({ method: 'POST', body: JSON.
 type ReportBody = { reason: ReportReason; details?: string }
 
 export type MeUser = User & {
+  /** When they last chose a handle; another is allowed 30 days on. */
+  handleChangedAt: string | null
   role: 'STUDENT' | 'FACULTY'
   isAdmin: boolean
   /** False for an account that only signs in with Microsoft. */
@@ -208,6 +210,7 @@ export type ProjectFields = {
 
 export type ProfileUser = {
   id: string
+  handle: string
   name: string
   faculty?: string
   campus?: Campus
@@ -226,9 +229,19 @@ export type ProfileUser = {
   _count: { ownedProjects: number; followers: number; following: number; collaborations: number }
   /** Whether the signed-in caller has blocked this person. */
   blockedByMe: boolean
+  /** Signed up with a @utoronto.ca address — faculty or staff, never a student. */
+  isFaculty: boolean
 }
 
-export type PersonSummary = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
+/** What a readable address names — see lib/paths.ts. */
+export type ResolvedPerson = { userId: string; handle: string }
+export type ResolvedProject = ResolvedPerson & { projectId: string; slug: string }
+
+/** Whether the caller could take a handle, as Settings asks while they type. */
+export type HandleCheck = { handle: string; available: boolean; problem: string | null }
+
+export type PersonSummary = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'> &
+  Partial<Pick<User, 'handle'>>
 
 /** A collection as a list shows it: a few covers and how many projects this reader can see. */
 export type CollectionSummary = {
@@ -378,7 +391,7 @@ export type Analytics = {
 
 /** Why one project reached this student's feed. See routes/feed.ts. */
 export type FeedReason =
-  | { kind: 'FOLLOWING'; userId: string; userName: string }
+  | { kind: 'FOLLOWING'; userId: string; userHandle: string; userName: string }
   | { kind: 'COURSE'; tag: string }
   | { kind: 'CAMPUS'; campus: Campus }
   | { kind: 'TRENDING' }
@@ -434,7 +447,7 @@ export type UpcomingEvent = OrgActivity & { org: { slug: string; name: string; c
 /** One person on a project, as its owner's People dialog lists them. */
 export type ProjectPerson = {
   userId: string
-  user: Pick<User, 'id' | 'name' | 'email' | 'avatarUrl' | 'faculty' | 'campus'>
+  user: Pick<User, 'id' | 'handle' | 'name' | 'email' | 'avatarUrl' | 'faculty' | 'campus'>
   /** What they did, as the owner put it: "Designer". */
   title: string | null
   invitedAt: string
@@ -487,7 +500,7 @@ export type OrgMember = {
   role: OrgRole
   status: OrgMemberStatus
   joinedAt: string
-  user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty'>
+  user: Pick<User, 'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty'>
 }
 
 /** A group that invited the signed-in student. */
@@ -507,8 +520,8 @@ export type OrgDetail = Org & {
   projects: {
     orgId: string
     projectId: string
-    project: Pick<Project, 'id' | 'title' | 'pitch' | 'description'> & {
-      owner: Pick<User, 'id' | 'name'>
+    project: Pick<Project, 'id' | 'slug' | 'title' | 'pitch' | 'description'> & {
+      owner: Pick<User, 'id' | 'handle' | 'name'>
       _count: { comments: number; reactions: number }
     }
   }[]
@@ -552,7 +565,7 @@ export type AdminReport = {
 }
 
 /** An account as the moderators' Users tab lists it. */
-export type AdminUser = Pick<User, 'id' | 'name' | 'email'> & {
+export type AdminUser = Pick<User, 'id' | 'handle' | 'name' | 'email'> & {
   createdAt: string
   isAdmin: boolean
   suspendedAt: string | null
@@ -785,6 +798,8 @@ export const api = {
       request<{ ok: boolean }>(`/admin/users/${userId}/suspend`, post({ note })),
     liftSuspension: (userId: string) =>
       request<{ ok: boolean }>(`/admin/users/${userId}/suspension`, { method: 'DELETE' }),
+    renameHandle: (userId: string, body: { handle: string }) =>
+      request<{ handle: string }>(`/admin/users/${userId}/handle`, post(body)),
     messageReports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminMessageReport[]>(`/admin/message-reports?status=${status}`),
     decideMessageReport: (id: string, body: { decision: MessageReportDecision; note?: string }) =>
@@ -876,8 +891,20 @@ export const api = {
         body: JSON.stringify(body),
       }),
   },
+  paths: {
+    person: (handle: string) => request<ResolvedPerson>(`/paths/${encodeURIComponent(handle)}`),
+    project: (handle: string, slug: string) =>
+      request<ResolvedProject>(`/paths/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`),
+  },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
+    checkHandle: (handle: string) =>
+      request<HandleCheck>(`/users/handle-check?handle=${encodeURIComponent(handle)}`),
+    setHandle: (handle: string) =>
+      request<{ handle: string }>('/users/me/handle', {
+        method: 'PUT',
+        body: JSON.stringify({ handle }),
+      }),
     projects: (id: string, params?: { skip?: number }) =>
       request<ProjectSummary[]>(paged(`/users/${id}/projects`, params?.skip)),
     pinned: (id: string) => request<ProjectSummary[]>(`/users/${id}/pinned`),

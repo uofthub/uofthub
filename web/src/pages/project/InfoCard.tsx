@@ -62,6 +62,7 @@ import {
   resolveOutputs,
   type ResolvedOutput,
 } from '../../lib/outputs'
+import { profilePath } from '../../lib/paths'
 
 type Open =
   | 'update'
@@ -87,11 +88,11 @@ function Maker({
   const follow = useFollow(person.id)
   return (
     <div className="flex items-center gap-3">
-      <Link to={`/u/${person.id}`} tabIndex={-1} aria-hidden="true">
+      <Link to={profilePath(person)} tabIndex={-1} aria-hidden="true">
         <Avatar person={person} size={44} />
       </Link>
       <div className="min-w-0 grow">
-        <Link to={`/u/${person.id}`} className="block text-15 font-semibold text-ink">
+        <Link to={profilePath(person)} className="block text-15 font-semibold text-ink">
           {person.name}
         </Link>
         {line && <div className="text-14 text-ink-3">{line}</div>}
@@ -225,7 +226,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
   const remove = useMutation({
     mutationFn: () => api.projects.delete(project.id),
     onSuccess: () => {
-      navigate(`/u/${project.ownerId}`)
+      navigate(profilePath({ id: project.ownerId, handle: project.owner?.handle }))
       toast('Project deleted.')
     },
   })

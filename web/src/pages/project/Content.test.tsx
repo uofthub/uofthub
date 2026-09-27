@@ -8,6 +8,7 @@ import { Contents, Overview, ProjectSections, References } from './Content'
 const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   id: 'p1',
   ownerId: 'owner-1',
+  slug: 'p1',
   title: 'Ferry times',
   tags: [],
   visibility: 'PUBLIC',

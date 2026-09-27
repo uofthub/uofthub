@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth'
 import { timeShort } from '../../lib/projectView'
 import { REACTIONS, reactionLabel } from '../../lib/reactions'
 import { Avatar, Button, Card, cx, Eyebrow, Heading, Icon, Panel } from '../ui'
+import { profilePath, projectPath } from '../../lib/paths'
 
 /** This week's views against last week's. No arrow before there is a last week. */
 function Delta({ now, before }: { now: number; before: number }) {
@@ -73,16 +74,16 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
         <ul className="flex flex-col gap-3.5">
           {comments.map((c) => (
             <li key={c.id} className="flex items-start gap-2.5">
-              <Link to={`/u/${c.user.id}`} tabIndex={-1} aria-hidden="true">
+              <Link to={profilePath(c.user)} tabIndex={-1} aria-hidden="true">
                 <Avatar person={c.user} size={compact ? 28 : 32} />
               </Link>
               <div className="min-w-0 grow">
                 <div className="text-14">
-                  <Link to={`/u/${c.user.id}`} className="font-semibold text-ink">
+                  <Link to={profilePath(c.user)} className="font-semibold text-ink">
                     {c.user.name}
                   </Link>{' '}
                   <span className="text-muted">on</span>{' '}
-                  <Link to={`/projects/${c.project.id}#comments`}>{c.project.title}</Link>
+                  <Link to={`${projectPath(c.project)}#comments`}>{c.project.title}</Link>
                   {!compact && <span className="text-muted"> · {timeShort(c.createdAt)}</span>}
                 </div>
                 <p className="mt-0.5 line-clamp-2 text-14 leading-[1.45] text-ink-3">{c.body}</p>
@@ -97,9 +98,9 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
         <p className="flex items-start gap-1.5 text-13 text-muted">
           <Icon name={REACTIONS.find((r) => r.kind === latest.kind)?.icon ?? 'star'} size={15} />
           <span>
-            Most recent reaction: <Link to={`/u/${latest.user.id}`}>{latest.user.name}</Link> —{' '}
+            Most recent reaction: <Link to={profilePath(latest.user)}>{latest.user.name}</Link> —{' '}
             {reactionLabel(latest.kind).toLowerCase()} on{' '}
-            <Link to={`/projects/${latest.project.id}`}>{latest.project.title}</Link>
+            <Link to={projectPath(latest.project)}>{latest.project.title}</Link>
           </span>
         </p>
       )}

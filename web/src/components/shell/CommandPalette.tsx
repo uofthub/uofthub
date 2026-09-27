@@ -7,6 +7,7 @@ import { GITHUB_URL } from '../../lib/site'
 import { useTheme } from '../../lib/theme'
 import { Card, cx, dialogPanel, Eyebrow, Icon, Scrim, type IconName } from '../ui'
 import { Kbd } from './Kbd'
+import { profilePath, projectPath } from '../../lib/paths'
 
 type Command = {
   id: string
@@ -78,7 +79,7 @@ function Palette({
               label: 'Your profile',
               icon: 'user' as IconName,
               group: 'Pages',
-              run: go(`/u/${user.id}`),
+              run: go(profilePath(user)),
             },
             {
               id: 'messages',
@@ -173,7 +174,7 @@ function Palette({
       hint: p.owner?.name,
       icon: 'layers',
       group: 'Projects',
-      run: go(`/projects/${p.id}`),
+      run: go(projectPath(p)),
     }))
 
     const q = query.trim().toLowerCase()

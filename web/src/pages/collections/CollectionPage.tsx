@@ -24,6 +24,7 @@ import {
   confirmAction,
   toast,
 } from '../../components/ui'
+import { profilePath } from '../../lib/paths'
 
 /** One collection: who put it together, why, and the projects in it you can see. */
 export default function CollectionPage() {
@@ -112,7 +113,7 @@ export default function CollectionPage() {
           )}
         </div>
         {data.description && <PageLede>{data.description}</PageLede>}
-        <Link to={`/u/${data.owner.id}`} className="flex items-center gap-2.5 text-14">
+        <Link to={profilePath(data.owner)} className="flex items-center gap-2.5 text-14">
           <Avatar person={data.owner} size={28} />
           <span>
             Curated by <b className="font-semibold">{data.owner.name}</b>

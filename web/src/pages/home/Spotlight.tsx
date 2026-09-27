@@ -3,6 +3,7 @@ import { api } from '../../lib/api'
 import { actionTarget, cardAction } from '../../lib/outputs'
 import { Cover } from '../../components/project'
 import { Banner, BannerKicker, Button } from '../../components/ui'
+import { projectPath } from '../../lib/paths'
 
 /** A button drawn onto the navy banner: outlined in its line colour, white text. */
 const ghost = 'border-navy-line bg-transparent text-white hover:bg-white/8 hover:text-white'
@@ -50,12 +51,12 @@ export function Spotlight() {
               {action.label}
             </Button>
           ) : (
-            <Button variant="gold" icon="chevronRight" to={`/projects/${project.id}`}>
+            <Button variant="gold" icon="chevronRight" to={projectPath(project)}>
               Take a look
             </Button>
           )}
           {action ? (
-            <Button to={`/projects/${project.id}`} className={ghost}>
+            <Button to={projectPath(project)} className={ghost}>
               Read about it
             </Button>
           ) : (

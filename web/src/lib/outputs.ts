@@ -2,6 +2,7 @@ import type { OutputKind, ProjectOutput } from '@uofthub/types'
 import type { IconName } from '../components/ui/Icon'
 import { safeUrl, type ProjectDetail, type ProjectSummary } from './api'
 import { linkRole, primaryAction, safeLinks } from './projectView'
+import { projectPath } from './paths'
 
 /**
  * What a project produced, as the page names it: the kind's label, its icon,
@@ -98,7 +99,7 @@ export function cardAction(
     const link = lead.linkId ? project.links.find((l) => l.id === lead.linkId) : undefined
     const href = link && safeUrl(link.url)
     if (href) return { label, icon, href }
-    if (lead.fileId) return { label, icon, to: `/projects/${project.id}?view=${lead.fileId}` }
+    if (lead.fileId) return { label, icon, to: `${projectPath(project)}?view=${lead.fileId}` }
   }
   const fromLinks = primaryAction(safeLinks(project.links))
   return fromLinks && { label: fromLinks.label, icon: fromLinks.icon, href: fromLinks.href }

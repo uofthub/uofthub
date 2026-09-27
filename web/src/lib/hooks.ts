@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { useAuth } from './auth'
@@ -11,6 +12,19 @@ export function useDocumentTitle(title?: string) {
   useEffect(() => {
     document.title = title ? `${title} · uofthub` : SITE_TITLE
   }, [title])
+}
+
+/**
+ * Moves the address bar to where the page lives now — an old /u/:id or
+ * /projects/:id link, a handle or title since changed, /@Ada for /@ada — once
+ * the page knows. Replaces rather than pushes, so Back doesn't bounce.
+ */
+export function useCanonicalPath(path: string | undefined) {
+  const { pathname, search, hash } = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (path && path !== pathname) navigate(`${path}${search}${hash}`, { replace: true })
+  }, [path, pathname, search, hash, navigate])
 }
 
 /**

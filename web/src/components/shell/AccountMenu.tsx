@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useTheme } from '../../lib/theme'
 import { Avatar, Menu, MenuDivider, MenuItem } from '../ui'
+import { profilePath } from '../../lib/paths'
 
 /**
  * The header avatar. The boards only show it as a link to the profile; it
@@ -36,7 +37,7 @@ export function AccountMenu() {
             <b>{user.name}</b>
             <span className="text-13 text-muted">{user.email}</span>
           </div>
-          <MenuItem icon="user" to={`/u/${user.id}`} close={close}>
+          <MenuItem icon="user" to={profilePath(user)} close={close}>
             Your profile
           </MenuItem>
           <MenuItem icon="settings" to="/settings" close={close}>

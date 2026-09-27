@@ -24,6 +24,7 @@ import {
   confirmAction,
   toast,
 } from '../../components/ui'
+import { profilePath } from '../../lib/paths'
 
 /* --------------------------------- updates --------------------------------- */
 
@@ -331,7 +332,11 @@ function CommentItem({
           onClose={() => setReporting(false)}
         />
       )}
-      <Link to={`/u/${comment.userId}`} tabIndex={-1} aria-hidden="true">
+      <Link
+        to={profilePath({ id: String(comment.userId), handle: comment.user?.handle })}
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         <Avatar
           person={{ id: comment.userId ?? undefined, name, avatarUrl: comment.user?.avatarUrl }}
           size={small ? 32 : 40}
@@ -339,7 +344,10 @@ function CommentItem({
       </Link>
       <div className="flex min-w-0 grow flex-col gap-1">
         <div className="text-14">
-          <Link to={`/u/${comment.userId}`} className="font-semibold text-ink">
+          <Link
+            to={profilePath({ id: String(comment.userId), handle: comment.user?.handle })}
+            className="font-semibold text-ink"
+          >
             {name}
           </Link>
           {author && (

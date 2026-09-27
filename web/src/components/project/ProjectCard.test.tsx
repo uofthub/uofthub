@@ -9,13 +9,14 @@ const project = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id: '11111111-2222-3333-4444-555555555555',
   ownerId: 'owner-1',
   title: 'Seatfinder',
+  slug: 'seatfinder',
   pitch: 'Live map of open study seats in Robarts.',
   description: '## What we built\nA floor-by-floor map.',
   tags: [],
   visibility: 'PUBLIC',
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
-  owner: { id: 'owner-1', name: 'Omar Haddad' },
+  owner: { id: 'owner-1', handle: 'omar-haddad', name: 'Omar Haddad' },
   links: [],
   collaborators: [],
   _count: { comments: 0 },
@@ -139,7 +140,7 @@ describe('ProjectCard', () => {
     show(project())
     expect(screen.getByRole('link', { name: 'Seatfinder' })).toHaveAttribute(
       'href',
-      '/projects/11111111-2222-3333-4444-555555555555'
+      '/@omar-haddad/seatfinder'
     )
   })
 

@@ -15,6 +15,7 @@ import TermsPage from './pages/info/TermsPage'
 import PrivacyPage from './pages/info/PrivacyPage'
 import NotFoundPage from './pages/info/NotFoundPage'
 import { HelpWantedPage, SavedPage } from './pages/lists/ListPages'
+import { PersonRoute, ProjectRoute } from './pages/paths/PathPages'
 
 // Pages most visits never open are loaded when first needed, which keeps them
 // out of the bundle every visitor downloads.
@@ -83,6 +84,11 @@ export default function App() {
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/messages/:userId" element={<MessagesPage />} />
             <Route path="/help-wanted" element={<HelpWantedPage />} />
+            {/* /@handle and /@handle/slug. React Router can't match a partial
+                segment, so these take any first segment the routes above
+                don't, and the page checks for the @. */}
+            <Route path="/:handle" element={<PersonRoute />} />
+            <Route path="/:handle/:slug" element={<ProjectRoute />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>

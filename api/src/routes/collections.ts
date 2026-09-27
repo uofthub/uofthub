@@ -27,7 +27,9 @@ const PREVIEW_COUNT = 3
 const PAGE_SIZE = 12
 const MAX_PAGE_SIZE = 50
 
-const OWNER = { select: { id: true, name: true, avatarUrl: true, campus: true } } as const
+const OWNER = {
+  select: { id: true, handle: true, name: true, avatarUrl: true, campus: true },
+} as const
 
 // Creating is cheap and each one is a public page, so it gets a budget.
 const writeRateLimit = { rateLimit: { max: 30, timeWindow: '10 minutes' } }

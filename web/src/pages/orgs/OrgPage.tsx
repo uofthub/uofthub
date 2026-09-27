@@ -31,6 +31,7 @@ import {
   confirmAction,
   toast,
 } from '../../components/ui'
+import { profilePath, projectPath } from '../../lib/paths'
 
 function EditOrgDialog({ org, onClose }: { org: OrgDetail; onClose: () => void }) {
   const qc = useQueryClient()
@@ -240,7 +241,10 @@ function MemberRow({
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      <Link to={`/u/${member.userId}`} className="flex min-w-0 grow items-center gap-2.5 text-ink">
+      <Link
+        to={profilePath({ id: member.userId, handle: member.user.handle })}
+        className="flex min-w-0 grow items-center gap-2.5 text-ink"
+      >
         <Avatar
           person={{ id: member.userId, name: member.user.name, avatarUrl: member.user.avatarUrl }}
           size={36}
@@ -719,7 +723,7 @@ export default function OrgPage() {
               org.projects.map(({ project }) => (
                 <Link
                   key={project.id}
-                  to={`/projects/${project.id}`}
+                  to={projectPath(project)}
                   className="flex items-start gap-3 text-ink hover:text-navy-ink"
                 >
                   <span className="flex flex-col gap-0.75">

@@ -189,6 +189,16 @@ describe('POST /auth/verify', () => {
     expect((await post('/auth/verify', { token })).statusCode).toBe(400)
   })
 
+  it('gives the account its handle only once the address is proven', async () => {
+    await register({ name: 'Ada Lovelace', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const where = { email: 'ada@mail.utoronto.ca' }
+    // Until then a placeholder nobody can choose, so a sign-up with somebody
+    // else's address can't squat their name.
+    expect((await db.user.findUniqueOrThrow({ where })).handle).toMatch(/^unconfirmed-/)
+    await post('/auth/verify', { token: sent.verify[0].token })
+    expect((await db.user.findUniqueOrThrow({ where })).handle).toBe('ada-lovelace')
+  })
+
   it('refuses a made-up token', async () => {
     expect((await post('/auth/verify', { token: 'nope' })).statusCode).toBe(400)
   })

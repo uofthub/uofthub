@@ -18,6 +18,7 @@ import {
 } from '../lib/visibility.js'
 import { coverUrls } from '../lib/covers.js'
 import { projectShare, projectCardPng } from '../lib/shareCards.js'
+import { claimProjectSlug, reslugProject, uniqueProjectSlug } from '../lib/handles.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
 import { safeExternalUrl } from '../lib/url.js'
 import {
@@ -468,7 +469,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   app.get('/sitemap', async () => {
     return db.project.findMany({
       where: listedProjectWhere(false),
-      select: { id: true, updatedAt: true },
+      select: { slug: true, updatedAt: true, owner: { select: { handle: true } } },
       orderBy: { publishedAt: 'desc' },
       take: 10_000,
     })
@@ -490,7 +491,14 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         collaborators: {
           include: {
             user: {
-              select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true },
+              select: {
+                id: true,
+                handle: true,
+                name: true,
+                avatarUrl: true,
+                faculty: true,
+                campus: true,
+              },
             },
           },
           orderBy: { invitedAt: 'asc' },
@@ -615,10 +623,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       safeLinks.push(link)
     }
 
+    const slug = await uniqueProjectSlug(db, request.user.sub, fields.title!)
+    await claimProjectSlug(db, request.user.sub, slug)
     const project = await db.project.create({
       data: {
         ownerId: request.user.sub,
         title: fields.title!,
+        slug,
         pitch: fields.pitch ?? undefined,
         description: fields.description ?? undefined,
         type: fields.type ?? undefined,
@@ -707,6 +718,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     try {
       updated = await db.$transaction(async (tx) => {
         if (outputs) orphanedThumbnails = await applyOutputs(tx, project.id, outputs.value)
+        // Its address follows its title; the old one keeps redirecting.
+        if (title !== undefined) await reslugProject(tx, project, title)
         if (fields.references) {
           await tx.projectReference.deleteMany({ where: { projectId: project.id } })
           if (fields.references.length)
@@ -960,7 +973,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const rows = await db.comment.findMany({
       where: { projectId: request.params.id },
       include: {
-        user: { select: { id: true, name: true, avatarUrl: true, faculty: true } },
+        user: { select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true } },
         _count: { select: { helpful: true } },
         ...(callerId ? { helpful: { where: { userId: callerId }, select: { userId: true } } } : {}),
       },
@@ -1079,7 +1092,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const comment = await db.comment.create({
         data: { projectId, userId, body, parentId: parent?.id },
-        include: { user: { select: { id: true, name: true, avatarUrl: true, faculty: true } } },
+        include: {
+          user: { select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true } },
+        },
       })
 
       // Unkeyed: every comment is new writing, and the owner wants all of them.
@@ -1244,6 +1259,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             user: {
               select: {
                 id: true,
+                handle: true,
                 name: true,
                 email: true,
                 avatarUrl: true,
@@ -1327,7 +1343,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
         update: { role: 'COLLABORATOR', accepted: false, title, invitedAt: new Date() },
         create: { projectId: project.id, userId: invitee.id, role: 'COLLABORATOR', title },
-        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        include: { user: { select: { id: true, handle: true, name: true, avatarUrl: true } } },
       })
 
       await notify(invitee.id, 'COLLABORATOR_INVITED', {
@@ -1892,7 +1908,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       const thirtyDaysAgo = startOfUtcDay(30)
       const sevenDaysAgo = startOfUtcDay(7)
       const fourteenDaysAgo = startOfUtcDay(14)
-      const person = { select: { id: true, name: true, avatarUrl: true, faculty: true } }
+      const person = {
+        select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true },
+      }
 
       const [dailyViews, reactionRows, collabInterest, recentReactions] = await Promise.all([
         db.projectDailyView.findMany({

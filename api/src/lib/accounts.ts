@@ -1,5 +1,6 @@
 import { db } from '../db/client.js'
 import { notify } from './notifications.js'
+import { isUnconfirmedHandle, withSuggestedHandle } from './handles.js'
 
 /**
  * What happens once an account's email address is proven — by Microsoft
@@ -9,10 +10,20 @@ import { notify } from './notifications.js'
  * pending invitations now, each announced the way it would have been had the
  * account existed. Only now, and not at sign-up: until the address is proven,
  * the account is not necessarily the person who was invited.
+ *
+ * So is the account's handle: until now it held a placeholder, so a sign-up
+ * with somebody else's address could not squat a name (see User.handle).
  */
 export async function onEmailVerified(userId: string): Promise<void> {
-  const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true, name: true, handle: true },
+  })
   if (!user) return
+  if (isUnconfirmedHandle(user.handle))
+    await withSuggestedHandle(user.name, (handle) =>
+      db.user.update({ where: { id: userId }, data: { handle } })
+    )
   const invites = await db.projectEmailInvite.findMany({
     where: { email: user.email },
     include: {

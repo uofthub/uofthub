@@ -11,6 +11,7 @@ import {
   sendVerificationEmail,
 } from '../lib/authEmails.js'
 import { onEmailVerified } from '../lib/accounts.js'
+import { unconfirmedHandle, withSuggestedHandle } from '../lib/handles.js'
 import { matchesDeclaredType } from '../lib/fileValidation.js'
 import { tenantAllowed, tenantOfIdToken } from '../lib/microsoftTenant.js'
 
@@ -153,7 +154,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
             ...(!existing.emailVerifiedAt && { emailVerifiedAt: new Date(), passwordHash: null }),
           },
         })
-      : await db.user.create({ data: { email, name, emailVerifiedAt: new Date() } })
+      : await withSuggestedHandle(name, (handle) =>
+          db.user.create({ data: { email, name, handle, emailVerifiedAt: new Date() } })
+        )
 
     if (!existing?.emailVerifiedAt) await onEmailVerified(user.id)
 
@@ -224,7 +227,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const passwordHash = await hashPassword(password)
       const user = existing
         ? await db.user.update({ where: { email }, data: { name, passwordHash } })
-        : await db.user.create({ data: { email, name, passwordHash } })
+        : await db.user.create({
+            data: { email, name, passwordHash, handle: unconfirmedHandle() },
+          })
 
       await sendVerificationEmail(email, name, await issueToken(user.id, 'VERIFY_EMAIL'))
       return reply.code(202).send(CHECK_EMAIL)
@@ -452,6 +457,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         id: true,
         email: true,
         name: true,
+        handle: true,
+        handleChangedAt: true,
         faculty: true,
         campus: true,
         program: true,

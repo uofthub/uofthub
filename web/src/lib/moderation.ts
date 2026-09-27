@@ -27,6 +27,19 @@ export const REPORT_REASONS: { value: ReportReason; label: string; short: string
   { value: 'OTHER', label: 'Something else', short: 'Other' },
 ]
 
+const IMPERSONATION = {
+  value: 'IMPERSONATION' as const,
+  label: 'Impersonation — pretending to be someone they are not',
+  short: 'Impersonation',
+}
+
+/**
+ * What a profile can be reported for: passing as somebody else first — a
+ * handle or a name borrowed from a professor, a club, another student. A
+ * moderator can rename the handle and free it for its rightful owner.
+ */
+export const PROFILE_REPORT_REASONS: typeof REPORT_REASONS = [IMPERSONATION, ...REPORT_REASONS]
+
 /**
  * What a conversation can be reported for — the reasons that make sense for
  * messages, in the order the dialog offers them. Shares the enum, so the
@@ -40,7 +53,7 @@ export const MESSAGE_REPORT_REASONS: { value: ReportReason; label: string }[] = 
 ]
 
 export const reasonShort = (reason: ReportReason) =>
-  REPORT_REASONS.find((r) => r.value === reason)?.short ?? reason
+  PROFILE_REPORT_REASONS.find((r) => r.value === reason)?.short ?? reason
 
 export const STATUS_LABELS: Record<ReportStatus, string> = {
   OPEN: 'Open',

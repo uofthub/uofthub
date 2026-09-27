@@ -33,7 +33,7 @@ const MAX_PAGE_SIZE = 50
 const TAG_SOURCE_LIMIT = 50
 
 type FeedReason =
-  | { kind: 'FOLLOWING'; userId: string; userName: string }
+  | { kind: 'FOLLOWING'; userId: string; userHandle: string; userName: string }
   | { kind: 'COURSE'; tag: string }
   | { kind: 'CAMPUS'; campus: Campus }
   | { kind: 'TRENDING' }
@@ -127,12 +127,17 @@ function reasonFor(
     ownerId: string
     tags: string[]
     courseCode: string | null
-    owner: { id: string; name: string; campus: Campus | null } | null
+    owner: { id: string; handle: string; name: string; campus: Campus | null } | null
   },
   affinity: Affinity
 ): FeedReason {
   if (project.owner && affinity.followeeIds.has(project.ownerId)) {
-    return { kind: 'FOLLOWING', userId: project.owner.id, userName: project.owner.name }
+    return {
+      kind: 'FOLLOWING',
+      userId: project.owner.id,
+      userHandle: project.owner.handle,
+      userName: project.owner.name,
+    }
   }
 
   if (project.courseCode && affinity.courses.includes(project.courseCode))
@@ -272,7 +277,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     const others = { userId: { not: userId } }
     const since = startOfUtcDay(7)
     const previously = startOfUtcDay(14)
-    const person = { select: { id: true, name: true, avatarUrl: true } }
+    const person = { select: { id: true, handle: true, name: true, avatarUrl: true } }
     const project = { select: { id: true, title: true } }
 
     const [

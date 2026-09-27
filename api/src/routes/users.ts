@@ -27,12 +27,22 @@ import {
 } from '../lib/profile.js'
 import { safeExternalUrl, safeGithubUrl, safeLinkedInUrl } from '../lib/url.js'
 import { userCardPng, userShare, userSitemap } from '../lib/shareCards.js'
+import {
+  changeHandle,
+  HandleError,
+  handleAvailable,
+  handleProblem,
+  normalizeHandle,
+} from '../lib/handles.js'
+import { roleFor } from '../lib/session.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
 
 const ME_SELECT = {
   id: true,
   email: true,
   name: true,
+  handle: true,
+  handleChangedAt: true,
   faculty: true,
   campus: true,
   program: true,
@@ -79,6 +89,35 @@ function optionalText(raw: unknown, max: number): string | null | undefined | fa
 const avatarRateLimit = { rateLimit: { max: 10, timeWindow: '10 minutes' } }
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
+  // GET /users/handle-check?handle= — whether the caller could take a handle,
+  // for the Settings field to answer as they type
+  app.get<{ Querystring: { handle?: string } }>(
+    '/handle-check',
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      const handle = normalizeHandle(request.query.handle)
+      const problem = handleProblem(handle)
+      if (problem) return { handle, available: false, problem }
+      const available = await handleAvailable(handle, request.user.sub)
+      return { handle, available, problem: available ? null : 'That handle is taken' }
+    }
+  )
+
+  // PUT /users/me/handle — { handle } choose a new handle. The old one keeps
+  // redirecting here until somebody else takes it; see lib/handles.ts.
+  app.put<{ Body: { handle?: string } }>(
+    '/me/handle',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      try {
+        return { handle: await changeHandle(request.user.sub, request.body?.handle) }
+      } catch (err) {
+        if (err instanceof HandleError) return reply.code(err.status).send({ error: err.message })
+        throw err
+      }
+    }
+  )
+
   // GET /users/sitemap — the profiles a search engine should list
   app.get('/sitemap', async () => userSitemap())
 
@@ -106,6 +145,9 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.params.id },
       select: {
         id: true,
+        handle: true,
+        // Only to tell faculty and staff from students; never sent.
+        email: true,
         name: true,
         faculty: true,
         campus: true,
@@ -146,8 +188,12 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
             .then(Boolean)
         : false,
     ])
+    const { email, ...profile } = user
     return {
-      ...user,
+      ...profile,
+      // From the address's domain, which nobody can set: what tells a real
+      // professor from a student who named themselves after one.
+      isFaculty: roleFor(email) === 'FACULTY',
       _count: { ...user._count, ownedProjects, collaborations },
       blockedByMe,
     }
@@ -167,7 +213,14 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           select: {
             createdAt: true,
             [direction === 'followers' ? 'follower' : 'following']: {
-              select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true },
+              select: {
+                id: true,
+                handle: true,
+                name: true,
+                avatarUrl: true,
+                faculty: true,
+                campus: true,
+              },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -290,7 +343,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
           select: {
             id: true,
             title: true,
-            owner: { select: { id: true, name: true, avatarUrl: true } },
+            owner: { select: { id: true, handle: true, name: true, avatarUrl: true } },
           },
         },
       },
@@ -719,7 +772,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: 'A valid reason is required' })
       const user = await db.user.findUnique({
         where: { id: request.params.id },
-        select: { id: true, name: true, bio: true },
+        select: { id: true, handle: true, name: true, bio: true },
       })
       if (!user) return reply.code(404).send({ error: 'Not found' })
       const report = await fileReport({

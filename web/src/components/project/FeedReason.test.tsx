@@ -5,7 +5,12 @@ import type { FeedReason as Reason } from '../../lib/api'
 import { reasonToShow } from '../../lib/feedReason'
 import { FeedReason } from './FeedReason'
 
-const following: Reason = { kind: 'FOLLOWING', userId: 'u1', userName: 'Priya Nair' }
+const following: Reason = {
+  kind: 'FOLLOWING',
+  userId: 'u1',
+  userHandle: 'priya-nair',
+  userName: 'Priya Nair',
+}
 const course: Reason = { kind: 'COURSE', tag: 'CSC343' }
 const campus: Reason = { kind: 'CAMPUS', campus: 'UTSG' }
 const trending: Reason = { kind: 'TRENDING' }
@@ -37,7 +42,9 @@ describe('FeedReason', () => {
         <FeedReason reason={course} />
       </MemoryRouter>
     )
-    expect(screen.getByRole('link', { name: 'Priya Nair' }).getAttribute('href')).toBe('/u/u1')
+    expect(screen.getByRole('link', { name: 'Priya Nair' }).getAttribute('href')).toBe(
+      '/@priya-nair'
+    )
     expect(screen.getByRole('link', { name: 'CSC343' }).getAttribute('href')).toBe(
       '/explore?course=CSC343'
     )

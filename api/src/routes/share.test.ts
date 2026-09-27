@@ -73,8 +73,8 @@ describe('profile previews', () => {
     await createProject(drafter.id, { visibility: 'UOFT' })
 
     const sitemap = (await get('/users/sitemap')).json()
-    expect(sitemap.map((u: { id: string }) => u.id)).toEqual([maker.id])
-    expect(sitemap.map((u: { id: string }) => u.id)).not.toContain(lurker.id)
+    expect(sitemap.map((u: { handle: string }) => u.handle)).toEqual([maker.handle])
+    expect(sitemap.map((u: { handle: string }) => u.handle)).not.toContain(lurker.handle)
   })
 })
 

@@ -169,6 +169,6 @@ describe('link previews and the sitemap', () => {
     ).toBe(404)
 
     const sitemap = (await app.inject({ method: 'GET', url: '/projects/sitemap' })).json()
-    expect(sitemap.map((p: { id: string }) => p.id)).toEqual([open.id])
+    expect(sitemap.map((p: { slug: string }) => p.slug)).toEqual([open.slug])
   })
 })

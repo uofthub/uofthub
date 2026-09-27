@@ -25,9 +25,9 @@ export async function onRequest({ request, env }) {
     entry('/help-wanted'),
     entry('/orgs'),
     entry('/about'),
-    ...projects.map((p) => entry(`/projects/${encodeURIComponent(p.id)}`, p.updatedAt)),
+    ...projects.map((p) => entry(`/@${p.owner.handle}/${p.slug}`, p.updatedAt)),
     ...orgs.map((o) => entry(`/orgs/${encodeURIComponent(o.slug)}`)),
-    ...users.map((u) => entry(`/u/${encodeURIComponent(u.id)}`, u.updatedAt)),
+    ...users.map((u) => entry(`/@${u.handle}`, u.updatedAt)),
   ]
   return new Response(
     `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`,

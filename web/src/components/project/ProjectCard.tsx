@@ -5,6 +5,7 @@ import { courseOf, makersLabel } from '../../lib/projectView'
 import { AvatarStack, Card, CardGrid, Chip, Icon, type AvatarPerson } from '../ui'
 import { Cover, CoverTag } from './Cover'
 import { CardTop, HelpNeeded, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
+import { projectPath } from '../../lib/paths'
 
 /** The owner first, then everyone credited alongside them. */
 function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, maker?: AvatarPerson) {
@@ -44,7 +45,7 @@ export function ProjectCard({
   maker?: AvatarPerson
   coverHeight?: number
 }) {
-  const href = `/projects/${project.id}`
+  const href = projectPath(project)
   const makers = makersOf(project, maker)
   const course = courseOf(project)
   const group = project.orgProjects?.[0]?.org
@@ -100,7 +101,7 @@ export function ProjectListRow({
   project: ProjectSummary
   maker?: AvatarPerson
 }) {
-  const href = `/projects/${project.id}`
+  const href = projectPath(project)
   const makers = makersOf(project, maker)
   const course = courseOf(project)
 

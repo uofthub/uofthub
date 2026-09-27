@@ -4,7 +4,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, type ProfileUser } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { campusShort } from '../../lib/campus'
-import { useDocumentTitle, useFollow } from '../../lib/hooks'
+import { useCanonicalPath, useDocumentTitle, useFollow } from '../../lib/hooks'
+import { profilePath } from '../../lib/paths'
 import { countTags, coursesOf } from '../../lib/queries'
 import { WeekActivity } from '../../components/activity/WeekActivity'
 import { ProjectCard, ProjectListRow, ReportDialog } from '../../components/project'
@@ -175,7 +176,7 @@ function FollowListDialog({
           {people.map((p) => (
             <li key={p.id}>
               <Link
-                to={`/u/${p.id}`}
+                to={profilePath(p)}
                 onClick={onClose}
                 className="flex items-center gap-3 text-ink"
               >
@@ -195,8 +196,10 @@ function FollowListDialog({
 }
 
 /** The Profile board. */
-export default function ProfilePage() {
-  const { id } = useParams<{ id: string }>()
+/** A profile, by `id` — given by the /@handle route, or from /u/:id. */
+export default function ProfilePage({ id: resolved }: { id?: string }) {
+  const params = useParams<{ id: string }>()
+  const id = resolved ?? params.id
   const { user: me } = useAuth()
   const [editing, setEditing] = useState(false)
   const [section, setSection] = useState<Section>('projects')
@@ -239,6 +242,7 @@ export default function ProfilePage() {
     enabled: !!id,
   })
   useDocumentTitle(profile?.name)
+  useCanonicalPath(profile && profilePath(profile))
 
   if (isLoading) return <Spinner />
   if (!profile) {
@@ -301,11 +305,23 @@ export default function ProfilePage() {
             <h1 className="font-display text-30 leading-[1.1] font-bold tracking-tightest md:text-40">
               {profile.name}
             </h1>
-            {/* Every account signed up with a U of T address; the API checks. */}
-            <Chip size="sm" tone="navy" icon="shieldCheck" className="h-6.5 font-semibold">
-              U of T verified
-            </Chip>
+            {/* Every account signed up with a U of T address; the API checks.
+                Which address — @utoronto.ca or @mail.utoronto.ca — is what
+                tells faculty from students, and nobody can set it: a student
+                who names themselves after a professor still reads as one. */}
+            <span
+              title={
+                profile.isFaculty
+                  ? 'Signed up with a @utoronto.ca address'
+                  : 'Signed up with a U of T student address'
+              }
+            >
+              <Chip size="sm" tone="navy" icon="shieldCheck" className="h-6.5 font-semibold">
+                {profile.isFaculty ? 'U of T faculty & staff' : 'U of T verified'}
+              </Chip>
+            </span>
           </div>
+          <div className="text-15 text-muted">@{profile.handle}</div>
           {(line.length > 0 || profile.campus) && (
             <div className="flex flex-wrap items-center gap-1.5 text-16 text-ink-3">
               {line.join(' · ')}

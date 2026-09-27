@@ -22,6 +22,7 @@ import {
   SuccessText,
   TextArea,
 } from '../../components/ui'
+import { profilePath } from '../../lib/paths'
 
 /** A list of things the owner can remove or toggle, one outlined row each. */
 function ManageList({ children }: { children: ReactNode }) {
@@ -360,7 +361,10 @@ function PersonRow({
       icon={<Avatar person={person.user} size={32} />}
       action={<span className="flex gap-1.5">{children}</span>}
     >
-      <Link to={`/u/${person.userId}`} className="text-14 font-semibold text-ink">
+      <Link
+        to={profilePath({ id: person.userId, handle: person.user.handle })}
+        className="text-14 font-semibold text-ink"
+      >
         {person.user.name}
       </Link>
       <span className="text-13 text-muted">{[person.title, note].filter(Boolean).join(' · ')}</span>
@@ -668,7 +672,7 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
               {data.collabInterest.map(({ user, createdAt }) => (
                 <Link
                   key={user.id}
-                  to={`/u/${user.id}`}
+                  to={profilePath(user)}
                   className="flex items-center gap-2.5 text-ink"
                 >
                   <Avatar person={user} size={32} />
@@ -691,7 +695,7 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
               {data.recentReactions.map((r) => (
                 <Link
                   key={`${r.user.id}-${r.kind}`}
-                  to={`/u/${r.user.id}`}
+                  to={profilePath(r.user)}
                   className="flex items-center gap-2 text-14 text-ink-3"
                 >
                   <Avatar person={r.user} size={26} />

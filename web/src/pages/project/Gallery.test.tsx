@@ -7,6 +7,7 @@ import { Gallery } from './Gallery'
 const project = (overrides: Partial<ProjectDetail> = {}): ProjectDetail => ({
   id: 'p1',
   ownerId: 'owner-1',
+  slug: 'p1',
   title: 'Mussels downstream',
   tags: [],
   visibility: 'PUBLIC',

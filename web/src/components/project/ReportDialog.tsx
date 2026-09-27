@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import type { ReportReason } from '@uofthub/types'
 import { api } from '../../lib/api'
-import { REPORT_REASONS } from '../../lib/moderation'
+import { PROFILE_REPORT_REASONS, REPORT_REASONS } from '../../lib/moderation'
 import { Button, Dialog, ErrorText, Field, Select, SuccessText, TextArea } from '../ui'
 
 /** What can be reported, and where each kind goes. */
@@ -37,7 +37,8 @@ function sendReport(target: ReportTarget, body: { reason: ReportReason; details?
 }
 
 export function ReportDialog({ target, onClose }: { target: ReportTarget; onClose: () => void }) {
-  const [reason, setReason] = useState<ReportReason>(REPORT_REASONS[0].value)
+  const reasons = target.kind === 'user' ? PROFILE_REPORT_REASONS : REPORT_REASONS
+  const [reason, setReason] = useState<ReportReason>(reasons[0].value)
   const [details, setDetails] = useState('')
   const send = useMutation({
     mutationFn: () => sendReport(target, { reason, details: details.trim() || undefined }),
@@ -67,7 +68,7 @@ export function ReportDialog({ target, onClose }: { target: ReportTarget; onClos
         <>
           <Field label="What is wrong with it?">
             <Select value={reason} onChange={(e) => setReason(e.target.value as ReportReason)}>
-              {REPORT_REASONS.map((r) => (
+              {reasons.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>

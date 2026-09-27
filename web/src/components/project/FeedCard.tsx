@@ -26,6 +26,7 @@ import { ReactionBar } from './ReactionBar'
 import { ReportDialog } from './ReportDialog'
 import { FeedReason } from './FeedReason'
 import { AddToCollectionDialog } from '../collection'
+import { profilePath, projectPath } from '../../lib/paths'
 
 /**
  * The home feed's project article: who, when, a big cover, what it is, and
@@ -38,7 +39,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
   const phone = useMediaQuery(PHONE)
   const [reporting, setReporting] = useState(false)
   const [collecting, setCollecting] = useState(false)
-  const href = `/projects/${project.id}`
+  const href = projectPath(project)
   const owner = project.owner
   const partners = project.collaborators.map((c) => c.user)
   const course = courseOf(project)
@@ -74,21 +75,21 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
           (partners.length > 0 && !phone ? (
             <AvatarStack people={[owner, ...partners]} size={40} max={2} />
           ) : (
-            <Link to={`/u/${owner.id}`} tabIndex={-1} aria-hidden="true">
+            <Link to={profilePath(owner)} tabIndex={-1} aria-hidden="true">
               <Avatar person={owner} size={phone ? 36 : 40} />
             </Link>
           ))}
         <div className="flex min-w-0 grow flex-col gap-0.5">
           {owner && (
             <div className="min-w-0 text-14 font-semibold text-ink md:text-15">
-              <Link to={`/u/${owner.id}`} className={titleLink}>
+              <Link to={profilePath(owner)} className={titleLink}>
                 {owner.name}
               </Link>
               {partners.length > 0 && (
                 <>
                   <span className="font-normal text-muted"> and </span>
                   {partners.length === 1 ? (
-                    <Link to={`/u/${partners[0].id}`} className={titleLink}>
+                    <Link to={profilePath(partners[0])} className={titleLink}>
                       {partners[0].name}
                     </Link>
                   ) : (

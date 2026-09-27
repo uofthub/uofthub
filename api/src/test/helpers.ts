@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Visibility, ProjectType, ProjectStatus } from '@prisma/client'
 import { buildApp } from '../app.js'
 import { db } from '../db/client.js'
+import { unconfirmedHandle, uniqueProjectSlug } from '../lib/handles.js'
 
 /**
  * Shared scaffolding for the route tests. Requests go through
@@ -59,6 +60,7 @@ export async function createUser(
     data: {
       email: overrides.email ?? `student${seq}@mail.utoronto.ca`,
       name: overrides.name ?? `Student ${seq}`,
+      handle: overrides.verified === false ? unconfirmedHandle() : `student-${seq}`,
       isAdmin: overrides.isAdmin ?? false,
       faculty: faculty ? 'Arts & Science' : undefined,
       // Confirmed unless a test says otherwise — the state every account a
@@ -130,10 +132,12 @@ export async function createProject(
   const announced =
     overrides.announcedAt !== undefined ? overrides.announcedAt : hidden ? null : published
 
+  const title = overrides.title ?? `Project ${seq}`
   const project = await db.project.create({
     data: {
       ownerId,
-      title: overrides.title ?? `Project ${seq}`,
+      title,
+      slug: await uniqueProjectSlug(db, ownerId, title),
       pitch: overrides.pitch,
       type: overrides.type,
       status: overrides.status,

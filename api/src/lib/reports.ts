@@ -20,6 +20,7 @@ export const REPORT_REASONS = [
   'ACADEMIC_INTEGRITY',
   'INTELLECTUAL_PROPERTY',
   'PRIVACY',
+  'IMPERSONATION',
   'OTHER',
 ] as const satisfies readonly ReportReason[]
 

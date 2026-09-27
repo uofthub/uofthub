@@ -32,6 +32,7 @@ import {
   toast,
 } from '../../components/ui'
 import { ReportConversationDialog } from './ReportConversationDialog'
+import { profilePath } from '../../lib/paths'
 
 const MESSAGE_MAX = 2000
 
@@ -228,7 +229,7 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
             aria-label="All messages"
           />
         )}
-        <Link to={`/u/${other.id}`} className="flex min-w-0 items-center gap-3">
+        <Link to={profilePath(other)} className="flex min-w-0 items-center gap-3">
           <Avatar person={other} size={40} />
           <span className="flex min-w-0 flex-col">
             <b className="font-semibold text-ink">{other.name}</b>

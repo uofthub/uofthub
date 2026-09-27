@@ -160,6 +160,8 @@ enum ReportReason {
   ACADEMIC_INTEGRITY
   INTELLECTUAL_PROPERTY
   PRIVACY
+  /// A profile passing itself off as somebody else.
+  IMPERSONATION
   OTHER
 }
 
@@ -174,6 +176,14 @@ model User {
   id                   String    @id @default(uuid())
   email                String    @unique
   name                 String
+  /// The profile's address, uofthub.com/@handle — lowercase, rules in
+  /// lib/handles.ts. An unconfirmed account holds `unconfirmed-<uuid>` instead:
+  /// longer than any handle can be, so nobody can pick it, and a sign-up with
+  /// somebody else's address can't squat a name. It gets a real one from its
+  /// name when the address is confirmed (lib/accounts.ts).
+  handle               String    @unique
+  /// When the student last chose a new handle; they may again 30 days later.
+  handleChangedAt      DateTime?
   /// scrypt hash; null for accounts that only ever signed in with Microsoft.
   passwordHash         String?
   /// When the student proved they own `email` — by signing in with Microsoft
@@ -266,6 +276,37 @@ model User {
   emailInvitesSent       ProjectEmailInvite[]  @relation("EmailInvitesSent")
   versionsAuthored       ProjectVersion[]
   pushSubscriptions      PushSubscription[]
+  handleHistory          HandleHistory[]
+  projectSlugHistory     ProjectSlugHistory[]
+}
+
+/// A handle somebody used to have. It keeps redirecting to them until
+/// somebody else takes it, as a handle given up on GitHub does; then the row
+/// goes, and the handle is the new owner's.
+model HandleHistory {
+  handle    String   @id
+  userId    String
+  retiredAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A slug one of the owner's projects used to have, before its title changed.
+/// uofthub.com/@handle/old-slug keeps redirecting to it until another of their
+/// projects takes the slug.
+model ProjectSlugHistory {
+  ownerId   String
+  slug      String
+  projectId String
+  retiredAt DateTime @default(now())
+
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, slug])
+  @@index([projectId])
 }
 
 enum AuthTokenKind {
@@ -294,6 +335,10 @@ model Project {
   id              String         @id @default(uuid())
   ownerId         String
   title           String
+  /// Its address under the owner's handle, uofthub.com/@handle/slug: the
+  /// title, slugged, unique among the owner's projects. Follows the title;
+  /// old ones redirect (ProjectSlugHistory). See lib/handles.ts.
+  slug            String
   /// The one line a card shows. Separate from the description (the story) so
   /// a card never has to guess where one ends — see the project_fields
   /// migration for how existing descriptions were split.
@@ -376,7 +421,9 @@ model Project {
   followers       ProjectFollow[]
   collectionItems CollectionItem[]
   emailInvites    ProjectEmailInvite[]
+  slugHistory     ProjectSlugHistory[]
 
+  @@unique([ownerId, slug])
   /// The directory's default read: visible projects, newest first.
   @@index([visibility, createdAt])
   /// A profile's project list, and the owner check in visibleProjectWhere.
@@ -398,30 +445,30 @@ model Project {
 }
 
 model Report {
-  id           String       @id @default(uuid())
-  reporterId   String
-  targetType   ReportTarget @default(PROJECT)
+  id            String       @id @default(uuid())
+  reporterId    String
+  targetType    ReportTarget @default(PROJECT)
   /// The project reported, or the project a reported comment is on.
-  projectId    String?
-  commentId    String?
-  collectionId String?
-  activityId   String?
+  projectId     String?
+  commentId     String?
+  collectionId  String?
+  activityId    String?
   /// Whoever posted what is reported — the one a warning or a suspension is
   /// for. For a reported profile, that person.
   subjectUserId String?
   /// What was reported, as it read when it was reported — a comment or an
   /// event can be edited or deleted before a moderator gets to it.
-  excerpt      String?
-  reason       ReportReason
+  excerpt       String?
+  reason        ReportReason
   /// Optional free text from the reporter — the reason enum is what the queue
   /// sorts on, this is the context a moderator actually needs to decide.
-  details      String?
-  status       ReportStatus @default(OPEN)
-  createdAt    DateTime     @default(now())
+  details       String?
+  status        ReportStatus @default(OPEN)
+  createdAt     DateTime     @default(now())
   /// Set together when a moderator decides the report.
-  reviewedAt   DateTime?
-  reviewedById String?
-  reviewNote   String?
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewNote    String?
 
   reporter   User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reviewedBy User?        @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
@@ -672,14 +719,14 @@ model ProjectReaction {
 }
 
 model Comment {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   projectId String
   userId    String
   /// Set on a reply. One level only: a reply to a reply is filed under the
   /// same top-level comment (see POST /projects/:id/comments).
   parentId  String?
   body      String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   /// Set when its author edits it; the thread says "edited".
   editedAt  DateTime?
   /// Set when a comment that has replies is deleted: its text is cleared and
@@ -724,26 +771,26 @@ model Follow {
 }
 
 model Organization {
-  id                   String    @id @default(uuid())
-  slug                 String    @unique
-  name                 String
-  type                 OrgType   @default(CLUB)
+  id           String   @id @default(uuid())
+  slug         String   @unique
+  name         String
+  type         OrgType  @default(CLUB)
   /// The campus the group is based at. A club can serve all three, which is
   /// what null means here — not "unknown".
-  campus               Campus?
-  description          String?
-  websiteUrl           String?
+  campus       Campus?
+  description  String?
+  websiteUrl   String?
   /// Invite link to the group's Discord server. Validated as a discord.gg /
   /// discord.com URL, not just any http(s) one.
-  discordUrl           String?
+  discordUrl   String?
   /// Share link to the group's GroupMe. Same treatment as discordUrl.
-  groupMeUrl           String?
+  groupMeUrl   String?
   /// How moderators reach the group's exec — set when a moderator creates the
   /// page, and shown only to the group's own members.
-  contactEmail         String?
+  contactEmail String?
   /// The exec's role, e.g. "president", "lab manager".
-  contactRole          String?
-  createdAt            DateTime  @default(now())
+  contactRole  String?
+  createdAt    DateTime @default(now())
 
   members    OrgMember[]
   projects   OrgProject[]

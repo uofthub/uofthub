@@ -2,7 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReportStatus } from '@uofthub/types'
-import { api, type AdminReport, type ReportDecision, type ReportTargetType } from '../../lib/api'
+import {
+  api,
+  type AdminReport,
+  type AdminUser,
+  type ReportDecision,
+  type ReportTargetType,
+} from '../../lib/api'
+import { profilePath } from '../../lib/paths'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CreateOrgDialog } from '../orgs/CreateOrgDialog'
@@ -12,6 +19,7 @@ import {
   Button,
   Card,
   Chip,
+  Dialog,
   EmptyState,
   ErrorText,
   Field,
@@ -24,6 +32,7 @@ import {
   Pill,
   SegmentedTabs,
   Spinner,
+  SuccessText,
   TextArea,
   Toggle,
   confirmAction,
@@ -197,6 +206,60 @@ function ReportRow({ report }: { report: AdminReport }) {
   )
 }
 
+/**
+ * Renaming someone's handle: an impersonation report upheld, or a name its
+ * rightful owner asked for. The old one is free at once for them to take.
+ */
+function RenameHandleDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [handle, setHandle] = useState('')
+  const rename = useMutation({
+    mutationFn: () => api.admin.renameHandle(user.id, { handle }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  })
+  return (
+    <Dialog
+      title={`Change @${user.handle}`}
+      onClose={onClose}
+      footer={
+        rename.isSuccess ? (
+          <Button onClick={onClose}>Close</Button>
+        ) : (
+          <>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() => rename.mutate()}
+              disabled={!handle.trim() || rename.isPending}
+            >
+              {rename.isPending ? 'Saving…' : 'Change handle'}
+            </Button>
+          </>
+        )
+      }
+    >
+      {rename.isSuccess ? (
+        <SuccessText>
+          {user.name} is @{rename.data.handle} now, and @{user.handle} is free for anyone to take.
+        </SuccessText>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <Field label="New handle" hint="They can change it themselves again in 30 days.">
+            <Input
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+          </Field>
+          {rename.isError && <ErrorText>{rename.error.message}</ErrorText>}
+        </div>
+      )}
+    </Dialog>
+  )
+}
+
 /** Finding an account, and suspending or lifting it. */
 function UsersAdmin() {
   const qc = useQueryClient()
@@ -219,6 +282,7 @@ function UsersAdmin() {
     mutationFn: (id: string) => api.admin.liftMessagingSuspension(id),
     onSuccess: refresh,
   })
+  const [renaming, setRenaming] = useState<AdminUser | null>(null)
   const busy = suspend.isPending || lift.isPending || liftMessaging.isPending
   const error = [suspend, lift, liftMessaging].find((m) => m.isError)?.error
 
@@ -235,13 +299,14 @@ function UsersAdmin() {
           className="grow"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Name or email — empty lists everyone suspended"
+          placeholder="Name, email or handle — empty lists everyone suspended"
           aria-label="Find an account"
         />
         <Button type="submit" icon="search">
           Find
         </Button>
       </form>
+      {renaming && <RenameHandleDialog user={renaming} onClose={() => setRenaming(null)} />}
       {error && <ErrorText>{error.message}</ErrorText>}
       {isLoading ? (
         <Spinner />
@@ -251,16 +316,19 @@ function UsersAdmin() {
         users.map((u) => (
           <Card key={u.id} className="flex flex-wrap items-center gap-3 p-4">
             <span className="flex min-w-0 grow flex-col">
-              <Link to={`/u/${u.id}`} className="font-semibold">
+              <Link to={profilePath(u)} className="font-semibold">
                 {u.name}
               </Link>
               <span className="text-13 text-muted">
-                {u.email} · joined {new Date(u.createdAt).toLocaleDateString()} ·{' '}
+                @{u.handle} · {u.email} · joined {new Date(u.createdAt).toLocaleDateString()} ·{' '}
                 {u._count.ownedProjects} projects · {u._count.comments} comments ·{' '}
                 {u._count.reportsAbout} reports about them
                 {u.isAdmin && ' · moderator'}
               </span>
             </span>
+            <Button size="sm" disabled={busy} onClick={() => setRenaming(u)}>
+              Change handle
+            </Button>
             {u.messagingSuspendedAt && (
               <Button size="sm" disabled={busy} onClick={() => liftMessaging.mutate(u.id)}>
                 Lift messaging suspension
@@ -294,8 +362,10 @@ function UsersAdmin() {
   )
 }
 
-/** A project link or bare id, as a moderator might paste either. */
-function projectIdFrom(raw: string): string {
+/** A project link — /@handle/slug or /projects/:id — or a bare id, as a moderator might paste any. */
+async function projectIdFrom(raw: string): Promise<string> {
+  const readable = raw.match(/\/@([\w-]+)\/([\w-]+)/)
+  if (readable) return (await api.paths.project(readable[1], readable[2])).projectId
   const match = raw.match(/projects\/([0-9a-f-]{36})/i)
   return (match ? match[1] : raw).trim()
 }
@@ -315,9 +385,9 @@ function SpotlightAdmin() {
     qc.invalidateQueries({ queryKey: ['spotlight'] })
   }
   const pick = useMutation({
-    mutationFn: () =>
+    mutationFn: async () =>
       api.admin.pickSpotlight({
-        projectId: projectIdFrom(project),
+        projectId: await projectIdFrom(project),
         note: note.trim() || undefined,
         weekOf: week,
       }),

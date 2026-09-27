@@ -29,7 +29,14 @@ export const MESSAGE_MAX = 2000
 const THREAD_PAGE = 50
 const CONVERSATIONS_MAX = 50
 
-const PERSON = { id: true, name: true, avatarUrl: true, faculty: true, campus: true } as const
+const PERSON = {
+  id: true,
+  handle: true,
+  name: true,
+  avatarUrl: true,
+  faculty: true,
+  campus: true,
+} as const
 
 // A person typing to a friend sends a few a minute; a script sends hundreds.
 const sendRateLimit = { rateLimit: { max: 30, timeWindow: '10 minutes', keyGenerator: bySession } }

@@ -4,7 +4,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, isNotFound } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { facultyByName } from '../../lib/faculties'
-import { useDocumentTitle } from '../../lib/hooks'
+import { useCanonicalPath, useDocumentTitle } from '../../lib/hooks'
+import { projectPath } from '../../lib/paths'
 import { courseOf } from '../../lib/projectView'
 import { CONTACT_EMAIL } from '../../lib/site'
 import {
@@ -46,8 +47,10 @@ function RequestAccess({ projectId }: { projectId: string }) {
 }
 
 /** The Project page board. */
-export default function ProjectPage() {
-  const { id } = useParams<{ id: string }>()
+/** A project, by `id` — given by the /@handle/slug route, or from /projects/:id. */
+export default function ProjectPage({ id: resolved }: { id?: string }) {
+  const params = useParams<{ id: string }>()
+  const id = resolved ?? params.id
   const { hash } = useLocation()
   const { user } = useAuth()
   const [updating, setUpdating] = useState(false)
@@ -70,6 +73,7 @@ export default function ProjectPage() {
     enabled: !!project,
   })
   useDocumentTitle(project?.title)
+  useCanonicalPath(project && projectPath(project))
 
   // A link to #comments has to wait for the page to exist before it can land.
   useEffect(() => {

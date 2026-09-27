@@ -5,6 +5,7 @@ import { Logo } from './Logo'
 import { MessagesButton } from './MessagesButton'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from './ThemeToggle'
+import { profilePath } from '../../lib/paths'
 
 /** The Mobile feed board's 60px header: logo, then search and the bell. */
 export function MobileHeader() {
@@ -49,7 +50,7 @@ export function BottomNav() {
     { to: user ? '/feed' : '/', label: 'Home', icon: 'home', end: true },
     { to: '/explore', label: 'Explore', icon: 'compass' },
     { to: '/saved', label: 'Saved', icon: 'bookmark' },
-    { to: user ? `/u/${user.id}` : '/session', label: 'You', icon: 'user' },
+    { to: user ? profilePath(user) : '/session', label: 'You', icon: 'user' },
   ]
 
   const item = (t: Tab) => (

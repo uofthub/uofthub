@@ -34,18 +34,39 @@ export const APP_ROUTES = [
   '/messages',
   '/messages/:userId',
   '/help-wanted',
+  // /@handle and /@handle/slug — see isAppRoute.
+  '/:handle',
+  '/:handle/:slug',
 ]
 
 const segments = (path) => path.split('/').filter(Boolean)
 
+/** A path as typed: /%40ada is /@ada. A malformed escape is left as it came. */
+export function decodePath(path) {
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
 const PATTERNS = APP_ROUTES.map(segments)
 
-/** Whether the app has a page at `pathname` — `/projects/abc`, `/about/`. */
+/**
+ * Whether a path segment fills a pattern's. A pattern that starts with a
+ * parameter is a person's address, /@handle…, so there the segment has to
+ * start with `@` — as App.tsx's PersonRoute and ProjectRoute insist too.
+ */
+const fills = (part, segment, i) =>
+  !part.startsWith(':')
+    ? part === segment
+    : i > 0 || (segment.startsWith('@') && segment.length > 1)
+
+/** Whether the app has a page at `pathname` — `/projects/abc`, `/@ada`, `/about/`. */
 export function isAppRoute(pathname) {
-  const parts = segments(pathname)
+  const parts = segments(decodePath(pathname))
   return PATTERNS.some(
     (pattern) =>
-      pattern.length === parts.length &&
-      pattern.every((part, i) => part.startsWith(':') || part === parts[i])
+      pattern.length === parts.length && pattern.every((part, i) => fills(part, parts[i], i))
   )
 }

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { FeedReason as Reason } from '../../lib/api'
 import { campusLabel } from '../../lib/campus'
 import { Icon } from '../ui'
+import { profilePath } from '../../lib/paths'
 
 const reasonLink = 'font-semibold text-ink-2 hover:text-ink-2'
 
@@ -14,7 +15,10 @@ export function FeedReason({ reason }: { reason: Reason }) {
           icon: 'user' as const,
           body: (
             <>
-              <Link to={`/u/${reason.userId}`} className={reasonLink}>
+              <Link
+                to={profilePath({ id: reason.userId, handle: reason.userHandle })}
+                className={reasonLink}
+              >
                 {reason.userName}
               </Link>
               , who you follow, published this

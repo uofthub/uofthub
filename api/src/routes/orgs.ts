@@ -99,7 +99,7 @@ function parseActivity(
 }
 
 const PERSON = {
-  select: { id: true, name: true, avatarUrl: true, faculty: true, campus: true },
+  select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true, campus: true },
 } as const
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
@@ -256,7 +256,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         activities: {
           orderBy: { date: 'desc' },
           take: PAGE_ACTIVITIES,
-          include: { createdBy: { select: { id: true, name: true } } },
+          include: { createdBy: { select: { id: true, handle: true, name: true } } },
         },
         projects: {
           // Linking a private project to an org must not publish it.
@@ -265,7 +265,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
           include: {
             project: {
               include: {
-                owner: { select: { id: true, name: true } },
+                owner: { select: { id: true, handle: true, name: true } },
                 _count: { select: { comments: true, reactions: true } },
               },
             },
@@ -583,7 +583,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       where: { orgId: org.id },
       orderBy: { date: 'desc' },
       take: PAGE_ACTIVITIES,
-      include: { createdBy: { select: { id: true, name: true } } },
+      include: { createdBy: { select: { id: true, handle: true, name: true } } },
     })
   })
 
@@ -610,7 +610,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         link: fields.link ?? null,
         imageUrl: fields.imageUrl ?? null,
       },
-      include: { createdBy: { select: { id: true, name: true } } },
+      include: { createdBy: { select: { id: true, handle: true, name: true } } },
     })
     return reply.code(201).send(activity)
   })
@@ -647,7 +647,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return db.orgActivity.update({
       where: { id: found.activity.id },
       data: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)),
-      include: { createdBy: { select: { id: true, name: true } } },
+      include: { createdBy: { select: { id: true, handle: true, name: true } } },
     })
   })
 

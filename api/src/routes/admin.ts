@@ -7,6 +7,7 @@ import { removeComment } from '../lib/comments.js'
 import { deleteObject } from '../lib/storage.js'
 import { startOfUtcWeek } from '../lib/dates.js'
 import { isListed } from '../lib/visibility.js'
+import { changeHandle, HandleError, normalizeHandle } from '../lib/handles.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
@@ -20,7 +21,7 @@ const DECISIONS = {
 
 type Decision = keyof typeof DECISIONS
 
-const PERSON = { select: { id: true, name: true, email: true } } as const
+const PERSON = { select: { id: true, handle: true, name: true, email: true } } as const
 
 const REPORT_SELECT = {
   id: true,
@@ -33,8 +34,8 @@ const REPORT_SELECT = {
   reviewedAt: true,
   reviewNote: true,
   reporter: PERSON,
-  reviewedBy: { select: { id: true, name: true } },
-  subject: { select: { id: true, name: true, email: true, suspendedAt: true } },
+  reviewedBy: { select: { id: true, handle: true, name: true } },
+  subject: { select: { id: true, handle: true, name: true, email: true, suspendedAt: true } },
   project: {
     select: {
       id: true,
@@ -172,9 +173,11 @@ const MESSAGE_REPORT_SELECT = {
   reviewedAt: true,
   reviewNote: true,
   messages: true,
-  reporter: { select: { id: true, name: true, email: true } },
-  reported: { select: { id: true, name: true, email: true, messagingSuspendedAt: true } },
-  reviewedBy: { select: { id: true, name: true } },
+  reporter: { select: { id: true, handle: true, name: true, email: true } },
+  reported: {
+    select: { id: true, handle: true, name: true, email: true, messagingSuspendedAt: true },
+  },
+  reviewedBy: { select: { id: true, handle: true, name: true } },
 } as const
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
@@ -314,12 +317,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             OR: [
               { email: { contains: q, mode: 'insensitive' } },
               { name: { contains: q, mode: 'insensitive' } },
+              { handle: { contains: normalizeHandle(q) } },
             ],
           }
         : { OR: [{ suspendedAt: { not: null } }, { messagingSuspendedAt: { not: null } }] },
       select: {
         id: true,
         name: true,
+        handle: true,
         email: true,
         createdAt: true,
         isAdmin: true,
@@ -347,6 +352,28 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (user.suspendedAt) return reply.code(409).send({ error: 'Already suspended' })
       await suspend(user.id, (request.body?.note ?? '').trim().slice(0, 1000) || null)
       return { ok: true }
+    }
+  )
+
+  // POST /admin/users/:id/handle — { handle } rename someone's handle: an
+  // impersonation report upheld, or a name its rightful owner asked for. The
+  // old one is free for them to take at once.
+  app.post<{ Params: { id: string }; Body: { handle?: string } }>(
+    '/users/:id/handle',
+    adminOnly,
+    async (request, reply) => {
+      const user = await db.user.findUnique({
+        where: { id: request.params.id },
+        select: { id: true },
+      })
+      if (!user) return reply.code(404).send({ error: 'Not found' })
+      try {
+        const handle = await changeHandle(user.id, request.body?.handle, { byModerator: true })
+        return { handle }
+      } catch (err) {
+        if (err instanceof HandleError) return reply.code(err.status).send({ error: err.message })
+        throw err
+      }
     }
   )
 
@@ -472,10 +499,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             id: true,
             title: true,
             visibility: true,
-            owner: { select: { id: true, name: true } },
+            owner: { select: { id: true, handle: true, name: true } },
           },
         },
-        pickedBy: { select: { id: true, name: true } },
+        pickedBy: { select: { id: true, handle: true, name: true } },
       },
     })
   })
@@ -498,11 +525,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       // The banner is shown to everyone signed in; a draft, a link-only or a
       // still-hidden project would be published by being picked.
       if (!isListed(project)) {
-        return reply
-          .code(400)
-          .send({
-            error: 'Only public or U of T-visible projects that are showing can be spotlighted',
-          })
+        return reply.code(400).send({
+          error: 'Only public or U of T-visible projects that are showing can be spotlighted',
+        })
       }
 
       const when = weekOf ? new Date(weekOf) : new Date()

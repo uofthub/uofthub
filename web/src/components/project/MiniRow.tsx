@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { ProjectSummary } from '../../lib/api'
 import { courseOf } from '../../lib/projectView'
 import { Cover } from './Cover'
+import { projectPath } from '../../lib/paths'
 
 /**
  * A 96px thumbnail beside a title — the project page's "More built for CSC309"
@@ -12,7 +13,7 @@ export function MiniRow({ project }: { project: ProjectSummary }) {
   const sub = [project.owner?.name, course && `Made for ${course}`].filter(Boolean).join(' · ')
   return (
     <Link
-      to={`/projects/${project.id}`}
+      to={projectPath(project)}
       className="flex items-center gap-3 text-ink hover:text-navy-ink"
     >
       <span className="block w-24 shrink-0">

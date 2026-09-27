@@ -9,6 +9,7 @@ import { WeekActivity } from '../../components/activity/WeekActivity'
 import { FooterNote } from '../../components/shell'
 import { Avatar, Button, Icon, Panel } from '../../components/ui'
 import { Rail } from './Rail'
+import { profilePath } from '../../lib/paths'
 
 /** The tags on this week's projects, counted across the whole site. */
 function Trending() {
@@ -93,11 +94,11 @@ function Person({
   const follow = useFollow(person.id)
   return (
     <div className="flex items-center gap-2.5">
-      <Link to={`/u/${person.id}`} tabIndex={-1} aria-hidden="true">
+      <Link to={profilePath(person)} tabIndex={-1} aria-hidden="true">
         <Avatar person={person} size={40} />
       </Link>
       <div className="min-w-0 grow">
-        <Link to={`/u/${person.id}`} className="block text-15 font-semibold text-ink">
+        <Link to={profilePath(person)} className="block text-15 font-semibold text-ink">
           {person.name}
         </Link>
         <div className="line-clamp-1 text-13 text-muted">

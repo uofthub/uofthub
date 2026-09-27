@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import { api, type MeUser } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { disablePush, enablePush, isIos, pushState } from '../../lib/push'
@@ -20,9 +20,100 @@ import {
   SuccessText,
   Toggle,
 } from '../../components/ui'
+import { profilePath } from '../../lib/paths'
 
 /** Must match the API's minimum (lib/password.ts). */
 const MIN_PASSWORD_LENGTH = 10
+
+/** Must match HANDLE_CHANGE_DAYS in the API (lib/handles.ts). */
+const HANDLE_CHANGE_DAYS = 30
+
+/** What they typed, as the API will read it. */
+const asHandle = (raw: string) => raw.trim().replace(/^@/, '').toLowerCase()
+
+function HandlePanel({ user }: { user: MeUser }) {
+  const { refetch } = useAuth()
+  const [draft, setDraft] = useState(user.handle)
+  // Asked about a moment after they stop typing, not on every key.
+  const [settled, setSettled] = useState(user.handle)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(draft), 300)
+    return () => clearTimeout(timer)
+  }, [draft])
+
+  const wanted = asHandle(draft)
+  const asked = asHandle(settled)
+  const check = useQuery({
+    queryKey: ['handle-check', asked],
+    queryFn: () => api.users.checkHandle(asked),
+    enabled: !!asked && asked !== user.handle,
+  })
+  // Only an answer about what is in the field now.
+  const verdict = asked === wanted && wanted !== user.handle ? check.data : undefined
+
+  const save = useMutation({
+    mutationFn: () => api.users.setHandle(wanted),
+    onSuccess: () => refetch(),
+  })
+
+  const nextChange = user.handleChangedAt
+    ? new Date(Date.parse(user.handleChangedAt) + HANDLE_CHANGE_DAYS * 86_400_000)
+    : null
+  const waiting = !!nextChange && nextChange > new Date()
+
+  return (
+    <Panel title="Handle" size="main">
+      <p className="text-15 text-ink-3">
+        Your profile is at <b>uofthub.com/@{user.handle}</b>, and your projects under it. If you
+        change it, links to the old one keep working until somebody else takes it.
+      </p>
+      {waiting ? (
+        <Notice tone="navy" title={`You can change it again on ${nextChange.toLocaleDateString()}`}>
+          A handle can change once every {HANDLE_CHANGE_DAYS} days.
+        </Notice>
+      ) : (
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            save.mutate()
+          }}
+        >
+          <Field
+            label="New handle"
+            hint={`3 to 30 characters: lowercase letters, numbers, - and _. You can change it once every ${HANDLE_CHANGE_DAYS} days.`}
+          >
+            <Input
+              value={draft}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                save.reset()
+              }}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={31}
+            />
+          </Field>
+          {verdict?.problem && <ErrorText>{verdict.problem}</ErrorText>}
+          {verdict?.available && <SuccessText>uofthub.com/@{verdict.handle} is free.</SuccessText>}
+          {save.isError && <ErrorText>{save.error.message}</ErrorText>}
+          {save.isSuccess && (
+            <SuccessText>Saved. Your profile is at uofthub.com/@{user.handle}.</SuccessText>
+          )}
+          <Button
+            type="submit"
+            variant="primary"
+            className="self-start"
+            disabled={!verdict?.available || save.isPending}
+          >
+            {save.isPending ? 'Saving…' : 'Change handle'}
+          </Button>
+        </form>
+      )}
+    </Panel>
+  )
+}
 
 function PasswordPanel({ hasPassword }: { hasPassword: boolean }) {
   const { refetch } = useAuth()
@@ -290,9 +381,11 @@ export default function SettingsPage() {
       <Panel title="Account" size="main">
         <p className="text-15">
           Signed in as <b>{user.email}</b>. Your name, faculty and links are on{' '}
-          <a href={`/u/${user.id}`}>your profile</a>.
+          <a href={profilePath(user)}>your profile</a>.
         </p>
       </Panel>
+
+      <HandlePanel user={user} />
 
       <PasswordPanel hasPassword={user.hasPassword} />
 
