@@ -84,9 +84,10 @@ export async function deleteObject(key: string): Promise<void> {
 
 /**
  * The first `maxBytes` of an object. Ranged rather than whole-object because
- * the only caller is the text preview, which shows the head of a file and has
- * no reason to pull 25MB through the API to throw most of it away. A range
- * past the end of a short object just returns the object.
+ * the text preview shows the head of a file and has no reason to pull 25MB
+ * through the API to throw most of it away. A range past the end of a short
+ * object just returns the object — which is how the profile preview card reads
+ * a whole avatar, capped at the avatar size limit.
  */
 export async function getObjectHead(key: string, maxBytes: number): Promise<Buffer> {
   const res = await getClient().send(

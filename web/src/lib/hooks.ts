@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { useAuth } from './auth'
 
+/** The home page's title, and index.html's — what a search result shows for the site. */
+const SITE_TITLE = 'uofthub · Student projects at the University of Toronto'
+
 /** Sets the tab title while a page is mounted. */
 export function useDocumentTitle(title?: string) {
   useEffect(() => {
-    document.title = title ? `${title} · uofthub` : 'uofthub'
+    document.title = title ? `${title} · uofthub` : SITE_TITLE
   }, [title])
 }
 

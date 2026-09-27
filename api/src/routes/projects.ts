@@ -17,6 +17,8 @@ import {
   visibleProjectWhere,
 } from '../lib/visibility.js'
 import { coverUrls } from '../lib/covers.js'
+import { projectShare, projectCardPng } from '../lib/shareCards.js'
+import { PNG_HEADERS } from '../lib/ogImage.js'
 import { safeExternalUrl } from '../lib/url.js'
 import {
   PROJECT_FILE_COUNT_CAP,
@@ -552,25 +554,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // GET /projects/:id/share — what a link preview shows: title, pitch and
-  // image. Public, showing projects only — a preview is read by whatever site
-  // the link is pasted into, signed in as nobody.
+  // image. Public, showing projects only — see lib/shareCards.ts.
   app.get<{ Params: { id: string } }>('/:id/share', async (request, reply) => {
-    const project = await db.project.findFirst({
-      where: { AND: [{ id: request.params.id }, listedProjectWhere(false)] },
-      select: { id: true, title: true, pitch: true, owner: { select: { name: true } } },
-    })
-    if (!project) return reply.code(404).send({ error: 'Not found' })
-    const { covers } = await coverUrls([project.id])
-    return {
-      title: project.title,
-      pitch: project.pitch,
-      ownerName: project.owner.name,
-      // A stable address that signs a fresh URL each time it is fetched —
-      // previews are fetched long after they are generated.
-      image: covers.has(project.id)
-        ? `${process.env.API_URL ?? 'http://localhost:3001'}/projects/${project.id}/cover`
-        : null,
-    }
+    const card = await projectShare(request.params.id)
+    return card ?? reply.code(404).send({ error: 'Not found' })
+  })
+
+  // GET /projects/:id/og.png — the preview image for a project without a cover
+  app.get<{ Params: { id: string } }>('/:id/og.png', async (request, reply) => {
+    const png = await projectCardPng(request.params.id)
+    if (!png) return reply.code(404).send({ error: 'Not found' })
+    return reply.headers(PNG_HEADERS).send(png)
   })
 
   // GET /projects/:id/cover — the cover image, for link previews

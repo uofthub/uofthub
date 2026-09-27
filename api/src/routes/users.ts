@@ -26,6 +26,8 @@ import {
   COURSES_MAX,
 } from '../lib/profile.js'
 import { safeExternalUrl, safeGithubUrl, safeLinkedInUrl } from '../lib/url.js'
+import { userCardPng, userShare, userSitemap } from '../lib/shareCards.js'
+import { PNG_HEADERS } from '../lib/ogImage.js'
 
 const ME_SELECT = {
   id: true,
@@ -77,6 +79,22 @@ function optionalText(raw: unknown, max: number): string | null | undefined | fa
 const avatarRateLimit = { rateLimit: { max: 10, timeWindow: '10 minutes' } }
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
+  // GET /users/sitemap — the profiles a search engine should list
+  app.get('/sitemap', async () => userSitemap())
+
+  // GET /users/:id/share — what a link preview shows; see lib/shareCards.ts
+  app.get<{ Params: { id: string } }>('/:id/share', async (request, reply) => {
+    const card = await userShare(request.params.id)
+    return card ?? reply.code(404).send({ error: 'Not found' })
+  })
+
+  // GET /users/:id/og.png — the profile's preview image
+  app.get<{ Params: { id: string } }>('/:id/og.png', async (request, reply) => {
+    const png = await userCardPng(request.params.id)
+    if (!png) return reply.code(404).send({ error: 'Not found' })
+    return reply.headers(PNG_HEADERS).send(png)
+  })
+
   // GET /users/:id — public profile
   //
   // The project counts are of what this caller can see, matching the lists

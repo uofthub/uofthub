@@ -9,6 +9,8 @@ import { parseCampus } from '../lib/campus.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 import { notify, notifyMany } from '../lib/notifications.js'
 import { bySession } from '../lib/rateLimit.js'
+import { orgCardPng, orgShare } from '../lib/shareCards.js'
+import { PNG_HEADERS } from '../lib/ogImage.js'
 
 const ORG_NAME_MAX = 100
 const ORG_DESCRIPTION_MAX = 2000
@@ -227,6 +229,19 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       },
     })
     return reply.code(201).send(org)
+  })
+
+  // GET /orgs/:slug/share — what a link preview shows; see lib/shareCards.ts
+  app.get<{ Params: { slug: string } }>('/:slug/share', async (request, reply) => {
+    const card = await orgShare(request.params.slug)
+    return card ?? reply.code(404).send({ error: 'Not found' })
+  })
+
+  // GET /orgs/:slug/og.png — the group's preview image
+  app.get<{ Params: { slug: string } }>('/:slug/og.png', async (request, reply) => {
+    const png = await orgCardPng(request.params.slug)
+    if (!png) return reply.code(404).send({ error: 'Not found' })
+    return reply.headers(PNG_HEADERS).send(png)
   })
 
   // GET /orgs/:slug — the page. Its members; for its admins, invitations and

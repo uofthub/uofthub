@@ -39,6 +39,8 @@ COPY --from=build /repo/api/node_modules ./api/node_modules
 COPY --from=build /repo/api/package.json ./api/package.json
 COPY --from=build /repo/api/prisma ./api/prisma
 COPY --from=build /repo/api/dist ./api/dist
+# Fonts and the mark the link-preview cards are drawn with (src/lib/ogImage.ts).
+COPY --from=build /repo/api/assets ./api/assets
 
 WORKDIR /repo/api
 EXPOSE 3001

@@ -161,7 +161,9 @@ describe('link previews and the sitemap', () => {
     const app = await getApp()
 
     const card = await app.inject({ method: 'GET', url: `/projects/${open.id}/share` })
-    expect(card.json()).toMatchObject({ title: 'Open', pitch: 'A pitch', image: null })
+    expect(card.json()).toMatchObject({ title: 'Open', pitch: 'A pitch' })
+    // No cover, so a drawn card, fingerprinted to what it draws.
+    expect(card.json().image).toMatch(new RegExp(`/projects/${open.id}/og\\.png\\?v=[0-9a-f]{12}$`))
     expect(
       (await app.inject({ method: 'GET', url: `/projects/${campus.id}/share` })).statusCode
     ).toBe(404)

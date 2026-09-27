@@ -30,198 +30,222 @@ A project is filed under at most one course (`course_code`) and credited to the 
 ## Data model
 
 ### User
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| email | string | must be `@mail.utoronto.ca` or `@utoronto.ca` |
-| name | string | |
-| faculty | string | |
-| campus | enum? | `UTSG`, `UTM`, `UTSC`. Nullable — added after launch, and nothing obliges a student to say |
-| program | string | |
-| class_year | int | |
-| bio | string? | |
-| open_to | string[] | "Open to" chips, up to six short items |
-| website_url, github_url, linkedin_url | string? | http(s) only; GitHub and LinkedIn must point at those hosts (`lib/url.ts`) |
-| courses | string[] | course codes the student takes; added to the feed's course affinity |
-| allow_messages | bool | false stops new conversations, never replies |
-| messaging_suspended_at | timestamp? | set when a moderator suspends the student's messaging after a message report; while set they can read but not send. Cleared to lift it |
-| avatar_url | string? | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage) |
-| avatar_key | string? | R2 object key when the avatar lives in our bucket; internal, never sent to the client |
-| avatar_is_custom | bool | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it |
-| is_admin | bool | platform moderator — see [Moderation](#moderation). Set only from the database (`pnpm --filter @uofthub/api grant-admin <email>`); no route grants it |
-| created_at | timestamp | |
-| updated_at | timestamp | |
+
+| Field                                 | Type       | Notes                                                                                                                                                 |
+| ------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                                    | uuid       |                                                                                                                                                       |
+| email                                 | string     | must be `@mail.utoronto.ca` or `@utoronto.ca`                                                                                                         |
+| name                                  | string     |                                                                                                                                                       |
+| faculty                               | string     |                                                                                                                                                       |
+| campus                                | enum?      | `UTSG`, `UTM`, `UTSC`. Nullable — added after launch, and nothing obliges a student to say                                                            |
+| program                               | string     |                                                                                                                                                       |
+| class_year                            | int        |                                                                                                                                                       |
+| bio                                   | string?    |                                                                                                                                                       |
+| open_to                               | string[]   | "Open to" chips, up to six short items                                                                                                                |
+| website_url, github_url, linkedin_url | string?    | http(s) only; GitHub and LinkedIn must point at those hosts (`lib/url.ts`)                                                                            |
+| courses                               | string[]   | course codes the student takes; added to the feed's course affinity                                                                                   |
+| allow_messages                        | bool       | false stops new conversations, never replies                                                                                                          |
+| messaging_suspended_at                | timestamp? | set when a moderator suspends the student's messaging after a message report; while set they can read but not send. Cleared to lift it                |
+| avatar_url                            | string?    | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage)               |
+| avatar_key                            | string?    | R2 object key when the avatar lives in our bucket; internal, never sent to the client                                                                 |
+| avatar_is_custom                      | bool       | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it                  |
+| is_admin                              | bool       | platform moderator — see [Moderation](#moderation). Set only from the database (`pnpm --filter @uofthub/api grant-admin <email>`); no route grants it |
+| created_at                            | timestamp  |                                                                                                                                                       |
+| updated_at                            | timestamp  |                                                                                                                                                       |
 
 ### Project
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| owner_id | uuid | FK → User |
-| title | string | |
-| pitch | string? | the one line a card shows |
-| description | text? | the optional Overview |
-| sections | jsonb? | optional sections (motivation, method, approaches, results…), stripped of empties on save — see [structured-projects.md](structured-projects.md) |
-| details | jsonb? | short labelled facts: `[{ label, value }]` |
-| course_code | string? | the course it was made for, upper-cased; the one source of truth for course filters |
-| template_code, template_version | string?, int? | the course template it started from |
-| type | enum? | `APP`, `RESEARCH`, `FILM`, `DESIGN`, `AUDIO`, `HARDWARE`, `WRITING`, `OTHER` |
-| status | enum? | `IN_PROGRESS`, `SHIPPED`, `HELP_WANTED` |
-| tags | string[] | topics |
-| visibility | enum | `private` (shown as Draft), `uoft`, `public`, `unlisted` |
-| published_at | timestamp? | first time it stopped being private; the feed orders by it — see [feed-and-density.md](feed-and-density.md#publishedat) |
-| show_from | timestamp? | hidden from everyone but its makers until then, whatever its visibility |
-| announced_at | timestamp? | when followers were told; see [Scheduled jobs](#scheduled-jobs) |
-| pinned_at | timestamp? | pinned to the top of the owner's profile, at most six |
-| view_count | int | lifetime total, shown to the owner only |
-| taken_down_at | timestamp? | set when a moderator takes the project down; while set, the owner cannot change visibility — see [Moderation](#moderation) |
-| created_at | timestamp | |
-| updated_at | timestamp | |
+
+| Field                           | Type          | Notes                                                                                                                                            |
+| ------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id                              | uuid          |                                                                                                                                                  |
+| owner_id                        | uuid          | FK → User                                                                                                                                        |
+| title                           | string        |                                                                                                                                                  |
+| pitch                           | string?       | the one line a card shows                                                                                                                        |
+| description                     | text?         | the optional Overview                                                                                                                            |
+| sections                        | jsonb?        | optional sections (motivation, method, approaches, results…), stripped of empties on save — see [structured-projects.md](structured-projects.md) |
+| details                         | jsonb?        | short labelled facts: `[{ label, value }]`                                                                                                       |
+| course_code                     | string?       | the course it was made for, upper-cased; the one source of truth for course filters                                                              |
+| template_code, template_version | string?, int? | the course template it started from                                                                                                              |
+| type                            | enum?         | `APP`, `RESEARCH`, `FILM`, `DESIGN`, `AUDIO`, `HARDWARE`, `WRITING`, `OTHER`                                                                     |
+| status                          | enum?         | `IN_PROGRESS`, `SHIPPED`, `HELP_WANTED`                                                                                                          |
+| tags                            | string[]      | topics                                                                                                                                           |
+| visibility                      | enum          | `private` (shown as Draft), `uoft`, `public`, `unlisted`                                                                                         |
+| published_at                    | timestamp?    | first time it stopped being private; the feed orders by it — see [feed-and-density.md](feed-and-density.md#publishedat)                          |
+| show_from                       | timestamp?    | hidden from everyone but its makers until then, whatever its visibility                                                                          |
+| announced_at                    | timestamp?    | when followers were told; see [Scheduled jobs](#scheduled-jobs)                                                                                  |
+| pinned_at                       | timestamp?    | pinned to the top of the owner's profile, at most six                                                                                            |
+| view_count                      | int           | lifetime total, shown to the owner only                                                                                                          |
+| taken_down_at                   | timestamp?    | set when a moderator takes the project down; while set, the owner cannot change visibility — see [Moderation](#moderation)                       |
+| created_at                      | timestamp     |                                                                                                                                                  |
+| updated_at                      | timestamp     |                                                                                                                                                  |
 
 ### ProjectReference
+
 A dataset, paper, piece of software, model, book, archive or website the project used. `key` is its normalized identity (a DOI, an arXiv id, a GitHub repo, a canonical URL — `lib/references.ts`), which is how the page names other projects that used the same thing.
 
 ### ProjectOutput
+
 What the project produced — poster, slides, paper, video, audio, demo, code, dataset — as an ordered layer over its files and links. Exactly one target (a CHECK). At most one per project is primary (`primaryOfProjectId`, unique); its thumbnail, made in the author's browser, is the project's image everywhere (`lib/covers.ts`).
 
 ### ProjectReaction / ProjectSave
+
 A reaction is one row per (user, project, kind), kinds `IMPRESSIVE`, `USEFUL` (shown as Learned something) and `COLLAB` (Want to collab). A save is a private bookmark: it never notifies, and the owner sees only a count. See [redesign.md](redesign.md#engagement-reactions-are-the-only-public-signal).
 
 ### Comment / CommentHelpful
+
 Comments with one level of replies (`parent_id`) and Helpful votes; helpful comments are listed first.
 
 ### ProjectVersion
+
 A snapshot of the project, including its sections, details and outputs. A version saved with a `note` is an update: it shows on the Updates timeline and notifies the project's followers.
 
 ### ProjectDailyView / ProjectViewer
+
 Views per project per day. `ProjectViewer` holds the day's viewer keys (a user id, or a salted hash for a visitor) so each person counts once a day; yesterday's are pruned when a view is recorded.
 
 ### Follow
+
 (follower, following) between students.
 
 ### Spotlight
+
 A moderator's pick of one project for a Monday-to-Sunday week, with an optional reason.
 
 ### OrgProject
+
 "Built with": a project linked to a group its owner belongs to.
 
 ### ProjectFollow
+
 Private "tell me about updates" on a project: (user, project). A version saved with a note notifies followers who can still see the project.
 
 ### Collection / CollectionItem
+
 A curator's titled set of projects. Readable by anyone; the projects in it are always filtered by the reader's own visibility, and only PUBLIC/UOFT projects can be added. See [redesign.md](redesign.md#what-used-to-be-coming-soon).
 
 ### Message
+
 One direct message (sender, recipient, body, read_at). A conversation is just the messages between two people.
 
 ### UserBlock
+
 (blocker, blocked). Closes the conversation both ways until the blocker lifts it. The blocked student gets the same "not taking new messages" as an opt-out, so a block is never revealed.
 
 ### ProjectCollaborator
-| Field | Type | Notes |
-|---|---|---|
-| project_id | uuid | |
-| user_id | uuid | |
-| role | enum | `owner`, `collaborator`, `viewer` |
-| title | string? | what they did, as the owner put it ("Designer") |
-| accepted | bool | false while an invitation or a TA's access request waits; a no deletes the row |
+
+| Field      | Type    | Notes                                                                          |
+| ---------- | ------- | ------------------------------------------------------------------------------ |
+| project_id | uuid    |                                                                                |
+| user_id    | uuid    |                                                                                |
+| role       | enum    | `owner`, `collaborator`, `viewer`                                              |
+| title      | string? | what they did, as the owner put it ("Designer")                                |
+| accepted   | bool    | false while an invitation or a TA's access request waits; a no deletes the row |
 
 An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited. Invitations go only to addresses that already have an account: emailing an address nobody signed up with is unasked-for mail, and a typo in one is a bounce, both of which count against the sender reputation every other email depends on. `ProjectEmailInvite` holds invitations sent before that rule, which still become a pending row once their address is proven (`lib/accounts.ts`).
 
 ### ProjectFile
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| project_id | uuid | |
-| name | string | |
-| storage_key | string | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
-| size_bytes | int | |
-| mime_type | string? | client-declared, informational only — not trusted for validation |
-| uploaded_at | timestamp | |
+
+| Field       | Type      | Notes                                                                                                       |
+| ----------- | --------- | ----------------------------------------------------------------------------------------------------------- |
+| id          | uuid      |                                                                                                             |
+| project_id  | uuid      |                                                                                                             |
+| name        | string    |                                                                                                             |
+| storage_key | string    | R2 object key, not a public URL — downloads go through a signed URL so they still honour project visibility |
+| size_bytes  | int       |                                                                                                             |
+| mime_type   | string?   | client-declared, informational only — not trusted for validation                                            |
+| uploaded_at | timestamp |                                                                                                             |
 
 ### ProjectLink
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| project_id | uuid | |
-| label | string | e.g. "GitHub", "Demo" |
-| url | string | |
+
+| Field      | Type   | Notes                 |
+| ---------- | ------ | --------------------- |
+| id         | uuid   |                       |
+| project_id | uuid   |                       |
+| label      | string | e.g. "GitHub", "Demo" |
+| url        | string |                       |
 
 ### Organization
+
 Clubs and research labs, created by moderators. Every group page is public. Policy in [student-groups.md](student-groups.md).
 
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| slug | string | unique |
-| name | string | |
-| type | enum | `CLUB`, `LAB` |
-| description | string | |
-| website_url | string | |
-| discord_url | string? | invite link; restricted to discord.gg / discord.com hosts, not just any http(s) URL |
-| contact_email | string? | how moderators reach the exec; members only |
-| contact_role | string? | the exec's role, e.g. "president" |
-| created_at | timestamp | |
+| Field         | Type      | Notes                                                                               |
+| ------------- | --------- | ----------------------------------------------------------------------------------- |
+| id            | uuid      |                                                                                     |
+| slug          | string    | unique                                                                              |
+| name          | string    |                                                                                     |
+| type          | enum      | `CLUB`, `LAB`                                                                       |
+| description   | string    |                                                                                     |
+| website_url   | string    |                                                                                     |
+| discord_url   | string?   | invite link; restricted to discord.gg / discord.com hosts, not just any http(s) URL |
+| contact_email | string?   | how moderators reach the exec; members only                                         |
+| contact_role  | string?   | the exec's role, e.g. "president"                                                   |
+| created_at    | timestamp |                                                                                     |
 
 ### OrgActivity
+
 A meeting, event, workshop or recap — lighter than a Project, rendered only on the group's own page.
 
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| org_id | uuid | |
-| created_by_id | uuid | any member may post; the author or an org admin may delete |
-| title | string | |
-| description | text? | |
-| date | timestamp | defaults to now |
-| link | string? | http(s) only |
-| image_url | string? | http(s) only — a URL, not an upload, so an activity is a lightweight post rather than a stored file |
-| created_at | timestamp | |
+| Field         | Type      | Notes                                                                                               |
+| ------------- | --------- | --------------------------------------------------------------------------------------------------- |
+| id            | uuid      |                                                                                                     |
+| org_id        | uuid      |                                                                                                     |
+| created_by_id | uuid      | any member may post; the author or an org admin may delete                                          |
+| title         | string    |                                                                                                     |
+| description   | text?     |                                                                                                     |
+| date          | timestamp | defaults to now                                                                                     |
+| link          | string?   | http(s) only                                                                                        |
+| image_url     | string?   | http(s) only — a URL, not an upload, so an activity is a lightweight post rather than a stored file |
+| created_at    | timestamp |                                                                                                     |
 
 ### Notification
+
 The bell's feed, pushed to open tabs as it is written — see [Live updates](#live-updates). The ones that need an answer are also emailed (`lib/notificationEmails.ts`), and all but the broadcasts go out as [push notifications](#push-notifications). See [ROADMAP.md § Notifications](ROADMAP.md).
 
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| user_id | uuid | recipient |
-| type | enum | Administrative: `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED`, `MESSAGING_MODERATED`. Social: `PROJECT_COMMENTED`, `COMMENT_REPLIED`, `PROJECT_REACTED`, `PROJECT_COLLAB_INTEREST`, `PROJECT_UPDATED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. `PROJECT_LIKED` is no longer sent; it stays for old rows |
-| key | string? | identity of what is announced, so a toggled state (a reaction, a follow) notifies once — see `notifyOnce` in `lib/notifications.ts` |
-| payload | json | denormalized display data (project title, actor name, etc.) captured at creation time |
-| read | bool | |
-| created_at | timestamp | |
+| Field      | Type      | Notes                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id         | uuid      |                                                                                                                                                                                                                                                                                                                                                                              |
+| user_id    | uuid      | recipient                                                                                                                                                                                                                                                                                                                                                                    |
+| type       | enum      | Administrative: `COLLABORATOR_INVITED`, `COLLABORATOR_RESPONDED`, `ACCESS_REQUESTED`, `ACCESS_REQUEST_DECIDED`, `PROJECT_MODERATED`, `MESSAGING_MODERATED`. Social: `PROJECT_COMMENTED`, `COMMENT_REPLIED`, `PROJECT_REACTED`, `PROJECT_COLLAB_INTEREST`, `PROJECT_UPDATED`, `FOLLOWED_YOU`, `FOLLOWING_PUBLISHED`. `PROJECT_LIKED` is no longer sent; it stays for old rows |
+| key        | string?   | identity of what is announced, so a toggled state (a reaction, a follow) notifies once — see `notifyOnce` in `lib/notifications.ts`                                                                                                                                                                                                                                          |
+| payload    | json      | denormalized display data (project title, actor name, etc.) captured at creation time                                                                                                                                                                                                                                                                                        |
+| read       | bool      |                                                                                                                                                                                                                                                                                                                                                                              |
+| created_at | timestamp |                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### OrgMember
-| Field | Type | Notes |
-|---|---|---|
-| org_id | uuid | |
-| user_id | uuid | |
-| role | string | `ADMIN` or `MEMBER` |
-| status | enum | `ACTIVE`, `INVITED` (waiting on the person), `REQUESTED` (waiting on an admin) — only `ACTIVE` is a member |
-| joined_at | timestamp | |
+
+| Field     | Type      | Notes                                                                                                      |
+| --------- | --------- | ---------------------------------------------------------------------------------------------------------- |
+| org_id    | uuid      |                                                                                                            |
+| user_id   | uuid      |                                                                                                            |
+| role      | string    | `ADMIN` or `MEMBER`                                                                                        |
+| status    | enum      | `ACTIVE`, `INVITED` (waiting on the person), `REQUESTED` (waiting on an admin) — only `ACTIVE` is a member |
+| joined_at | timestamp |                                                                                                            |
 
 Admins invite (`POST /orgs/:slug/members`), students ask (`POST /orgs/:slug/join`), and each side's answer makes the other `ACTIVE`. A group always keeps an admin while it has other members.
 
 ### Report
+
 One row per person per target per open complaint. See [Moderation](#moderation).
 
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| reporter_id | uuid | FK → User |
-| target_type | enum | `PROJECT`, `COMMENT`, `COLLECTION`, `USER`, `ORG_ACTIVITY` |
-| project_id | uuid? | the project reported, or the one a reported comment is on |
-| comment_id / collection_id / activity_id | uuid? | the thing reported; set null if it is deleted |
-| subject_user_id | uuid? | whoever posted it — who a warning or suspension is for |
-| excerpt | text? | what it said when it was reported |
-| reason | enum | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `OTHER` |
-| details | text? | reporter's free text, capped at 1000 chars |
-| status | enum | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself |
-| created_at | timestamp | |
-| reviewed_at | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides |
-| reviewed_by_id | uuid? | FK → User (the moderator) |
-| review_note | text? | shown to the owner on a warning or take-down |
+| Field                                    | Type       | Notes                                                                                   |
+| ---------------------------------------- | ---------- | --------------------------------------------------------------------------------------- |
+| id                                       | uuid       |                                                                                         |
+| reporter_id                              | uuid       | FK → User                                                                               |
+| target_type                              | enum       | `PROJECT`, `COMMENT`, `COLLECTION`, `USER`, `ORG_ACTIVITY`                              |
+| project_id                               | uuid?      | the project reported, or the one a reported comment is on                               |
+| comment_id / collection_id / activity_id | uuid?      | the thing reported; set null if it is deleted                                           |
+| subject_user_id                          | uuid?      | whoever posted it — who a warning or suspension is for                                  |
+| excerpt                                  | text?      | what it said when it was reported                                                       |
+| reason                                   | enum       | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `OTHER` |
+| details                                  | text?      | reporter's free text, capped at 1000 chars                                              |
+| status                                   | enum       | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself  |
+| created_at                               | timestamp  |                                                                                         |
+| reviewed_at                              | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides           |
+| reviewed_by_id                           | uuid?      | FK → User (the moderator)                                                               |
+| review_note                              | text?      | shown to the owner on a warning or take-down                                            |
 
 ### MessageReport
+
 A reported conversation. Same reasons, statuses and review fields as `Report`, but about a person (`reported_id`) rather than a project, and with `messages` — a JSON snapshot of the last 30 messages between the two, taken when the report is filed. Only someone the reported student has messaged can file one. The moderator's decisions are dismiss, warn, or suspend messaging (stored as `TAKEN_DOWN`); a suspension closes every other open report about the same person.
 
 ---
@@ -245,11 +269,11 @@ The session is a JWT in an HTTP-only, `SameSite=Lax` cookie, valid for 7 days, a
 
 Projects have four visibility levels:
 
-| Level | Shown as | Who can see |
-|---|---|---|
-| `private` | Draft | Owner and accepted collaborators only |
-| `uoft` | U of T | Any signed-in U of T user |
-| `public` | Public | Anyone on the internet |
+| Level      | Shown as | Who can see                                                      |
+| ---------- | -------- | ---------------------------------------------------------------- |
+| `private`  | Draft    | Owner and accepted collaborators only                            |
+| `uoft`     | U of T   | Any signed-in U of T user                                        |
+| `public`   | Public   | Anyone on the internet                                           |
 | `unlisted` | Unlisted | Anyone with the link; never listed, never announced to followers |
 
 Default: `private`. Students must explicitly open visibility up.
@@ -288,7 +312,7 @@ SSE rather than WebSockets because the traffic only goes one way, it rides the s
 
 A browser can subscribe to Web Push from `/settings` (`web/src/lib/push.ts`), which registers the service worker `web/public/sw.js` and hands its subscription to `POST /push/subscriptions`. From then on `lib/notifications.ts` pushes each notification through `lib/push.ts`, and the send-message route pushes each message, collapsed per sender under one tag and without its text.
 
-- **What is pushed.** Every type maps to one of three switches in `PUSH_CATEGORY`, or to null: *messages*, *answers* (invitations, access and group requests, moderation), *activity* (comments, replies, reactions, follows, want-to-collab). The map is exhaustive, so a new `NotificationType` does not compile until someone decides whether it is worth a buzz. The switches are `User.pushMessages` / `pushAnswers` / `pushActivity`. They are per account, while turning push on is per browser. The broadcasts, `FOLLOWING_PUBLISHED` and `PROJECT_UPDATED` (every logged edit), map to null: they scale with somebody else's activity, and a phone buzzing for them is how push gets turned off. The push text is written in `pushFor` and is shorter than the bell's, since a lock screen shows two lines; the API cannot import the web app's copy.
+- **What is pushed.** Every type maps to one of three switches in `PUSH_CATEGORY`, or to null: _messages_, _answers_ (invitations, access and group requests, moderation), _activity_ (comments, replies, reactions, follows, want-to-collab). The map is exhaustive, so a new `NotificationType` does not compile until someone decides whether it is worth a buzz. The switches are `User.pushMessages` / `pushAnswers` / `pushActivity`. They are per account, while turning push on is per browser. The broadcasts, `FOLLOWING_PUBLISHED` and `PROJECT_UPDATED` (every logged edit), map to null: they scale with somebody else's activity, and a phone buzzing for them is how push gets turned off. The push text is written in `pushFor` and is shorter than the bell's, since a lock screen shows two lines; the API cannot import the web app's copy.
 - **Not twice.** The worker shows nothing when a uofthub tab is focused and visible, since the bell and Messages already update live. Safari is the exception: it revokes a subscription whose pushes show nothing, so on Apple devices every push is shown.
 - **Read state follows.** Each push names its bell row (`notificationId`). Clicking it marks that row read, and the read routes publish a live event so open tabs agree. Opening the bell closes the notifications still on screen, and so does opening a conversation for that sender's.
 - **Badge.** Each push carries unread notifications plus unread messages, which the worker sets on the installed app's icon (`setAppBadge`). The header's bell and Messages buttons keep it current while the app is open.
@@ -324,11 +348,11 @@ The `/admin` page (Moderation, in the account menu for moderators only) has five
 
 `GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide). `POST /admin/reports/:id/decision` takes one of three decisions:
 
-| Decision | Effect | Owner told? |
-|---|---|---|
-| `DISMISS` | Closes the report. | No — nobody learns a dismissed report existed |
-| `WARN` | It stays up. | Yes, with the moderator's note |
-| `TAKE_DOWN` | A project: visibility forced to `private`, `taken_down_at` stamped. A comment, collection or event: removed. A profile: bio, links and photo cleared. | Yes, with the moderator's note |
+| Decision    | Effect                                                                                                                                                | Owner told?                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `DISMISS`   | Closes the report.                                                                                                                                    | No — nobody learns a dismissed report existed |
+| `WARN`      | It stays up.                                                                                                                                          | Yes, with the moderator's note                |
+| `TAKE_DOWN` | A project: visibility forced to `private`, `taken_down_at` stamped. A comment, collection or event: removed. A profile: bio, links and photo cleared. | Yes, with the moderator's note                |
 
 Any decision can also suspend the account of whoever posted it (`suspend: true`).
 
@@ -348,24 +372,24 @@ Object storage: Cloudflare R2 (S3-compatible). The bucket is private — files a
 
 **Allowed file types** — allowlisted by category rather than a short fixed list, so students aren't forced to convert files before uploading:
 
-| Category | Extensions |
-|---|---|
-| Docs | `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, `.csv`, `.txt`, `.md` |
-| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` |
-| Video | `.mp4`, `.webm` |
-| Audio | `.mp3`, `.wav` |
-| Archives | `.zip` |
+| Category | Extensions                                                                       |
+| -------- | -------------------------------------------------------------------------------- |
+| Docs     | `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, `.csv`, `.txt`, `.md` |
+| Images   | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`                                 |
+| Video    | `.mp4`, `.webm`                                                                  |
+| Audio    | `.mp3`, `.wav`                                                                   |
+| Archives | `.zip`                                                                           |
 
 Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a security boundary, not a friction one. Storage cost is controlled via per-file/per-project size limits, not by narrowing formats.
 
 **Limits — individual accounts**
 
-| Scope | Limit |
-|---|---|
-| Per-file (docs/images) | 25MB |
-| Per-file (video) | 250MB — larger videos should be hosted externally (YouTube, etc.) and attached via `ProjectLink` instead of uploaded |
-| Per-file (archives) | 100MB |
-| Per-project file count | 20 files (soft cap) |
+| Scope                  | Limit                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Per-file (docs/images) | 25MB                                                                                                                 |
+| Per-file (video)       | 250MB — larger videos should be hosted externally (YouTube, etc.) and attached via `ProjectLink` instead of uploaded |
+| Per-file (archives)    | 100MB                                                                                                                |
+| Per-project file count | 20 files (soft cap)                                                                                                  |
 
 There is no per-account or per-group storage quota. The 2GB personal quota and the 10GB per-term group allowance were removed with the redesign — they were enforcement for a scale the platform hasn't reached, and the per-file limits and file-count cap above already bound what any one project can hold. When storage costs make a quota worth having again, it should be designed then against real usage, not restored from the old numbers. See [redesign.md](redesign.md#student-groups-and-quotas).
 
@@ -422,26 +446,26 @@ On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update str
 
 ## Stack decisions
 
-| Concern | Decision | Rationale |
-|---|---|---|
-| Monorepo | pnpm workspaces | Shared types between api/web without publishing; fast installs |
-| Frontend | React 19 + Vite | Fast DX, strong ecosystem, no framework lock-in at this scale |
-| Backend | Fastify 5 | Faster than Express, built-in JSON Schema validation, good TS support |
-| Language | TypeScript throughout | Type safety across the API boundary via `@uofthub/types` |
-| ORM | Prisma | Clean migrations, generated TS types, good Postgres support |
-| Database | PostgreSQL | Relational model fits the social graph; Prisma handles migrations |
-| Routing (web) | React Router v7 | Standard choice, no SSR complexity needed at MVP |
-| Styling (web) | Tailwind CSS v4 | Design tokens as a `@theme` in `src/index.css`, redefined for dark mode; components style themselves with utilities, and shared shapes live in `src/components/ui`. See [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-web) |
-| Data fetching | TanStack Query | Server state management, caching, background refetch |
-| Auth | Microsoft OAuth (domain-restricted) + email/password | Microsoft is what every U of T account already has; password sign-in covers local development and anyone who prefers it. Both are restricted to `@mail.utoronto.ca` / `@utoronto.ca` |
-| Session | JWT via `@fastify/jwt` | Stateless; works across potential future services |
-| File storage | Cloudflare R2 (S3-compatible) | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API |
-| AI discovery | OpenAI Responses API via `openai`, structured output validated with Zod | Turns a natural-language query into a closed set of filters; `api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
-| Email | Resend | Simple API, generous free tier; `api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything |
-| Tests | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real |
-| CI | GitHub Actions | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`) |
-| Hosting (API + database) | Render | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/` |
-| Hosting (web) | Cloudflare Pages | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard |
+| Concern                  | Decision                                                                                             | Rationale                                                                                                                                                                                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo                 | pnpm workspaces                                                                                      | Shared types between api/web without publishing; fast installs                                                                                                                                                                                                                          |
+| Frontend                 | React 19 + Vite                                                                                      | Fast DX, strong ecosystem, no framework lock-in at this scale                                                                                                                                                                                                                           |
+| Backend                  | Fastify 5                                                                                            | Faster than Express, built-in JSON Schema validation, good TS support                                                                                                                                                                                                                   |
+| Language                 | TypeScript throughout                                                                                | Type safety across the API boundary via `@uofthub/types`                                                                                                                                                                                                                                |
+| ORM                      | Prisma                                                                                               | Clean migrations, generated TS types, good Postgres support                                                                                                                                                                                                                             |
+| Database                 | PostgreSQL                                                                                           | Relational model fits the social graph; Prisma handles migrations                                                                                                                                                                                                                       |
+| Routing (web)            | React Router v7                                                                                      | Standard choice, no SSR complexity needed at MVP                                                                                                                                                                                                                                        |
+| Styling (web)            | Tailwind CSS v4                                                                                      | Design tokens as a `@theme` in `src/index.css`, redefined for dark mode; components style themselves with utilities, and shared shapes live in `src/components/ui`. See [CONTRIBUTING.md § Styling](CONTRIBUTING.md#styling-web)                                                        |
+| Data fetching            | TanStack Query                                                                                       | Server state management, caching, background refetch                                                                                                                                                                                                                                    |
+| Auth                     | Microsoft OAuth (domain-restricted) + email/password                                                 | Microsoft is what every U of T account already has; password sign-in covers local development and anyone who prefers it. Both are restricted to `@mail.utoronto.ca` / `@utoronto.ca`                                                                                                    |
+| Session                  | JWT via `@fastify/jwt`                                                                               | Stateless; works across potential future services                                                                                                                                                                                                                                       |
+| File storage             | Cloudflare R2 (S3-compatible)                                                                        | Decoupled from compute; no egress fees; `@aws-sdk/client-s3` talks to it over the S3 API                                                                                                                                                                                                |
+| AI discovery             | OpenAI Responses API via `openai`, structured output validated with Zod                              | Turns a natural-language query into a closed set of filters; `api/src/lib/discovery.ts` falls back to keyword search with a warning if `OPENAI_API_KEY` is unset, so no route depends on an AI budget existing. Model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL` |
+| Email                    | Resend                                                                                               | Simple API, generous free tier; `api/src/lib/email.ts` no-ops with a warning if `RESEND_API_KEY` is unset rather than blocking anything                                                                                                                                                 |
+| Tests                    | Vitest — `app.inject()` against a real Postgres for the API, Testing Library + jsdom for the web app | Same toolchain as Vite/TS, no extra config; the rules worth testing are Prisma queries, so a mocked database would test nothing real                                                                                                                                                    |
+| CI                       | GitHub Actions                                                                                       | `typecheck` + API tests + web tests + `build` + `lint` on every PR (`.github/workflows/ci.yml`)                                                                                                                                                                                         |
+| Hosting (API + database) | Render                                                                                               | Managed Postgres next to the API, so there's no separate database account or connection-pooling story at this size; deploys from the Dockerfile in `api/`                                                                                                                               |
+| Hosting (web)            | Cloudflare Pages                                                                                     | Static build, free, and already where R2 lives — the storage bucket and the site sit in one dashboard                                                                                                                                                                                   |
 
 ---
 
@@ -449,11 +473,11 @@ On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update str
 
 Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck` → API and web tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
 
-| Piece | Where | How |
-|---|---|---|
-| API | Render web service (Docker) | Defined in `render.yaml` (a Blueprint): Dockerfile `api/Dockerfile`, build context the repo root, health check on `/health` |
-| Database | Render Postgres | Also in `render.yaml`; `DATABASE_URL` is wired from it to the API, and nothing else references the credentials |
-| Web | Cloudflare Pages | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
+| Piece    | Where                       | How                                                                                                                                                                                                                                           |
+| -------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API      | Render web service (Docker) | Defined in `render.yaml` (a Blueprint): Dockerfile `api/Dockerfile`, build context the repo root, health check on `/health`                                                                                                                   |
+| Database | Render Postgres             | Also in `render.yaml`; `DATABASE_URL` is wired from it to the API, and nothing else references the credentials                                                                                                                                |
+| Web      | Cloudflare Pages            | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
 
 **Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the health check, and Render keeps the previous instance serving.
 
@@ -477,7 +501,13 @@ Environment variables in production — see `api/.env.example` for the full list
 
 On Cloudflare Pages, set `VITE_API_URL` (the build reads it, and so do the Functions). `web/public/_headers` sets the Content-Security-Policy and the other response headers; the API sets its own in an `onSend` hook in `app.ts`.
 
-**Link previews** — the app is a single page, so a shared link would otherwise show the site's generic title. `web/functions/projects/[id].js`, a Pages Function, fetches `GET /projects/:id/share` (public projects only) and writes the project's title, pitch and cover into the page's head; `web/functions/sitemap.xml.js` lists every public project from `GET /projects/sitemap`. Nothing else is server-rendered.
+**Link previews and search** — the app is a single page, so without help every shared link and every crawler would see index.html's generic head and an empty `#root`. The Pages Functions in `web/functions` fix that at the edge; nothing is server-rendered beyond them.
+
+- `index.html` carries the site's defaults: title, description, canonical, Open Graph and Twitter tags, and `public/og.png`, the site's own card (redrawn with `pnpm --filter @uofthub/api og:site`). The functions set attributes on those tags rather than adding their own, so every tag they change has to exist there.
+- `_middleware.js` runs for every page: it sets the canonical address and `og:url` (no query string, no trailing slash), adds the site's `WebSite` JSON-LD on `/`, and answers a path the app has no page for with a 404 and `noindex` instead of the SPA fallback's 200. Its list of paths, `_routes.js`, must match `src/App.tsx`; `src/lib/pagesRoutes.test.ts` fails when they differ.
+- `projects/[id].js`, `u/[id].js` and `orgs/[slug].js` fetch `GET /projects/:id/share`, `/users/:id/share` and `/orgs/:slug/share` and write the page's title, description, image, schema.org data (`CreativeWork`, `ProfilePage`, `Organization`) and a plain-HTML summary into `#root` for crawlers that don't run the app. A 404 from the API becomes a 404 page; an API that is down or slow leaves the page as it is. A project that isn't public is a 404 even for someone who may see it (the app still renders for them), since the API won't confirm a private project's id.
+- The image is a project's cover when it has one, and otherwise a 1200×630 card the API draws (`GET /projects/:id/og.png`, `/users/:id/og.png`, `/orgs/:slug/og.png`; `lib/ogImage.ts` with satori and resvg, fonts in `api/assets`). The `/share` answer carries the card's URL with a fingerprint of what it draws, so an edit is a new URL and Discord or Slack don't keep showing the old one.
+- `sitemap.xml.js` lists the site's own pages, every public project (`GET /projects/sitemap`), every group (`GET /orgs`) and each confirmed student with at least one public project (`GET /users/sitemap`). A student who has only signed up can be found by link, but isn't listed.
 
 Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Render may buffer them. It also means the API must run on a paid Render instance: free instances spin down when idle, which drops the live-update streams and stops the in-process maintenance sweep.
 

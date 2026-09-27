@@ -6,6 +6,9 @@
     "module": "esnext",
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,
+    /* src/lib/pagesRoutes.test.ts imports functions/_routes.js, which is plain
+       JavaScript: Pages builds every file in functions/, a .d.ts included. */
+    "allowJs": true,
     "skipLibCheck": true,
 
     /* Bundler mode */
