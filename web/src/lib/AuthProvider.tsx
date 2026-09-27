@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type MeUser } from './api'
 import { AuthContext } from './auth'
@@ -37,17 +37,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeHint(signedIn)
   }
 
+  const qc = useQueryClient()
+  // Whose data the cache holds: undefined until the first check answers.
+  const cachedFor = useRef<string | null | undefined>(undefined)
+  // Everything cached was fetched as one account — whether they may edit a
+  // project, what they saved, their messages. Signing in as somebody else
+  // without logging out here (another tab, an expired session) must not show
+  // it to them: a project page cached as its owner would still offer the
+  // owner's Manage links and Manage files.
+  const settle = (me: MeUser | null) => {
+    const id = me?.id ?? null
+    if (cachedFor.current !== undefined && cachedFor.current !== id) qc.clear()
+    cachedFor.current = id
+    setUser(me)
+  }
+
   // The first check needs no `setLoading(true)` — loading starts true — so
   // the mount effect only starts the request; a later refetch says it is busy.
   const load = () => {
     api.auth
       .me()
       .then((me) => {
-        setUser(me)
+        settle(me)
         remember(true)
       })
       .catch(() => {
-        setUser(null)
+        settle(null)
         remember(false)
       })
       .finally(() => setLoading(false))
@@ -58,9 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     load()
   }
 
+  // Once, on mount: everything `load` touches is a ref, a setter or the client.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [])
 
-  const qc = useQueryClient()
   const logout = async () => {
     await api.auth.logout()
     setUser(null)
