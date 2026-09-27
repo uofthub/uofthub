@@ -12,6 +12,7 @@ import {
 } from '../lib/authEmails.js'
 import { onEmailVerified } from '../lib/accounts.js'
 import { matchesDeclaredType } from '../lib/fileValidation.js'
+import { tenantAllowed, tenantOfIdToken } from '../lib/microsoftTenant.js'
 
 const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
 
@@ -87,6 +88,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /auth/callback — Microsoft redirects here after login
   app.get('/callback', async (request, reply) => {
+    // Not registered without credentials (see app.ts).
+    if (!app.hasDecorator('microsoftOAuth2')) return failSignIn(reply, 'unavailable')
     const oauthResult = await app.microsoftOAuth2
       .getAccessTokenFromAuthorizationCodeFlow(request)
       .catch((err: unknown) => {
@@ -95,6 +98,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       })
 
     if (!oauthResult) return failSignIn(reply, 'oauth')
+
+    // Before anything the token says about an address is believed: see
+    // lib/microsoftTenant.ts for why any other directory's word is worthless.
+    if (!tenantAllowed(oauthResult.token.id_token)) {
+      app.log.warn(
+        { tenant: tenantOfIdToken(oauthResult.token.id_token) },
+        'Microsoft sign-in from a tenant not in MICROSOFT_ALLOWED_TENANT_IDS'
+      )
+      return failSignIn(reply, 'domain')
+    }
 
     const accessToken = oauthResult.token.access_token
 

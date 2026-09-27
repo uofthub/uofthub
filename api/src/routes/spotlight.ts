@@ -3,7 +3,7 @@ import { db } from '../db/client.js'
 import { startOfUtcWeek } from '../lib/dates.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds } from '../lib/trending.js'
-import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
+import { getOptionalUserId, listedProjectWhere } from '../lib/visibility.js'
 
 /**
  * GET /spotlight — the navy banner at the top of the home feed.
@@ -15,8 +15,10 @@ import { getOptionalUserId, visibleProjectWhere } from '../lib/visibility.js'
 export const spotlightRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (request) => {
     const callerId = await getOptionalUserId(request)
+    // Listed, not merely visible: the banner is the same for everyone, so a
+    // student's own draft or link-only project must never be its "pick".
     const eligible = {
-      AND: [visibleProjectWhere(callerId), { takenDownAt: null }, { publishedAt: { not: null } }],
+      AND: [listedProjectWhere(!!callerId), { publishedAt: { not: null } }],
     }
 
     const pick = await db.spotlight.findUnique({

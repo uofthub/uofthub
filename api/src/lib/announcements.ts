@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { notifyFollowersOfPublish } from './publishing.js'
 
@@ -23,12 +24,18 @@ export const ANNOUNCE_INTERVAL_MS = 5 * 60 * 1000
 export async function announceDueProjects(now: Date = new Date()): Promise<string[]> {
   // Only projects that are listed to someone: one taken down, or put back to
   // private or link-only while it waited, has nothing to announce.
+  //
+  // Prisma stores DateTime as UTC in `timestamp without time zone` columns,
+  // but a Date in raw SQL arrives as a timestamptz, which Postgres would
+  // convert using the session's time zone. Pin it to UTC so the sweep is
+  // right on a database that isn't running in UTC.
+  const at = Prisma.sql`(${now}::timestamptz AT TIME ZONE 'UTC')`
   const due = await db.$queryRaw<{ id: string; ownerId: string; title: string }[]>`
     UPDATE "Project"
-    SET "announcedAt" = ${now}, "publishedAt" = "showFrom"
+    SET "announcedAt" = ${at}, "publishedAt" = "showFrom"
     WHERE "announcedAt" IS NULL
       AND "publishedAt" IS NOT NULL
-      AND "showFrom" <= ${now}
+      AND "showFrom" <= ${at}
       AND "visibility" IN ('PUBLIC', 'UOFT')
       AND "takenDownAt" IS NULL
     RETURNING "id", "ownerId", "title"

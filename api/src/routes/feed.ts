@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import type { Campus, Prisma, ProjectType } from '@prisma/client'
 import { db } from '../db/client.js'
-import { visibleProjectWhere } from '../lib/visibility.js'
+import { listedProjectWhere } from '../lib/visibility.js'
 import { facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds } from '../lib/trending.js'
@@ -170,12 +170,14 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     const affinity = await affinityFor(userId)
 
     const eligible: Prisma.ProjectWhereInput[] = [
-      visibleProjectWhere(userId),
+      // Listed, not merely visible to this student: a project they only
+      // collaborate on is still a draft or link-only to everyone else, and
+      // never belongs in a feed.
+      listedProjectWhere(true),
       { ownerId: { not: userId } },
       // Only ever-published projects: a draft opened up yesterday belongs in
       // today's feed, and publishedAt is when that happened.
       { publishedAt: { not: null } },
-      { takenDownAt: null },
       ...(onCampus && scope !== 'campus' ? [{ owner: { campus: onCampus } }] : []),
       ...(type ? [{ type }] : []),
     ]

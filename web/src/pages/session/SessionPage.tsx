@@ -35,6 +35,7 @@ type Mode = 'login' | 'signup' | 'forgot'
 const OAUTH_ERRORS: Record<string, string> = {
   domain: 'That Microsoft account isn’t a U of T one. Sign in with your utoronto.ca account.',
   oauth: 'Microsoft sign-in didn’t go through. Try again, or use your email and password.',
+  unavailable: 'Microsoft sign-in isn’t set up here. Use your email and password instead.',
 }
 
 /** "Check your inbox", after anything that sent an email. */
