@@ -108,3 +108,6 @@ export const PROJECT_STATUSES: Record<ProjectStatus, { label: string; dot: strin
 }
 
 export const PROJECT_STATUS_KEYS = Object.keys(PROJECT_STATUSES) as ProjectStatus[]
+
+/** As long as the API lets it be — see HELP_NEEDED_MAX in api/src/routes/projects.ts. */
+export const HELP_NEEDED_MAX = 500

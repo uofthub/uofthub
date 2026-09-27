@@ -47,7 +47,8 @@ import {
   withContent,
 } from '../lib/projectShape.js'
 import { recordView } from '../lib/views.js'
-import { restoreVersion, snapshotVersion } from '../lib/versions.js'
+import { logChanges, notifyFollowers, restoreVersion, snapshotVersion } from '../lib/versions.js'
+import { fieldChanges, sameRows, type Change } from '../lib/changes.js'
 import { trendingIds } from '../lib/trending.js'
 import { facetsFor } from '../lib/facets.js'
 import { parseCampus } from '../lib/campus.js'
@@ -114,6 +115,8 @@ const VISIBILITIES: Visibility[] = ['PRIVATE', 'UOFT', 'PUBLIC', 'UNLISTED']
 const TITLE_MAX = 120
 /** A card's one line. Generous next to the form's 120, for pitches split out of old descriptions. */
 const PITCH_MAX = 280
+/** "What do you need help with?" — a couple of sentences, shown on cards. */
+const HELP_NEEDED_MAX = 500
 /** The long overview; room for a README brought in by a GitHub import. */
 const DESCRIPTION_MAX = 20_000
 const TAGS_MAX = 10
@@ -206,6 +209,7 @@ function parseFields(body: {
   pitch?: string | null
   type?: string | null
   status?: string | null
+  helpNeeded?: string | null
   visibility?: string
   showFrom?: string | null
   sections?: unknown
@@ -223,6 +227,7 @@ function parseFields(body: {
       pitch?: string | null
       type?: ProjectType | null
       status?: ProjectStatus | null
+      helpNeeded?: string | null
       visibility?: Visibility
       showFrom?: Date | null
       sections?: Prisma.InputJsonValue | typeof Prisma.DbNull
@@ -282,6 +287,14 @@ function parseFields(body: {
     if (pitch && pitch.length > PITCH_MAX)
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
   }
+  let helpNeeded: string | null | undefined
+  if (body.helpNeeded !== undefined) {
+    if (body.helpNeeded !== null && typeof body.helpNeeded !== 'string')
+      return { error: 'What you need help with must be text' }
+    helpNeeded = body.helpNeeded?.trim() || null
+    if (helpNeeded && helpNeeded.length > HELP_NEEDED_MAX)
+      return { error: `What you need help with is at most ${HELP_NEEDED_MAX} characters` }
+  }
   return {
     title,
     description,
@@ -289,6 +302,7 @@ function parseFields(body: {
     pitch,
     type,
     status,
+    helpNeeded,
     visibility: visibility || undefined,
     showFrom,
     sections: sections && asJson(sections.value),
@@ -316,6 +330,41 @@ async function ownOutput(projectId: string, outputId: string, userId: string) {
  */
 async function deleteObjects(keys: (string | null | undefined)[]) {
   await Promise.all(keys.flatMap((k) => (k ? [deleteObject(k).catch(() => undefined)] : [])))
+}
+
+/** How a link is named on the Updates timeline: its label, or where it goes. */
+function linkName(link: { label: string | null; url: string }) {
+  if (link.label) return link.label
+  try {
+    return new URL(link.url).hostname
+  } catch {
+    return link.url
+  }
+}
+
+/** A project's references and outputs, compared by what they say, not their ids. */
+async function contentSignature(projectId: string) {
+  const [references, outputs] = await Promise.all([
+    db.projectReference.findMany({
+      where: { projectId },
+      orderBy: { position: 'asc' },
+      select: {
+        kind: true,
+        title: true,
+        url: true,
+        doi: true,
+        authors: true,
+        year: true,
+        note: true,
+      },
+    }),
+    db.projectOutput.findMany({
+      where: { projectId },
+      orderBy: { position: 'asc' },
+      select: { kind: true, label: true, fileId: true, linkId: true, primaryOfProjectId: true },
+    }),
+  ])
+  return { references, outputs }
 }
 
 /** How many other projects "also used in…" names per reference. */
@@ -545,6 +594,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       description?: string
       type?: string
       status?: string
+      helpNeeded?: string | null
       tags?: unknown
       visibility?: string
       showFrom?: string | null
@@ -579,6 +629,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         description: fields.description ?? undefined,
         type: fields.type ?? undefined,
         status: fields.status ?? undefined,
+        helpNeeded: fields.helpNeeded ?? undefined,
         tags: fields.tags ?? [],
         visibility: fields.visibility ?? 'PRIVATE',
         showFrom: fields.showFrom ?? undefined,
@@ -610,6 +661,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       description?: string
       type?: string | null
       status?: string | null
+      helpNeeded?: string | null
       tags?: unknown
       visibility?: string
       showFrom?: string | null
@@ -648,6 +700,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'This project was taken down by a moderator. Contact the team to appeal.' })
     }
 
+    // What the references and outputs said before, to tell a save that
+    // rewrote them identically from one that changed them.
+    const tracked = !!project.publishedAt
+    const replacesContent = !!fields.references || !!outputs
+    const signatureBefore = tracked && replacesContent ? await contentSignature(project.id) : null
+
     // One transaction: an edit that replaces the references or the outputs
     // either lands whole or not at all.
     let orphanedThumbnails: string[] = []
@@ -671,6 +729,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             ...(fields.pitch !== undefined && { pitch: fields.pitch }),
             ...(fields.type !== undefined && { type: fields.type }),
             ...(fields.status !== undefined && { status: fields.status }),
+            ...(fields.helpNeeded !== undefined && { helpNeeded: fields.helpNeeded }),
             ...(visibility !== undefined && { visibility }),
             ...(fields.showFrom !== undefined && { showFrom: fields.showFrom }),
             ...(fields.sections !== undefined && { sections: fields.sections }),
@@ -693,6 +752,20 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     // and an edit to a still-unannounced project's show-from date moves when
     // it will appear.
     const publishedAt = await announcePublish(updated)
+
+    // On the Updates timeline — but only for a project that was already out;
+    // the edit that publishes it is the timeline's "Published".
+    if (tracked) {
+      const changes: Change[] = fieldChanges(project, updated)
+      if (signatureBefore) {
+        const after = await contentSignature(project.id)
+        if (fields.references && !sameRows(signatureBefore.references, after.references))
+          changes.push({ kind: 'edited', part: 'references' })
+        if (outputs && !sameRows(signatureBefore.outputs, after.outputs))
+          changes.push({ kind: 'edited', part: 'outputs' })
+      }
+      await logChanges(project.id, request.user.sub, changes)
+    }
 
     const [shaped] = await decorate([{ ...updated, publishedAt }], request.user.sub)
     return await withContent(shaped, updated)
@@ -1415,6 +1488,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: `A project has at most ${LINKS_MAX} links` })
 
       const link = await db.projectLink.create({ data: { projectId: project.id, ...parsed } })
+      await logChanges(project.id, request.user.sub, [
+        { kind: 'added', what: 'link', name: linkName(link) },
+      ])
       return reply.code(201).send(link)
     }
   )
@@ -1435,11 +1511,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       // Scope the delete to this project: owning one project must not grant
       // the ability to delete another project's link by id.
+      const link = await db.projectLink.findFirst({
+        where: { id: request.params.linkId, projectId: project.id },
+      })
       const { count } = await db.projectLink.deleteMany({
         where: { id: request.params.linkId, projectId: project.id },
       })
-      if (count === 0) return reply.code(404).send({ error: 'Link not found' })
+      if (count === 0 || !link) return reply.code(404).send({ error: 'Link not found' })
       await deleteObjects([output?.thumbnailKey])
+      await logChanges(project.id, request.user.sub, [
+        { kind: 'removed', what: 'link', name: linkName(link) },
+      ])
 
       return { ok: true }
     }
@@ -1505,6 +1587,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         },
         select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
       })
+      await logChanges(project.id, request.user.sub, [
+        { kind: 'added', what: 'file', name: file.name },
+      ])
       return reply.code(201).send(file)
     }
   )
@@ -1534,6 +1619,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       // thumbnail made from it.
       await db.projectFile.delete({ where: { id: file.id } })
       await deleteObjects([output?.thumbnailKey])
+      await logChanges(project.id, request.user.sub, [
+        { kind: 'removed', what: 'file', name: file.name },
+      ])
       return { ok: true }
     }
   )
@@ -1747,10 +1835,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const project = await db.project.findUnique({
         where: { id: request.params.id },
-        select: { id: true, title: true, ...VIEW_CHECK_SELECT, takenDownAt: true },
+        select: { id: true, ownerId: true },
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
-      if (!(await canEditProject({ id: project.id, ownerId: project.ownerId }, request.user.sub)))
+      if (!(await canEditProject(project, request.user.sub)))
         return reply.code(403).send({ error: 'Forbidden' })
 
       const note = request.body?.note?.trim() || null
@@ -1758,26 +1846,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: `An update note is at most ${NOTE_MAX} characters` })
       }
 
-      const version = await snapshotVersion(project.id, note)
+      const version = await snapshotVersion(project.id, note, { authorId: request.user.sub })
 
       // A version with a note is an update, and its followers asked to hear
-      // about those. Only the ones who can still see the project are told —
-      // it may have gone back to a draft since they followed it.
-      if (note && !project.takenDownAt) {
-        const followers = await db.projectFollow.findMany({
-          where: { projectId: project.id },
-          select: { userId: true },
-        })
-        const audience = followers
-          .map((f) => f.userId)
-          .filter((userId) => canViewProject(project, userId))
-        await notifyMany(
-          audience,
-          'PROJECT_UPDATED',
-          { projectId: project.id, projectTitle: project.title, note },
-          `update:${version.id}`
-        )
-      }
+      // about those.
+      if (note) await notifyFollowers(project.id, version.id, request.user.sub, { note })
       return reply.code(201).send(version)
     }
   )
@@ -1797,7 +1870,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: 'Forbidden' })
       const num = Number(request.params.num)
       if (!Number.isInteger(num)) return reply.code(404).send({ error: 'No such version' })
-      const result = await restoreVersion(project.id, num)
+      const result = await restoreVersion(project.id, num, request.user.sub)
       if (!result) return reply.code(404).send({ error: 'No such version' })
       return result
     }

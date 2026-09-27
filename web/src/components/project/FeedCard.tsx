@@ -19,7 +19,7 @@ import {
   PillButton,
 } from '../ui'
 import { Cover, CoverTag } from './Cover'
-import { SaveButton, StatusPill, TypeBadge, VisibilityPill } from './bits'
+import { HelpNeeded, SaveButton, StatusPill, TypeBadge, VisibilityPill } from './bits'
 import { titleLink } from './ProjectCard'
 import { ReactionBar } from './ReactionBar'
 import { ReportDialog } from './ReportDialog'
@@ -178,6 +178,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
             {project.pitch}
           </p>
         )}
+        <HelpNeeded project={project} clamp="line-clamp-3" />
         {tags.length > 0 && !phone && (
           <div className="flex flex-wrap gap-1.5">
             {tags.map((t) => (

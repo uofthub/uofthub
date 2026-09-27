@@ -1,27 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { UpdateDialog } from '../project/OwnerDialogs'
-import {
-  Avatar,
-  Button,
-  Card,
-  Dialog,
-  ErrorText,
-  Field,
-  Icon,
-  PillButton,
-  Select,
-} from '../../components/ui'
+import { HelpNeededDialog, UpdateDialog } from '../project/OwnerDialogs'
+import { Avatar, Button, Card, Dialog, Field, Icon, PillButton, Select } from '../../components/ui'
 
 type Mode = 'update' | 'help'
 
 /**
  * Both composer actions start from one of the student's own projects: an
- * update is a note about what changed in it, and "Looking for…" marks it as
- * asking for help — which is what puts it in the Looking for help list.
+ * update is a note about what changed in it, and "Looking for…" says what
+ * help it needs — which is what puts it in the Looking for help list.
  */
 function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) {
   const { user } = useAuth()
@@ -32,19 +22,19 @@ function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) 
     enabled: !!user,
   })
   const [projectId, setProjectId] = useState('')
-  const [updating, setUpdating] = useState<{ id: string; title: string } | null>(null)
+  const [next, setNext] = useState(false)
   const chosen = mine?.find((p) => p.id === projectId) ?? mine?.[0]
 
-  const askForHelp = useMutation({
-    mutationFn: () => api.projects.update(chosen!.id, { status: 'HELP_WANTED' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['facets'] })
-      qc.invalidateQueries({ queryKey: ['project', chosen!.id] })
-      onClose()
-    },
-  })
-
-  if (updating) return <UpdateDialog project={updating} onClose={onClose} />
+  if (next && chosen)
+    return mode === 'update' ? (
+      <UpdateDialog project={chosen} onClose={onClose} />
+    ) : (
+      <HelpNeededDialog
+        project={chosen}
+        onClose={onClose}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['userProjects', user?.id] })}
+      />
+    )
 
   const empty = !isLoading && (mine?.length ?? 0) === 0
 
@@ -58,25 +48,14 @@ function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) 
         ) : (
           <>
             <Button onClick={onClose}>Cancel</Button>
-            {mode === 'update' ? (
-              <Button
-                variant="primary"
-                icon="send"
-                disabled={!chosen}
-                onClick={() => chosen && setUpdating({ id: chosen.id, title: chosen.title })}
-              >
-                Next
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                icon="megaphone"
-                disabled={!chosen || askForHelp.isPending}
-                onClick={() => askForHelp.mutate()}
-              >
-                {askForHelp.isPending ? 'Saving…' : 'Mark as looking for help'}
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              icon={mode === 'update' ? 'send' : 'megaphone'}
+              disabled={!chosen}
+              onClick={() => setNext(true)}
+            >
+              Next
+            </Button>
           </>
         )
       }
@@ -110,15 +89,14 @@ function ComposerDialog({ mode, onClose }: { mode: Mode; onClose: () => void }) 
           </Field>
           {mode === 'help' && (
             <p className="text-14 leading-normal text-muted">
-              It shows up under <b>Looking for help</b> and in Explore’s filter. Say what you need
-              in its pitch or story — or{' '}
+              Next you’ll say what you need. It shows up under <b>Looking for help</b> and in
+              Explore’s filter — or{' '}
               <Link to="/projects/new?status=HELP_WANTED" onClick={onClose}>
                 start a new project that asks for help
               </Link>
               .
             </p>
           )}
-          {askForHelp.isError && <ErrorText>{(askForHelp.error as Error).message}</ErrorText>}
         </>
       )}
     </Dialog>

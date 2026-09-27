@@ -161,6 +161,23 @@ describe('messageFor — social notifications', () => {
     expect(text).toBe('Update on "Autonomous gripper": Added a second gripper arm')
     expect(to).toBe('/projects/p1#updates')
   })
+
+  it('says what an edit changed when there is no note', () => {
+    const { text, to } = messageFor(
+      notification('PROJECT_UPDATED', {
+        ...PROJECT,
+        changes: [
+          { kind: 'status', to: 'HELP_WANTED' },
+          { kind: 'added', what: 'file', name: 'demo.mp4' },
+          { kind: 'edited', part: 'description' },
+        ],
+      })
+    )
+    expect(text).toBe(
+      '"Autonomous gripper" changed: Marked it looking for help, added the file “demo.mp4” and 1 more'
+    )
+    expect(to).toBe('/projects/p1#updates')
+  })
 })
 
 describe('messageFor — malformed payloads', () => {

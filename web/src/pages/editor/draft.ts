@@ -102,6 +102,8 @@ export type Draft = {
   description: string
   type: ProjectType | null
   status: ProjectStatus | null
+  /** What it needs help with; sent only while the status asks for help. */
+  helpNeeded: string
   courseCode: string
   tags: string[]
   visibility: Visibility
@@ -129,6 +131,7 @@ export function emptyDraft(overrides: Partial<Draft> = {}): Draft {
     description: '',
     type: null,
     status: 'IN_PROGRESS',
+    helpNeeded: '',
     courseCode: '',
     tags: [],
     visibility: 'UOFT',
@@ -169,6 +172,7 @@ export function draftFromProject(project: ProjectDetail): Draft {
     description: project.description ?? '',
     type: project.type ?? null,
     status: project.status ?? null,
+    helpNeeded: project.helpNeeded ?? '',
     courseCode: project.courseCode ?? '',
     tags: project.tags,
     visibility: project.visibility,
@@ -385,6 +389,8 @@ export function contentPayload(draft: Draft): Omit<
     description: draft.description,
     type: draft.type,
     status: draft.status,
+    // Kept while the status moves on, so asking again starts from it.
+    ...(draft.status === 'HELP_WANTED' && { helpNeeded: orNull(draft.helpNeeded) }),
     courseCode: orNull(draft.courseCode),
     tags: draft.tags.filter((t) => t.toUpperCase() !== draft.courseCode.trim().toUpperCase()),
     sections: sectionsPayload(draft.sections),

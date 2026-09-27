@@ -66,6 +66,28 @@ export function VisibilityPill({ visibility }: { visibility: string }) {
   return null
 }
 
+/**
+ * What a project looking for help wants a hand with, under a card's pitch —
+ * the line the Looking for help list is for. Nothing when it hasn't said.
+ */
+export function HelpNeeded({
+  project,
+  clamp = 'line-clamp-2',
+}: {
+  project: Pick<ProjectSummary, 'status' | 'helpNeeded'>
+  clamp?: string
+}) {
+  if (project.status !== 'HELP_WANTED' || !project.helpNeeded) return null
+  return (
+    <p className={cx('flex gap-1.5 text-14 leading-[1.45] text-navy-ink', clamp)}>
+      <Icon name="megaphone" size={15} className="mt-0.5 shrink-0" />
+      <span>
+        <b>Needs:</b> {project.helpNeeded}
+      </span>
+    </p>
+  )
+}
+
 /** The row every card opens with: type on the left, where it stands on the right. */
 export function CardTop({
   project,

@@ -184,6 +184,8 @@ export type ProjectFields = {
   description: string
   type: ProjectType | null
   status: ProjectStatus | null
+  /** What a project looking for help wants a hand with. */
+  helpNeeded: string | null
   tags: string[]
   visibility: Visibility
   sections: ProjectSection[] | null
@@ -322,8 +324,32 @@ export type ProjectVersion = {
         link?: { label: string; url: string }
       })[]
     | null
+  /** What the edit that made it changed; absent on posted updates. */
+  changes?: ProjectChange[] | null
   createdAt: string
 }
+
+/** One thing an edit changed — api/src/lib/changes.ts, worded by lib/changes.ts. */
+export type ProjectChange =
+  | { kind: 'renamed'; from: string; to: string }
+  | {
+      kind: 'edited'
+      part:
+        | 'pitch'
+        | 'description'
+        | 'sections'
+        | 'details'
+        | 'tags'
+        | 'references'
+        | 'outputs'
+        | 'helpNeeded'
+    }
+  | { kind: 'status'; to: ProjectStatus | null }
+  | { kind: 'type'; to: ProjectType | null }
+  | { kind: 'course'; to: string | null }
+  | { kind: 'visibility'; to: Visibility }
+  | { kind: 'added' | 'removed'; what: 'file' | 'link'; name: string }
+  | { kind: 'restored'; versionNum: number }
 
 type Person = Pick<User, 'id' | 'name' | 'avatarUrl'> & { faculty?: string }
 

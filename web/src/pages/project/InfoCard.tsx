@@ -47,7 +47,9 @@ import {
   PeopleDialog,
   UpdateDialog,
   GroupsDialog,
+  HelpNeededDialog,
 } from './OwnerDialogs'
+import { FollowUpdatesButton } from './Sections'
 import { AddToCollectionDialog } from '../../components/collection'
 import FileViewer from '../../components/FileViewer'
 import {
@@ -59,7 +61,16 @@ import {
 } from '../../lib/outputs'
 
 type Open =
-  'update' | 'links' | 'files' | 'people' | 'groups' | 'insights' | 'report' | 'collect' | null
+  | 'update'
+  | 'links'
+  | 'files'
+  | 'people'
+  | 'groups'
+  | 'insights'
+  | 'report'
+  | 'collect'
+  | 'help'
+  | null
 
 function Maker({
   person,
@@ -231,6 +242,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         />
       )}
       {open === 'update' && <UpdateDialog project={project} onClose={() => setOpen(null)} />}
+      {open === 'help' && <HelpNeededDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'groups' && <GroupsDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'links' && <LinksDialog project={project} onClose={() => setOpen(null)} />}
       {open === 'files' && <FilesDialog project={project} onClose={() => setOpen(null)} />}
@@ -267,6 +279,28 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
         {pitch && <p className="mt-2.5 text-17 leading-normal text-ink-3">{pitch}</p>}
       </div>
 
+      {project.status === 'HELP_WANTED' && (
+        <div className="flex flex-col gap-1 rounded-md border border-navy-soft bg-navy-tint px-3.5 py-3">
+          <span className="flex items-center gap-1.5 text-14 font-semibold text-navy-ink">
+            <Icon name="megaphone" size={15} />
+            Looking for help
+          </span>
+          <p className="text-15 leading-normal wrap-anywhere whitespace-pre-line">
+            {project.helpNeeded ||
+              (project.canEdit
+                ? 'Say what you need a hand with, so the right people offer.'
+                : 'They haven’t said with what yet — ask in the comments.')}
+          </p>
+          {project.canEdit ? (
+            <LinkButton className="self-start text-14" onClick={() => setOpen('help')}>
+              {project.helpNeeded ? 'Edit' : 'Add what you need'}
+            </LinkButton>
+          ) : (
+            <span className="text-13 text-muted">Offer with “Want to collab” below.</span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         {action ? (
           action.href ? (
@@ -300,6 +334,8 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           </Button>
         )}
         <SaveButton project={project} size="lg" />
+        {/* Its makers hear about their own changes already. */}
+        {!project.canEdit && <FollowUpdatesButton project={project} compact />}
         <Menu
           width={250}
           trigger={({ toggle, open: menuOpen }) => (

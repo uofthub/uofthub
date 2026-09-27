@@ -1,4 +1,6 @@
 import type { Notification } from '@uofthub/types'
+import type { ProjectChange } from './api'
+import { summarizeChanges } from './changes'
 
 /**
  * What one notification says, and where it goes.
@@ -126,13 +128,18 @@ export function messageFor(n: Notification): { text: string; to: string } {
       }
     case 'FOLLOWING_PUBLISHED':
       return { text: `${p.ownerName} published "${p.projectTitle}"`, to }
-    case 'PROJECT_UPDATED':
-      // The note is the update; the title alone would say nothing new.
+    case 'PROJECT_UPDATED': {
+      // The note is the update, or what the edit changed; the title alone
+      // would say nothing new.
+      const changes = (n.payload as { changes?: ProjectChange[] }).changes
       return {
         text: p.note
           ? `Update on "${p.projectTitle}": ${p.note}`
-          : `"${p.projectTitle}" posted an update`,
+          : changes?.length
+            ? `"${p.projectTitle}" changed: ${summarizeChanges(changes)}`
+            : `"${p.projectTitle}" posted an update`,
         to: `${to}#updates`,
       }
+    }
   }
 }

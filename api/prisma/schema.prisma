@@ -256,6 +256,7 @@ model User {
   messageReportsReviewed MessageReport[]       @relation("MessageReviewer")
   authTokens             AuthToken[]
   emailInvitesSent       ProjectEmailInvite[]  @relation("EmailInvitesSent")
+  versionsAuthored       ProjectVersion[]
 }
 
 enum AuthTokenKind {
@@ -298,6 +299,10 @@ model Project {
   details         Json?
   type            ProjectType?
   status          ProjectStatus?
+  /// What a project looking for help wants a hand with ("A React dev for the
+  /// map view, ~3h a week"). Shown with the status on its page and on cards;
+  /// kept when the status moves on, so asking again starts from it.
+  helpNeeded      String?
   tags            String[]       @default([])
   /// The course it was made for, upper-cased: CSC211H5. The one source of
   /// truth for "Built for" and Explore's course filter — see the
@@ -438,9 +443,17 @@ model ProjectVersion {
   /// The outputs as they stood, each naming its file or link rather than
   /// pointing at it — a file deleted since still shows what it was.
   outputs     Json?
+  /// What an edit changed, when the version was recorded by the edit itself
+  /// rather than posted: a list of lib/changes.ts `Change`s, which the
+  /// Updates timeline words. Null on posted updates and restore points.
+  changes     Json?
+  /// Who made it. Edits by one person within a few minutes of each other are
+  /// folded into one version (lib/versions.ts `logChanges`), and only their own.
+  authorId    String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@unique([projectId, versionNum])
 }

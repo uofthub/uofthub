@@ -125,6 +125,8 @@ export interface Project {
   showFrom?: string | null
   type?: ProjectType
   status?: ProjectStatus
+  /** What a project looking for help wants a hand with. */
+  helpNeeded?: string | null
   tags: string[]
   /** The course it was made for, upper-cased: CSC211H5. */
   courseCode?: string | null

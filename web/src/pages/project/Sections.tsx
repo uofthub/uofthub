@@ -1,9 +1,10 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CommentThread } from '@uofthub/types'
 import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { describeChange } from '../../lib/changes'
 import { courseOf, postedAt, timeAgo, timeShort, topicTags } from '../../lib/projectView'
 import { MiniRow, ReportDialog } from '../../components/project'
 import Markdown from '../../components/Markdown'
@@ -33,7 +34,7 @@ function Node({
 }: {
   title: string
   when: string
-  children?: string
+  children?: ReactNode
   last?: boolean
   /** Opens what the project said at this point. */
   onOpen?: () => void
@@ -59,7 +60,8 @@ function Node({
 
 /**
  * The project's updates, newest first, ending at the day it went out. Each is
- * a version the owner saved with a note about what changed.
+ * a version: one its makers posted with a note, or one an edit recorded on
+ * its own with a list of what changed.
  */
 export function Updates({
   project,
@@ -103,7 +105,16 @@ export function Updates({
           when={timeAgo(v.createdAt)}
           onOpen={() => setViewing(v)}
         >
-          {v.note ?? 'Saved a new version'}
+          {v.note ??
+            (v.changes?.length ? (
+              <ul className="flex flex-col gap-0.5">
+                {v.changes.map((c, i) => (
+                  <li key={i}>{describeChange(c)}</li>
+                ))}
+              </ul>
+            ) : (
+              'Saved a new version'
+            ))}
         </Node>
       ))}
       <Node
@@ -203,10 +214,18 @@ function VersionDialog({
 }
 
 /**
- * "Tell me when this posts an update." Private to the follower — the owner
- * sees only a count in Insights.
+ * "Tell me when this changes": posted updates, and what its makers' edits
+ * changed — once per sitting (api/src/lib/versions.ts). Private to the
+ * follower; the owner sees only a count in Insights.
  */
-function FollowUpdatesButton({ project }: { project: ProjectDetail }) {
+export function FollowUpdatesButton({
+  project,
+  compact = false,
+}: {
+  project: ProjectDetail
+  /** The bell alone, beside the bookmark at the top of the page. */
+  compact?: boolean
+}) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -216,17 +235,27 @@ function FollowUpdatesButton({ project }: { project: ProjectDetail }) {
       qc.setQueryData<ProjectDetail>(['project', project.id], (p) => (p ? { ...p, following } : p)),
   })
   const following = project.following ?? false
+  const hint = following
+    ? 'Following — you’re told when this changes. Press to stop.'
+    : 'Follow — get told in the app when this changes'
   return (
     <Button
-      size="sm"
-      icon={following ? 'check' : 'bell'}
-      variant={following ? 'ghost' : 'default'}
+      size={compact ? 'lg' : 'sm'}
+      iconOnly={compact}
+      icon="bell"
+      variant={following && !compact ? 'ghost' : 'default'}
       aria-pressed={following}
+      aria-label={compact ? hint : undefined}
       onClick={() => (user ? toggle.mutate() : navigate('/session'))}
       disabled={toggle.isPending}
-      title={following ? 'You’ll be told when this posts an update' : undefined}
+      title={hint}
+      className={cx(
+        compact &&
+          following &&
+          'border-navy-soft bg-navy-tint text-navy-ink hover:bg-navy-tint hover:text-navy-ink [&_svg]:fill-current'
+      )}
     >
-      {following ? 'Following updates' : 'Follow updates'}
+      {compact ? undefined : following ? 'Following' : 'Follow'}
     </Button>
   )
 }

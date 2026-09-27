@@ -5,6 +5,7 @@ import { api, type ProjectDetail, type ProjectPerson } from '../../lib/api'
 import { formatBytes, lookFor, previewKindFor } from '../../lib/files'
 import { safeLinks, LINK_ICONS, timeAgo } from '../../lib/projectView'
 import { REACTIONS, reactionLabel } from '../../lib/reactions'
+import { HELP_NEEDED_MAX } from '../../lib/projectMeta'
 import {
   Avatar,
   Button,
@@ -19,6 +20,7 @@ import {
   Spinner,
   Stat,
   SuccessText,
+  TextArea,
 } from '../../components/ui'
 
 /** A list of things the owner can remove or toggle, one outlined row each. */
@@ -109,6 +111,81 @@ export function UpdateDialog({
         />
       </Field>
       {post.isError && <ErrorText>{(post.error as Error).message}</ErrorText>}
+    </Dialog>
+  )
+}
+
+/* ------------------------------- help needed ------------------------------- */
+
+/**
+ * "Looking for help — with what?" Saving marks the project as looking for
+ * help, which is what puts it in the Looking for help list; what it says is
+ * shown there, on the card, and at the top of the project.
+ */
+export function HelpNeededDialog({
+  project,
+  onClose,
+  onSaved,
+}: {
+  project: Pick<ProjectDetail, 'id' | 'title' | 'helpNeeded' | 'status'>
+  onClose: () => void
+  onSaved?: () => void
+}) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(project.helpNeeded ?? '')
+  const asking = project.status === 'HELP_WANTED'
+  const save = useMutation({
+    mutationFn: (stop: boolean) =>
+      api.projects.update(
+        project.id,
+        stop ? { status: 'IN_PROGRESS' } : { status: 'HELP_WANTED', helpNeeded: text.trim() }
+      ),
+    onSuccess: () => {
+      invalidate(qc, project.id)
+      qc.invalidateQueries({ queryKey: ['versions', project.id] })
+      qc.invalidateQueries({ queryKey: ['facets'] })
+      onSaved?.()
+      onClose()
+    },
+  })
+
+  return (
+    <Dialog
+      title={`Ask for help on ${project.title}`}
+      onClose={onClose}
+      footer={
+        <>
+          {asking && (
+            <Button className="mr-auto" onClick={() => save.mutate(true)} disabled={save.isPending}>
+              No longer looking
+            </Button>
+          )}
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            icon="megaphone"
+            onClick={() => save.mutate(false)}
+            disabled={!text.trim() || save.isPending}
+          >
+            {save.isPending ? 'Saving…' : asking ? 'Save' : 'Ask for help'}
+          </Button>
+        </>
+      }
+    >
+      <Field
+        label="What do you need help with?"
+        hint="Who you’re looking for and what they’d do. It shows on the card in Looking for help."
+      >
+        <TextArea
+          rows={4}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={HELP_NEEDED_MAX}
+          placeholder="A React developer for the map view, a few hours a week until April"
+          autoFocus
+        />
+      </Field>
+      {save.isError && <ErrorText>{(save.error as Error).message}</ErrorText>}
     </Dialog>
   )
 }

@@ -8,6 +8,7 @@ import { formatBytes } from '../../lib/files'
 import { useDocumentTitle, useReleasedObjectUrls } from '../../lib/hooks'
 import { outputKindForLink } from '../../lib/outputs'
 import {
+  HELP_NEEDED_MAX,
   PROJECT_STATUSES,
   PROJECT_STATUS_KEYS,
   PROJECT_TYPES,
@@ -551,6 +552,20 @@ function EditorForm({ initial, project }: { initial: Draft; project?: ProjectDet
               ))}
             </div>
           </div>
+          {draft.status === 'HELP_WANTED' && (
+            <Field
+              label="What do you need help with?"
+              hint="Who you’re looking for and what they’d do. It shows on the card in Looking for help."
+            >
+              <TextArea
+                rows={3}
+                value={draft.helpNeeded}
+                onChange={(e) => update({ helpNeeded: e.target.value })}
+                maxLength={HELP_NEEDED_MAX}
+                placeholder="A React developer for the map view, a few hours a week until April"
+              />
+            </Field>
+          )}
         </EditorCard>
 
         <EditorCard title="Outputs" note="what it produced">

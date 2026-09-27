@@ -4,7 +4,7 @@ import { cardAction } from '../../lib/outputs'
 import { courseOf, makersLabel } from '../../lib/projectView'
 import { AvatarStack, Card, CardGrid, Chip, Icon, type AvatarPerson } from '../ui'
 import { Cover, CoverTag } from './Cover'
-import { CardTop, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
+import { CardTop, HelpNeeded, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
 
 /** The owner first, then everyone credited alongside them. */
 function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, maker?: AvatarPerson) {
@@ -66,6 +66,7 @@ export function ProjectCard({
         {project.pitch && (
           <p className="line-clamp-2 text-14 leading-[1.45] text-ink-3">{project.pitch}</p>
         )}
+        <HelpNeeded project={project} />
         <div className="mt-auto flex min-w-0 items-center gap-2 pt-2">
           {makers.length > 0 && <AvatarStack people={makers} size={28} />}
           <span className="text-13 font-semibold">
@@ -126,6 +127,7 @@ export function ProjectListRow({
           </Link>
         </h3>
         {project.pitch && <p className="line-clamp-1 text-14 text-ink-3">{project.pitch}</p>}
+        <HelpNeeded project={project} clamp="line-clamp-1" />
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-2.5 pr-2 sm:flex">
         <span className="flex items-center gap-1.5">
