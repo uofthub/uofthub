@@ -426,8 +426,8 @@ Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck`
 
 | Piece | Where | How |
 |---|---|---|
-| API | Render web service (Docker) | Dockerfile path `api/Dockerfile`, Docker build context `.` (the repo root), health check path `/health` |
-| Database | Render Postgres | `DATABASE_URL` is set on the API service to the database's Internal Database URL; nothing else references the credentials |
+| API | Render web service (Docker) | Defined in `render.yaml` (a Blueprint): Dockerfile `api/Dockerfile`, build context the repo root, health check on `/health` |
+| Database | Render Postgres | Also in `render.yaml`; `DATABASE_URL` is wired from it to the API, and nothing else references the credentials |
 | Web | Cloudflare Pages | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
 
 **Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the health check, and Render keeps the previous instance serving.
@@ -436,7 +436,7 @@ Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck`
 
 Environment variables in production — see `api/.env.example` for the full list and shape:
 
-- `DATABASE_URL` — the Render Postgres Internal Database URL (same region as the API).
+- `DATABASE_URL` — wired from the Render Postgres by `render.yaml`.
 - `JWT_SECRET` — required; `buildApp()` refuses to boot in production without it rather than silently signing forgeable sessions.
 - `WEB_URL` — the site's origin. Drives both the CORS allowlist and the post-OAuth redirect, so a wrong value looks like "sign-in does nothing".
 - `API_URL` — this API's own public base, used to build avatar URLs.

@@ -1,0 +1,12 @@
+# Build context for api/Dockerfile is the repo root. Keep out what the image
+# installs or builds itself, and anything secret.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+coverage
+web/*
+!web/package.json
+docs
