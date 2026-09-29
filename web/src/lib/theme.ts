@@ -4,7 +4,7 @@ import { createContext, useContext } from 'react'
  * Light or dark, and whether the ⌘K command panel is open.
  *
  * The theme is resolved before first paint by public/theme.js (same
- * storage key, same fallback to the OS preference), so this only has to keep
+ * storage key, same fallback to light), so this only has to keep
  * `<html data-theme>` in step once React is running.
  */
 export interface ThemeState {

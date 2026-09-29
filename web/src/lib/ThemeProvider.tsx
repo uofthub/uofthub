@@ -5,12 +5,11 @@ const KEY = 'dark-mode'
 
 function initialDark(): boolean {
   try {
-    const saved = localStorage.getItem(KEY)
-    if (saved !== null) return saved === 'true'
+    return localStorage.getItem(KEY) === 'true'
   } catch {
-    // Storage blocked: fall through to the OS preference.
+    // Storage blocked: start light.
+    return false
   }
-  return !!window.matchMedia?.('(prefers-color-scheme: dark)').matches
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
