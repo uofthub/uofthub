@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Read by the action to label its results with the run they came from.
+      actions: read
       # To upload results to the repository's Security tab.
       security-events: write
     steps:

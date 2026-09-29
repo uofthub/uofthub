@@ -10,6 +10,8 @@ vi.mock('../lib/storage.js', async (original) => ({
   deleteObjects: async (keys: (string | null | undefined)[]) => {
     for (const key of keys) if (key) stored.delete(key)
   },
+  // CI has no storage configured to sign against.
+  signedDownloadUrl: async (key: string) => `https://storage.test/${key}`,
 }))
 
 import { db } from '../db/client.js'
