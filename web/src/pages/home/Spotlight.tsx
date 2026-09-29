@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { personLine } from '../../lib/campus'
 import { api } from '../../lib/api'
 import { actionTarget, cardAction } from '../../lib/outputs'
 import { Cover } from '../../components/project'
@@ -24,11 +25,11 @@ export function Spotlight() {
   const project = data?.project
   if (!project) return null
 
-  const faculty = project.owner?.faculty
+  const line = personLine(project.owner)
   const action = cardAction(project)
   const kicker = data.curated
-    ? `Weekly spotlight${faculty ? ` · ${faculty}` : ''}`
-    : `Most active this week${faculty ? ` · ${faculty}` : ''}`
+    ? `Weekly spotlight${line ? ` · ${line}` : ''}`
+    : `Most active this week${line ? ` · ${line}` : ''}`
   const text = data.curated && data.note ? data.note : project.pitch
 
   return (

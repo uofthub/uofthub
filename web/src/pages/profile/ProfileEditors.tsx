@@ -176,7 +176,7 @@ export function EditProfileDialog({ onClose }: { onClose: () => void }) {
       <Field label="Name">
         <Input value={form.name} onChange={set('name')} maxLength={80} />
       </Field>
-      <Field label="Faculty" hint="Explore’s faculty tiles and “Your program” match on this.">
+      <Field label="Faculty" hint="Explore’s faculty tiles match on this.">
         <Select value={form.faculty} onChange={set('faculty')}>
           <option value="">Prefer not to say</option>
           {FACULTIES.map((f) => (

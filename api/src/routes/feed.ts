@@ -2,9 +2,9 @@ import type { FastifyPluginAsync } from 'fastify'
 import type { Campus, Prisma, ProjectType } from '@prisma/client'
 import { db } from '../db/client.js'
 import { listedProjectWhere } from '../lib/visibility.js'
-import { facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
+import { facultyWhere, mainSubjects, normalizeCourseCode } from '../lib/faculties.js'
 import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
-import { trendingIds } from '../lib/trending.js'
+import { trendingIds, trendingScores } from '../lib/trending.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
 
@@ -19,11 +19,14 @@ import { startOfUtcDay } from '../lib/dates.js'
  *   FOLLOWING → its owner is somebody they follow
  *   COURSE    → it is tagged with a course they have published in themselves
  *   CAMPUS    → its owner is at their campus
- *   TRENDING  → the top-up, so a brand new account still lands on something
+ *   TRENDING  → nothing connects them, but people engaged with it this week
+ *   NEW       → nothing connects them and it is quiet: the rest of the site
  *
- * The first three are the connected feed and are ordered by publish time. The
- * fourth only appears once the connected set runs out, which is what keeps a
- * student with no follows from seeing an empty page on their first visit.
+ * The first three are the connected feed, newest first; the last two are
+ * discovery, this week's most engaged first and then everything else newest
+ * first. The blended feed deals the two together — three connected to every
+ * two from discovery — so a student sees past their own circle from the first
+ * screen, and scrolling never runs dry until they have seen every project.
  */
 
 const PAGE_SIZE = 20
@@ -37,6 +40,7 @@ type FeedReason =
   | { kind: 'COURSE'; tag: string }
   | { kind: 'CAMPUS'; campus: Campus }
   | { kind: 'TRENDING' }
+  | { kind: 'NEW' }
 
 /** What connects this student to everything the connected feed can show them. */
 type Affinity = {
@@ -53,6 +57,8 @@ type Affinity = {
   tagQuery: string[]
   /** Course codes, upper-cased: ones they published in, and ones they take. */
   courses: string[]
+  /** The subjects of their main area (CSC, MAT) — the program tab. */
+  subjects: string[]
   campus: Campus | null
   faculty: string | null
 }
@@ -110,6 +116,7 @@ async function affinityFor(userId: string): Promise<Affinity> {
   return {
     followeeIds: new Set(follows.map((f) => f.followingId)),
     courses,
+    subjects: mainSubjects(courses),
     tags: new Set(tags.map((t) => t.toLowerCase())),
     tagQuery: [...new Set(tags.flatMap((t) => [t, t.toUpperCase(), t.toLowerCase()]))],
     campus: me?.campus ?? null,
@@ -150,6 +157,28 @@ function reasonFor(
   }
 
   return { kind: 'TRENDING' }
+}
+
+/**
+ * Of the first `n` items of the blended feed, how many are connected: three in
+ * every five (C C D C D …) while both halves last, and once one runs out the
+ * other fills every slot. Placing each item with the same function is what
+ * makes any page line up exactly with the pages before it.
+ */
+export function connectedAmong(n: number, connected: number, discovery: number): number {
+  return Math.min(connected, n, Math.max(Math.ceil((n * 3) / 5), n - discovery))
+}
+
+/**
+ * The program tab: work filed under a course in the student's main subjects,
+ * on any campus. A faculty is far too broad for "your program" — Arts &
+ * Science alone runs from CSC to ENG — so it is only the fallback for a
+ * student with no courses yet. Null when there is nothing to go on.
+ */
+function programWhere(affinity: Affinity): Prisma.ProjectWhereInput | null {
+  if (affinity.subjects.length > 0)
+    return { OR: affinity.subjects.map((s) => ({ courseCode: { startsWith: s } })) }
+  return affinity.faculty ? facultyWhere(affinity.faculty) : null
 }
 
 export const feedRoutes: FastifyPluginAsync = async (app) => {
@@ -207,9 +236,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             ? campus
               ? { owner: { campus } }
               : {}
-            : affinity.faculty
-              ? facultyWhere(affinity.faculty)
-              : null
+            : programWhere(affinity)
       if (!scoped) return { items: [] }
 
       const rows = await db.project.findMany({
@@ -238,34 +265,62 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       AND: [...eligible, ...(connectedOr.length > 0 ? [{ NOT: { OR: connectedOr } }] : [])],
     }
 
-    const connectedTotal =
-      connectedOr.length > 0 ? await db.project.count({ where: connectedWhere }) : 0
+    const [connectedTotal, discoveryTotal] = await Promise.all([
+      connectedOr.length > 0 ? db.project.count({ where: connectedWhere }) : 0,
+      db.project.count({ where: trendingWhere }),
+    ])
+    const end = Math.min(skip + take, connectedTotal + discoveryTotal)
+    if (end <= skip) return { items: [] }
+    const at = (n: number) => connectedAmong(n, connectedTotal, discoveryTotal)
 
-    const connected =
-      skip < connectedTotal
-        ? await db.project.findMany({
+    const connectedSkip = at(skip)
+    const connectedTake = at(end) - connectedSkip
+    const discoverySkip = skip - connectedSkip
+    const discoveryTake = end - skip - connectedTake
+
+    const [connected, discoveryIds] = await Promise.all([
+      connectedTake > 0
+        ? db.project.findMany({
             where: connectedWhere,
             include: CARD_INCLUDE,
             orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-            skip,
-            take,
+            skip: connectedSkip,
+            take: connectedTake,
           })
-        : []
+        : [],
+      discoveryTake > 0
+        ? trendingIds(trendingWhere, { skip: discoverySkip, take: discoveryTake })
+        : [],
+    ])
+    const [discovery, scores] = await Promise.all([
+      db.project
+        .findMany({ where: { id: { in: discoveryIds } }, include: CARD_INCLUDE })
+        .then((rows) => inOrder(rows, discoveryIds)),
+      trendingScores(discoveryIds),
+    ])
 
-    // The top-up picks up where the connected set ran out, and is ranked by
-    // this week's activity (lib/trending.ts), not all-time views.
-    const trendingSkip = skip < connectedTotal ? 0 : skip - connectedTotal
-    const trendingTake = take - connected.length
-    let trending: typeof connected = []
-    if (trendingTake > 0) {
-      const ids = await trendingIds(trendingWhere, { skip: trendingSkip, take: trendingTake })
-      trending = inOrder(
-        await db.project.findMany({ where: { id: { in: ids } }, include: CARD_INCLUDE }),
-        ids
-      )
+    // Deal them together in the order connectedAmong lays out.
+    const rows: Prisma.ProjectGetPayload<{ include: typeof CARD_INCLUDE }>[] = []
+    const fromDiscovery = new Set<string>()
+    let c = 0
+    let d = 0
+    for (let n = skip; n < end; n++) {
+      if (at(n + 1) > at(n) && c < connected.length) rows.push(connected[c++])
+      else if (d < discovery.length) {
+        fromDiscovery.add(discovery[d].id)
+        rows.push(discovery[d++])
+      }
     }
 
-    return decorateItems([...connected, ...trending])
+    const projects = await decorate(rows, userId)
+    return {
+      items: projects.map((project) => ({
+        project,
+        reason: fromDiscovery.has(project.id)
+          ? { kind: (scores.get(project.id) ?? 0) > 0 ? 'TRENDING' : 'NEW' }
+          : reasonFor(project, affinity),
+      })),
+    }
   })
 
   // GET /feed/activity — the student's own week: how their work is landing

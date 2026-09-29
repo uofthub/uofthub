@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ProfileUser } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { campusShort } from '../../lib/campus'
+import { campusShort, personLine } from '../../lib/campus'
 import { useCanonicalPath, useDocumentTitle, useFollow } from '../../lib/hooks'
 import { profilePath } from '../../lib/paths'
 import { countTags, coursesOf } from '../../lib/queries'
@@ -183,7 +183,7 @@ function FollowListDialog({
                 <Avatar person={p} size={36} />
                 <span className="flex min-w-0 flex-col">
                   <b className="text-15 font-semibold">{p.name}</b>
-                  {p.faculty && <span className="text-13 text-muted">{p.faculty}</span>}
+                  {personLine(p) && <span className="text-13 text-muted">{personLine(p)}</span>}
                 </span>
               </Link>
             </li>

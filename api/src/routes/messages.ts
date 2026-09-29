@@ -36,6 +36,7 @@ const PERSON = {
   avatarUrl: true,
   faculty: true,
   campus: true,
+  program: true,
 } as const
 
 // A person typing to a friend sends a few a minute; a script sends hundreds.

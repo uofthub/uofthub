@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { personLine } from '../../lib/campus'
 import { api, type ProjectDetail, type ProjectPerson } from '../../lib/api'
 import { formatBytes, lookFor, previewKindFor } from '../../lib/files'
 import { safeLinks, LINK_ICONS, timeAgo } from '../../lib/projectView'
@@ -473,7 +474,7 @@ export function PeopleDialog({
               <Eyebrow as="h3">Asking for access</Eyebrow>
               <ManageList>
                 {people.accessRequests.map((p) => (
-                  <PersonRow key={p.userId} person={p} note={p.user.faculty ?? p.user.email}>
+                  <PersonRow key={p.userId} person={p} note={personLine(p.user) ?? p.user.email}>
                     <Button
                       size="sm"
                       variant="primary"
@@ -679,7 +680,7 @@ export function InsightsDialog({ projectId, onClose }: { projectId: string; onCl
                   <span className="min-w-0 grow">
                     <b className="block text-14 font-semibold">{user.name}</b>
                     <span className="text-13 text-muted">
-                      {[user.faculty, timeAgo(createdAt)].filter(Boolean).join(' · ')}
+                      {[personLine(user), timeAgo(createdAt)].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <Icon name="chevronRight" size={16} />

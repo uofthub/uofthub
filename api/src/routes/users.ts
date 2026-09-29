@@ -18,6 +18,7 @@ import { publish } from '../lib/live.js'
 import { blockedBetween } from '../lib/blocks.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 import { PIN_LIMIT } from '../lib/pins.js'
+import { listablePeopleWhere, PERSON_RESULT_SELECT, toPersonResult } from '../lib/people.js'
 import {
   parseCourses,
   parseOpenTo,
@@ -115,6 +116,56 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof HandleError) return reply.code(err.status).send({ error: err.message })
         throw err
       }
+    }
+  )
+
+  // GET /users/search?q=&take= — people by name, handle or program, for
+  // Explore and the command panel.
+  //
+  // Signed in only: a profile is public by link, but a directory anyone can
+  // page through is a list of every student's name. Every word must appear in
+  // one of the three fields, so "maya cs" finds Maya Chen in Computer Science.
+  // Names that start with the query come first, then the most followed.
+  app.get<{ Querystring: { q?: string; take?: string } }>(
+    '/search',
+    { preHandler: [app.authenticate] },
+    async (request) => {
+      // Letters, digits and spaces only: `%` and `_` would be LIKE wildcards.
+      const q = String(request.query.q ?? '')
+        .normalize('NFKD')
+        .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+        .trim()
+        .toLowerCase()
+      const terms = q.split(/\s+/).filter(Boolean).slice(0, 5)
+      if (!terms.length) return []
+      const take = Math.min(Math.max(Number(request.query.take) || 6, 1), 20)
+      const me = request.user.sub
+
+      const rows = await db.user.findMany({
+        where: {
+          ...listablePeopleWhere(me),
+          AND: terms.map((t) => ({
+            OR: [
+              { name: { contains: t, mode: 'insensitive' as const } },
+              { handle: { contains: t, mode: 'insensitive' as const } },
+              { program: { contains: t, mode: 'insensitive' as const } },
+            ],
+          })),
+        },
+        select: PERSON_RESULT_SELECT,
+        take: 50,
+      })
+
+      const starts = (u: (typeof rows)[number]) =>
+        u.name.toLowerCase().startsWith(q) ||
+        u.name.toLowerCase().includes(` ${q}`) ||
+        u.handle.startsWith(q)
+      return rows
+        .sort(
+          (a, b) => Number(starts(b)) - Number(starts(a)) || b._count.followers - a._count.followers
+        )
+        .slice(0, take)
+        .map(toPersonResult)
     }
   )
 
@@ -220,6 +271,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
                 avatarUrl: true,
                 faculty: true,
                 campus: true,
+                program: true,
               },
             },
           },

@@ -99,7 +99,15 @@ function parseActivity(
 }
 
 const PERSON = {
-  select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true, campus: true },
+  select: {
+    id: true,
+    handle: true,
+    name: true,
+    avatarUrl: true,
+    faculty: true,
+    campus: true,
+    program: true,
+  },
 } as const
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {

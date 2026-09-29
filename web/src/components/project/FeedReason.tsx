@@ -42,6 +42,8 @@ export function FeedReason({ reason }: { reason: Reason }) {
         return { icon: 'mapPin' as const, body: <>From {campusLabel(reason.campus)}</> }
       case 'TRENDING':
         return { icon: 'chart' as const, body: <>Being read across uofthub</> }
+      case 'NEW':
+        return { icon: 'sparkle' as const, body: <>New on uofthub</> }
     }
   })()
 

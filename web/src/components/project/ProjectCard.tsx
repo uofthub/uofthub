@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import type { ProjectSummary } from '../../lib/api'
 import { cardAction } from '../../lib/outputs'
-import { courseOf, makersLabel } from '../../lib/projectView'
+import { courseOf } from '../../lib/projectView'
 import { AvatarStack, Card, CardGrid, Chip, Icon, type AvatarPerson } from '../ui'
 import { Cover, CoverTag } from './Cover'
-import { CardTop, HelpNeeded, ProjectStats, StatusPill, TypeBadge, VisibilityPill } from './bits'
-import { projectPath } from '../../lib/paths'
+import { CardTop, HelpNeeded, StatusPill, TypeBadge, VisibilityPill } from './bits'
+import { ReactionBar } from './ReactionBar'
+import { profilePath, projectPath } from '../../lib/paths'
 
 /** The owner first, then everyone credited alongside them. */
 function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, maker?: AvatarPerson) {
@@ -15,6 +16,38 @@ function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, make
 
 /** A card's title link: ink at rest, navy under the pointer. */
 export const titleLink = 'text-ink hover:text-navy-ink'
+
+/**
+ * Who made it, as links: the faces open the owner's profile, and so does the
+ * owner's name. "Maya +1" when others are credited alongside.
+ */
+function Makers({ makers, size }: { makers: AvatarPerson[]; size: number }) {
+  const owner = makers[0]
+  if (!owner) return null
+  const first = (owner.name ?? '').split(/\s+/)[0]
+  const faces = <AvatarStack people={makers} size={size} />
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {owner.id ? (
+        <Link to={profilePath({ ...owner, id: owner.id })} tabIndex={-1} aria-hidden="true">
+          {faces}
+        </Link>
+      ) : (
+        faces
+      )}
+      <span className="min-w-0 truncate text-13 font-semibold">
+        {owner.id ? (
+          <Link to={profilePath({ ...owner, id: owner.id })} className={titleLink}>
+            {first}
+          </Link>
+        ) : (
+          first
+        )}
+        {makers.length > 1 && <span className="font-normal text-muted"> +{makers.length - 1}</span>}
+      </span>
+    </span>
+  )
+}
 
 /** "Live demo", "View poster" on the cover: what opening it gets you. */
 function CoverAction({ project }: { project: Pick<ProjectSummary, 'id' | 'links' | 'lead'> }) {
@@ -31,9 +64,10 @@ function CoverAction({ project }: { project: Pick<ProjectSummary, 'id' | 'links'
  * The Card system board's tile: cover, badge and status, title, pitch, and a
  * footer of who made it and how it landed.
  *
- * Only the cover and the title are links. The board has it that way, and it is
- * what keeps a card from being an anchor with other anchors inside it — the
- * browser closes the outer one early and the card stops being clickable.
+ * The cover and the title open the project; the makers open their profile;
+ * the reactions react in place and the comment count opens the comments. No
+ * part of the card is a link wrapping the others — an anchor with anchors
+ * inside it is closed early by the browser and stops being clickable.
  */
 export function ProjectCard({
   project,
@@ -69,24 +103,23 @@ export function ProjectCard({
         )}
         <HelpNeeded project={project} />
         <div className="mt-auto flex min-w-0 items-center gap-2 pt-2">
-          {makers.length > 0 && <AvatarStack people={makers} size={28} />}
-          <span className="text-13 font-semibold">
-            {makersLabel(makers.map((m) => m.name ?? ''))}
-          </span>
-          {course ? (
-            <Chip size="xs" tone="subtle">
-              Made for {course}
-            </Chip>
-          ) : (
-            group && (
-              <Chip size="xs" tone="subtle" to={`/orgs/${group.slug}`}>
-                Built with {group.name}
+          <Makers makers={makers} size={28} />
+          <span className="ml-auto shrink-0">
+            {course ? (
+              <Chip size="xs" tone="subtle" to={`/explore?course=${encodeURIComponent(course)}`}>
+                Made for {course}
               </Chip>
-            )
-          )}
-          <span className="ml-auto">
-            <ProjectStats project={project} />
+            ) : (
+              group && (
+                <Chip size="xs" tone="subtle" to={`/orgs/${group.slug}`}>
+                  Built with {group.name}
+                </Chip>
+              )
+            )}
           </span>
+        </div>
+        <div className="border-t border-line-soft pt-3">
+          <ReactionBar project={project} dense />
         </div>
       </div>
     </Card>
@@ -129,15 +162,15 @@ export function ProjectListRow({
         </h3>
         {project.pitch && <p className="line-clamp-1 text-14 text-ink-3">{project.pitch}</p>}
         <HelpNeeded project={project} clamp="line-clamp-1" />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">
+          <Makers makers={makers} size={24} />
+          <ReactionBar project={project} dense />
+        </div>
       </div>
-      <div className="hidden shrink-0 flex-col items-end gap-2.5 pr-2 sm:flex">
+      <div className="hidden shrink-0 flex-col items-end gap-2.5 self-start pt-1 pr-2 sm:flex">
         <span className="flex items-center gap-1.5">
           <VisibilityPill visibility={project.visibility} />
           <StatusPill status={project.status} />
-        </span>
-        <span className="flex items-center gap-2">
-          {makers.length > 0 && <AvatarStack people={makers} size={26} />}
-          <ProjectStats project={project} />
         </span>
       </div>
     </Card>

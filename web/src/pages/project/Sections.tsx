@@ -2,6 +2,7 @@ import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CommentThread } from '@uofthub/types'
+import { personLine } from '../../lib/campus'
 import { api, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { describeChange } from '../../lib/changes'
@@ -357,7 +358,7 @@ function CommentItem({
           )}{' '}
           <span className="text-muted">
             ·{' '}
-            {[comment.user?.faculty, timeShort(comment.createdAt), comment.editedAt && 'edited']
+            {[personLine(comment.user), timeShort(comment.createdAt), comment.editedAt && 'edited']
               .filter(Boolean)
               .join(' · ')}
           </span>

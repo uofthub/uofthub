@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ProjectSummary } from '../../lib/api'
 import { ProjectCard, ProjectListRow } from './ProjectCard'
 import { COVER_PALETTES, coverPalette } from './palette'
@@ -28,12 +30,17 @@ const project = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
   ...overrides,
 })
 
-const show = (p: ProjectSummary, row = false) =>
+vi.mock('../../lib/auth', () => ({ useAuth: () => ({ user: { id: 'me', name: 'Me' } }) }))
+
+const wrap = (children: ReactNode) =>
   render(
-    <MemoryRouter>
-      {row ? <ProjectListRow project={p} /> : <ProjectCard project={p} />}
-    </MemoryRouter>
-  ).container
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  )
+
+const show = (p: ProjectSummary, row = false) =>
+  wrap(row ? <ProjectListRow project={p} /> : <ProjectCard project={p} />).container
 
 describe('ProjectCard', () => {
   it('uses the uploaded cover when there is one', () => {
@@ -74,21 +81,26 @@ describe('ProjectCard', () => {
     expect(screen.queryByText(/Made for/)).not.toBeInTheDocument()
   })
 
-  it('hides zero counts instead of printing a row of noughts', () => {
+  it('reacts from the card, with the counts on the buttons', () => {
+    show(project({ reactions: { USEFUL: 2, IMPRESSIVE: 5, COLLAB: 0 }, myReactions: ['USEFUL'] }))
+    const pressed = screen.getAllByRole('button', { pressed: true })
+    expect(pressed).toHaveLength(1)
+    expect(pressed[0]).toHaveAccessibleName(/, 2$/)
+  })
+
+  it('opens the comments from the comment count, on the card and the row', () => {
+    for (const row of [false, true]) {
+      const c = show(project({ _count: { comments: 9 } }), row)
+      expect(c.querySelector('a[aria-label="9 comments"]')).toHaveAttribute(
+        'href',
+        '/@omar-haddad/seatfinder#comments'
+      )
+    }
+  })
+
+  it('links the owner to their profile', () => {
     show(project())
-    expect(screen.queryByLabelText(/reactions/)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/comments/)).not.toBeInTheDocument()
-  })
-
-  it('shows counts once they are non-zero, and only those', () => {
-    show(project({ _count: { comments: 9 } }))
-    expect(screen.getByLabelText('9 comments')).toBeInTheDocument()
-    expect(screen.queryByLabelText(/reactions/)).not.toBeInTheDocument()
-  })
-
-  it('stars the reaction total — the one public engagement number', () => {
-    show(project({ reactionTotal: 66 }))
-    expect(screen.getByLabelText('66 reactions')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Omar' })).toHaveAttribute('href', '/@omar-haddad')
   })
 
   it('shows the type badge and where the project stands', () => {
@@ -120,7 +132,8 @@ describe('ProjectCard', () => {
 
   it('credits collaborators beside the owner', () => {
     show(project({ collaborators: [{ user: { id: 'u2', name: 'Maya Chen' } }] }))
-    expect(screen.getByText('Omar +1')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Omar' })).toBeInTheDocument()
+    expect(screen.getByText('+1')).toBeInTheDocument()
   })
 
   it('marks a draft and a link-only project so their owner can tell', () => {
@@ -145,14 +158,12 @@ describe('ProjectCard', () => {
   })
 
   it('credits the profile owner when the payload carries no owner', () => {
-    render(
-      <MemoryRouter>
-        <ProjectCard
-          project={project({ owner: undefined })}
-          maker={{ id: 'm1', name: 'Maya Chen' }}
-        />
-      </MemoryRouter>
+    wrap(
+      <ProjectCard
+        project={project({ owner: undefined })}
+        maker={{ id: 'm1', name: 'Maya Chen' }}
+      />
     )
-    expect(screen.getByText('Maya')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Maya' })).toHaveAttribute('href', '/u/m1')
   })
 })

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/client.js'
 import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/helpers.js'
+import { connectedAmong } from './feed.js'
 
 beforeEach(resetDb)
 
@@ -340,5 +341,50 @@ describe('GET /feed/activity', () => {
       reactions: 0,
       comments: 0,
     })
+  })
+})
+
+describe('the blended feed', () => {
+  it('deals three connected to every two from discovery, then whichever is left', () => {
+    const lay = (connected: number, discovery: number, n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        connectedAmong(i + 1, connected, discovery) > connectedAmong(i, connected, discovery)
+          ? 'C'
+          : 'D'
+      ).join('')
+    expect(lay(10, 10, 10)).toBe('CCDCDCCDCD')
+    expect(lay(2, 10, 6)).toBe('CCDDDD')
+    expect(lay(10, 1, 5)).toBe('CCDCC')
+    expect(lay(0, 3, 3)).toBe('DDD')
+  })
+
+  it('mixes discovery into the first page and pages every project exactly once', async () => {
+    const me = await createUser()
+    const followed = await createUser()
+    const stranger = await createUser()
+    await db.follow.create({ data: { followerId: me.id, followingId: followed.id } })
+    for (let i = 0; i < 6; i++)
+      await createProject(followed.id, {
+        title: `connected ${i}`,
+        visibility: 'PUBLIC',
+        publishedAt: new Date(Date.now() - i * 60_000),
+      })
+    await createProject(stranger.id, { title: 'busy', visibility: 'PUBLIC', recentViews: 5 })
+    for (let i = 0; i < 3; i++)
+      await createProject(stranger.id, {
+        title: `quiet ${i}`,
+        visibility: 'PUBLIC',
+        publishedAt: new Date(Date.now() - i * 60_000),
+      })
+
+    const first = (await feed(me, '?take=5')).json()
+    expect(titles(first)).toEqual(['connected 0', 'connected 1', 'busy', 'connected 2', 'quiet 0'])
+    expect(reasons(first)).toEqual(['FOLLOWING', 'FOLLOWING', 'TRENDING', 'FOLLOWING', 'NEW'])
+
+    const seen = [...titles(first)]
+    for (let skip = 5; skip < 15; skip += 5)
+      seen.push(...titles((await feed(me, `?take=5&skip=${skip}`)).json()))
+    expect(seen).toHaveLength(10)
+    expect(new Set(seen).size).toBe(10)
   })
 })

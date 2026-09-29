@@ -131,7 +131,7 @@ export type OrgRef = { slug: string; name: string; type: 'CLUB' | 'LAB' }
 
 export type ProjectDetail = Omit<ProjectSummary, 'collaborators'> & {
   collaborators: {
-    user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
+    user: Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'>
     accepted: boolean
     title?: string | null
   }[]
@@ -240,8 +240,14 @@ export type ResolvedProject = ResolvedPerson & { projectId: string; slug: string
 /** Whether the caller could take a handle, as Settings asks while they type. */
 export type HandleCheck = { handle: string; available: boolean; problem: string | null }
 
-export type PersonSummary = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'> &
+export type PersonSummary = Pick<
+  User,
+  'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'
+> &
   Partial<Pick<User, 'handle'>>
+
+/** One match from GET /users/search. */
+export type PersonResult = PersonSummary & { handle: string; followerCount: number }
 
 /** A collection as a list shows it: a few covers and how many projects this reader can see. */
 export type CollectionSummary = {
@@ -260,7 +266,7 @@ export type CollectionDetail = Omit<CollectionSummary, 'preview'> & { projects: 
 /** One of the caller's collections, for the "Add to collection" menu. */
 export type MyCollection = { id: string; title: string; projectCount: number; hasProject: boolean }
 
-export type ChatPerson = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus'>
+export type ChatPerson = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'>
 
 export type Conversation = {
   user: ChatPerson
@@ -368,7 +374,7 @@ export type ProjectChange =
   | { kind: 'added' | 'removed'; what: 'file' | 'link'; name: string }
   | { kind: 'restored'; versionNum: number }
 
-type Person = Pick<User, 'id' | 'name' | 'avatarUrl'> & { faculty?: string }
+type Person = Pick<User, 'id' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'>
 
 /** GET /projects/:id/analytics — the owner's own numbers. */
 export type Analytics = {
@@ -395,6 +401,7 @@ export type FeedReason =
   | { kind: 'COURSE'; tag: string }
   | { kind: 'CAMPUS'; campus: Campus }
   | { kind: 'TRENDING' }
+  | { kind: 'NEW' }
 
 export type FeedItem = { project: ProjectSummary; reason: FeedReason }
 
@@ -447,7 +454,10 @@ export type UpcomingEvent = OrgActivity & { org: { slug: string; name: string; c
 /** One person on a project, as its owner's People dialog lists them. */
 export type ProjectPerson = {
   userId: string
-  user: Pick<User, 'id' | 'handle' | 'name' | 'email' | 'avatarUrl' | 'faculty' | 'campus'>
+  user: Pick<
+    User,
+    'id' | 'handle' | 'name' | 'email' | 'avatarUrl' | 'faculty' | 'campus' | 'program'
+  >
   /** What they did, as the owner put it: "Designer". */
   title: string | null
   invitedAt: string
@@ -500,7 +510,7 @@ export type OrgMember = {
   role: OrgRole
   status: OrgMemberStatus
   joinedAt: string
-  user: Pick<User, 'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty'>
+  user: Pick<User, 'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'>
 }
 
 /** A group that invited the signed-in student. */
@@ -898,6 +908,11 @@ export const api = {
   },
   users: {
     get: (id: string) => request<ProfileUser>(`/users/${id}`),
+    /** People by name, handle or program. Signed in only. */
+    search: (q: string, take?: number) =>
+      request<PersonResult[]>(
+        `/users/search?q=${encodeURIComponent(q)}${take ? `&take=${take}` : ''}`
+      ),
     checkHandle: (handle: string) =>
       request<HandleCheck>(`/users/handle-check?handle=${encodeURIComponent(handle)}`),
     setHandle: (handle: string) =>
@@ -966,6 +981,9 @@ export const api = {
     /** 404s (as an error) for a course without one, which is most of them. */
     template: (code: string) =>
       request<CourseTemplate>(`/courses/${encodeURIComponent(code)}/template`),
+    /** Who lists the course or posted work in it. Signed in only. */
+    people: (code: string) =>
+      request<PersonResult[]>(`/courses/${encodeURIComponent(code)}/people`),
   },
   collections: {
     list: (params?: { owner?: string; take?: number; skip?: number }) => {

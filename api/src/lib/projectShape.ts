@@ -17,7 +17,15 @@ import { thumbnailContentType } from './outputs.js'
 export const REACTION_KINDS: ReactionKind[] = ['USEFUL', 'IMPRESSIVE', 'COLLAB']
 
 export const OWNER_SELECT = {
-  select: { id: true, handle: true, name: true, faculty: true, campus: true, avatarUrl: true },
+  select: {
+    id: true,
+    handle: true,
+    name: true,
+    faculty: true,
+    campus: true,
+    program: true,
+    avatarUrl: true,
+  },
 } as const
 
 /** Include for any `findMany` whose rows are shown as project cards. */

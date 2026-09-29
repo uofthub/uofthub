@@ -39,3 +39,14 @@ export function campusShort(campus?: Campus | null): string | undefined {
 export function campusLabel(campus?: Campus | null): string | undefined {
   return campus ? `${campus} — ${CAMPUS_LABELS[campus]}` : undefined
 }
+
+/**
+ * The line under a person's name: the program they wrote on their profile —
+ * "Computer Science" says far more than a faculty the size of Arts & Science —
+ * or their campus when they have not written one.
+ */
+export function personLine(
+  person?: { program?: string | null; campus?: Campus | null } | null
+): string | undefined {
+  return person?.program?.trim() || campusShort(person?.campus)
+}

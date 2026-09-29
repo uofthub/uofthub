@@ -31,6 +31,9 @@ import {
 import { CollectionCard, CollectionDialog, CollectionGrid } from '../../components/collection'
 import { useAuth } from '../../lib/auth'
 import { FacultyTiles } from './FacultyTiles'
+import { PeopleResults } from './PeopleResults'
+import { useCoursePeople, usePeopleSearch } from '../../lib/people'
+import { isCourseCode } from '../../lib/projectView'
 
 type Sort = 'new' | 'trending'
 
@@ -250,6 +253,12 @@ export default function ExplorePage() {
     },
     searching
   )
+  // People only for a typed search: a course or faculty filter is about work.
+  const people = usePeopleSearch(q)
+  const peopleFound = people.data ?? []
+  // A course filter, or a search that is a course code, also shows who takes it.
+  const courseQuery = course || (isCourseCode(q) ? q.trim().toUpperCase() : '')
+  const classmates = useCoursePeople(courseQuery).data ?? []
   const trending = useQuery({
     queryKey: ['projects', 'explore-trending'],
     queryFn: () => api.projects.list({ sort: 'trending', take: 6 }),
@@ -324,6 +333,8 @@ export default function ExplorePage() {
         </div>
       </div>
 
+      {searching && q && <PeopleResults people={peopleFound} />}
+
       {searching ? (
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -370,7 +381,7 @@ export default function ExplorePage() {
           ) : results.projects.length === 0 ? (
             <EmptyState
               icon="search"
-              title="Nothing matched"
+              title={peopleFound.length ? 'No projects matched' : 'Nothing matched'}
               action={
                 <Button onClick={() => setParams({})} icon="close">
                   Clear the search
@@ -386,6 +397,12 @@ export default function ExplorePage() {
           )}
 
           {results.hasNextPage && <LoadMore query={results} label="Load more" />}
+
+          {courseQuery && (
+            <div className="mt-7">
+              <PeopleResults people={classmates} title={`Taking ${courseQuery}`} />
+            </div>
+          )}
         </section>
       ) : (
         <>

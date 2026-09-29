@@ -164,7 +164,10 @@ describe('faculty filters', () => {
     const musician = await createUser()
     const ta = await createUser()
     const invitee = await createUser()
-    await db.user.update({ where: { id: engineer.id }, data: { faculty: 'Engineering' } })
+    await db.user.update({
+      where: { id: engineer.id },
+      data: { faculty: 'Applied Science & Engineering' },
+    })
     await db.user.update({ where: { id: musician.id }, data: { faculty: 'Music' } })
     await db.user.update({ where: { id: ta.id }, data: { faculty: 'Law' } })
     await db.user.update({ where: { id: invitee.id }, data: { faculty: 'Nursing' } })
@@ -184,7 +187,9 @@ describe('faculty filters', () => {
 
   it('find a project by its owner’s faculty or an accepted collaborator’s', async () => {
     await seed()
-    expect(titles(await call('GET', '/projects?faculty=Engineering'))).toEqual(['joint', 'solo'])
+    expect(
+      titles(await call('GET', '/projects?faculty=Applied%20Science%20%26%20Engineering'))
+    ).toEqual(['joint', 'solo'])
     expect(titles(await call('GET', '/projects?faculty=music'))).toEqual(['joint'])
     expect(titles(await call('GET', '/projects?faculty=Law'))).toEqual([])
     expect(titles(await call('GET', '/projects?faculty=Nursing'))).toEqual([])
@@ -193,7 +198,7 @@ describe('faculty filters', () => {
   it('count a joint project once under each of its makers’ faculties', async () => {
     await seed()
     const { faculties } = (await call('GET', '/projects/facets')).json()
-    expect(faculties).toEqual({ Engineering: 2, Music: 1 })
+    expect(faculties).toEqual({ 'Applied Science & Engineering': 2, Music: 1 })
   })
 })
 
@@ -232,5 +237,32 @@ describe('UTSC course codes', () => {
       payload: { courses: ['MATA31H3', 'CSC108'] },
     })
     expect(profile.json().courses).toEqual(['MATA31H3', 'CSC108'])
+  })
+})
+
+describe('GET /courses/:code/people', () => {
+  it('lists who takes it or posted in it, any section of a bare code, signed in only', async () => {
+    const me = await createUser()
+    const taking = await createUser({ name: 'Taking' })
+    await db.user.update({ where: { id: taking.id }, data: { courses: ['CSC309H1'] } })
+    const bare = await createUser({ name: 'Bare' })
+    await db.user.update({ where: { id: bare.id }, data: { courses: ['CSC309'] } })
+    const poster = await createUser({ name: 'Poster' })
+    await createProject(poster.id, { visibility: 'PUBLIC', courseCode: 'CSC309H5' })
+    const drafter = await createUser({ name: 'Drafter' })
+    await createProject(drafter.id, { visibility: 'PRIVATE', courseCode: 'CSC309H1' })
+    const other = await createUser({ name: 'Other' })
+    await db.user.update({ where: { id: other.id }, data: { courses: ['CSC343H1'] } })
+
+    const names = async (code: string) =>
+      ((await call('GET', `/courses/${code}/people`, me)).json() as { name: string }[])
+        .map((p) => p.name)
+        .sort()
+
+    expect(await names('csc309')).toEqual(['Bare', 'Poster', 'Taking'])
+    // A full code: that section, plus whoever listed only the bare course.
+    expect(await names('CSC309H1')).toEqual(['Bare', 'Taking'])
+    expect(await names('not-a-course')).toEqual([])
+    expect((await call('GET', '/courses/CSC309/people')).statusCode).toBe(401)
   })
 })

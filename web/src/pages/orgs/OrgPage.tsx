@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, safeUrl, type OrgDetail, type OrgMember, type OrgRole } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { CAMPUS_OPTIONS, campusShort } from '../../lib/campus'
+import { CAMPUS_OPTIONS, campusShort, personLine } from '../../lib/campus'
 import { useDocumentTitle } from '../../lib/hooks'
 import { ReportDialog } from '../../components/project'
 import {
@@ -252,7 +252,7 @@ function MemberRow({
         <span className="min-w-0 grow">
           <b className="block text-15 font-semibold">{member.user.name}</b>
           <span className="text-13 text-muted">
-            {note ?? (member.role === 'ADMIN' ? 'Admin' : (member.user.faculty ?? 'Member'))}
+            {note ?? (member.role === 'ADMIN' ? 'Admin' : (personLine(member.user) ?? 'Member'))}
           </span>
         </span>
       </Link>

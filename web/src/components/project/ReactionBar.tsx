@@ -19,15 +19,21 @@ type Tally = { counts: Record<ReactionKind, number>; mine: ReactionKind[] }
  * requests until somebody taps. Taps land at once and are undone if the API
  * refuses.
  *
- * `compact` is the mobile card: counts only, no words.
+ * `compact` is the mobile card: counts only, no words. `dense` is the same
+ * at a card's size — the Explore, profile and list cards.
  */
 export function ReactionBar({
   project,
   compact = false,
+  dense = false,
 }: {
-  project: Pick<ProjectSummary, 'id' | 'reactions' | 'myReactions' | '_count'>
+  project: Pick<ProjectSummary, 'id' | 'slug' | 'owner' | 'reactions' | 'myReactions' | '_count'>
   compact?: boolean
+  dense?: boolean
 }) {
+  const countsOnly = compact || dense
+  const pill = cx(compact && 'h-11', dense && 'h-8 gap-1 px-2.5 text-13')
+  const iconSize = dense ? 15 : 16
   const { user } = useAuth()
   const navigate = useNavigate()
   const [tally, setTally] = useState<Tally>({
@@ -58,33 +64,35 @@ export function ReactionBar({
   const mine = new Set(tally.mine)
 
   return (
-    <div className={cx('flex items-center gap-2', compact ? 'flex-nowrap gap-1.5' : 'flex-wrap')}>
+    <div
+      className={cx('flex items-center gap-2', countsOnly ? 'flex-nowrap gap-1.5' : 'flex-wrap')}
+    >
       {REACTIONS.map((r) => {
         const count = tally.counts[r.kind] ?? 0
         const pressed = mine.has(r.kind)
         return (
           <PillButton
             key={r.kind}
-            className={cx(compact && 'h-11')}
+            className={pill}
             aria-pressed={user ? pressed : undefined}
             aria-label={`${r.label}, ${count}`}
             title={user ? r.hint : 'Sign in to react'}
             disabled={toggle.isPending}
             onClick={() => (user ? toggle.mutate(r.kind) : navigate('/session'))}
           >
-            <Icon name={r.icon} size={16} />
-            {!compact && <span>{r.label}</span>}
-            {(count > 0 || compact) && <b className="font-semibold">{count}</b>}
+            <Icon name={r.icon} size={iconSize} />
+            {!countsOnly && <span>{r.label}</span>}
+            {(count > 0 || countsOnly) && <b className="font-semibold">{count}</b>}
           </PillButton>
         )
       })}
       <PillButton
         as={Link}
         to={`${projectPath(project)}#comments`}
-        className={cx(compact && 'h-11')}
+        className={pill}
         aria-label={`${project._count.comments} comments`}
       >
-        <Icon name="comment" size={16} />
+        <Icon name="comment" size={iconSize} />
         {project._count.comments}
       </PillButton>
     </div>

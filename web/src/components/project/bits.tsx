@@ -7,38 +7,6 @@ import { useAuth } from '../../lib/auth'
 import { PROJECT_STATUSES, PROJECT_TYPES } from '../../lib/projectMeta'
 import { Badge, Button, cx, Icon, Pill, toast } from '../ui'
 
-/**
- * The star and comment counts at the foot of a card. The star is the
- * project's reaction total — the app's one public engagement number. Zeros
- * are hidden: a young directory is mostly zeros, and a wall of them buries
- * the counts that mean something.
- */
-export function ProjectStats({
-  project,
-}: {
-  project: Pick<ProjectSummary, '_count' | 'reactionTotal'>
-}) {
-  const reactions = project.reactionTotal
-  const comments = project._count.comments
-  if (!reactions && !comments) return null
-  return (
-    <span className="flex items-center gap-3.5 text-13 text-muted">
-      {reactions > 0 && (
-        <span className="flex items-center gap-1" aria-label={`${reactions} reactions`}>
-          <Icon name="star" size={15} />
-          {reactions}
-        </span>
-      )}
-      {comments > 0 && (
-        <span className="flex items-center gap-1" aria-label={`${comments} comments`}>
-          <Icon name="comment" size={15} />
-          {comments}
-        </span>
-      )}
-    </span>
-  )
-}
-
 export function TypeBadge({ type }: { type?: ProjectType | null }) {
   if (!type) return null
   const t = PROJECT_TYPES[type]

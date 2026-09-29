@@ -498,6 +498,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
                 avatarUrl: true,
                 faculty: true,
                 campus: true,
+                program: true,
               },
             },
           },
@@ -973,7 +974,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const rows = await db.comment.findMany({
       where: { projectId: request.params.id },
       include: {
-        user: { select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true } },
+        user: {
+          select: {
+            id: true,
+            handle: true,
+            name: true,
+            avatarUrl: true,
+            faculty: true,
+            campus: true,
+            program: true,
+          },
+        },
         _count: { select: { helpful: true } },
         ...(callerId ? { helpful: { where: { userId: callerId }, select: { userId: true } } } : {}),
       },
@@ -1093,7 +1104,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       const comment = await db.comment.create({
         data: { projectId, userId, body, parentId: parent?.id },
         include: {
-          user: { select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true } },
+          user: {
+            select: {
+              id: true,
+              handle: true,
+              name: true,
+              avatarUrl: true,
+              faculty: true,
+              campus: true,
+              program: true,
+            },
+          },
         },
       })
 
@@ -1265,6 +1286,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
                 avatarUrl: true,
                 faculty: true,
                 campus: true,
+                program: true,
               },
             },
           },
@@ -1909,7 +1931,15 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       const sevenDaysAgo = startOfUtcDay(7)
       const fourteenDaysAgo = startOfUtcDay(14)
       const person = {
-        select: { id: true, handle: true, name: true, avatarUrl: true, faculty: true },
+        select: {
+          id: true,
+          handle: true,
+          name: true,
+          avatarUrl: true,
+          faculty: true,
+          campus: true,
+          program: true,
+        },
       }
 
       const [dailyViews, reactionRows, collabInterest, recentReactions] = await Promise.all([

@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import type { Campus } from '@uofthub/types'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { campusShort } from '../../lib/campus'
+import { personLine } from '../../lib/campus'
 import { useFollow } from '../../lib/hooks'
 import { useFacets } from '../../lib/queries'
 import { WeekActivity } from '../../components/activity/WeekActivity'
@@ -89,7 +90,12 @@ function ComingUp() {
 function Person({
   person,
 }: {
-  person: { id: string; name: string; faculty?: string; campus?: Parameters<typeof campusShort>[0] }
+  person: {
+    id: string
+    name: string
+    program?: string
+    campus?: Campus
+  }
 }) {
   const follow = useFollow(person.id)
   return (
@@ -101,9 +107,7 @@ function Person({
         <Link to={profilePath(person)} className="block text-15 font-semibold text-ink">
           {person.name}
         </Link>
-        <div className="line-clamp-1 text-13 text-muted">
-          {[person.faculty, campusShort(person.campus)].filter(Boolean).join(' · ')}
-        </div>
+        <div className="line-clamp-1 text-13 text-muted">{personLine(person)}</div>
       </div>
       {follow.canFollow && (
         <Button size="sm" onClick={follow.toggle} disabled={follow.pending}>
@@ -115,19 +119,20 @@ function Person({
 }
 
 /**
- * People in the student's faculty, taken from who has published there — the
- * API has no people search, but every project carries its owner.
+ * People in the student's program, taken from who has published on the feed's
+ * program tab — the API has no people search, but every project carries its
+ * owner.
  */
 function PeopleInProgram() {
   const { user } = useAuth()
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects', { faculty: user?.faculty, take: 50 }],
-    queryFn: () => api.projects.list({ faculty: user!.faculty, sort: 'new', take: 50 }),
-    enabled: !!user?.faculty,
+  const { data } = useQuery({
+    queryKey: ['feed', 'program', 'people'],
+    queryFn: () => api.feed.list({ scope: 'program' }),
+    enabled: !!user,
   })
 
   const seen = new Set<string>()
-  const people = projects.flatMap((p) => {
+  const people = (data?.items ?? []).flatMap(({ project: p }) => {
     const owner = p.owner
     if (!owner || owner.id === user?.id || seen.has(owner.id)) return []
     seen.add(owner.id)

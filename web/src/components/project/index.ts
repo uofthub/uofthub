@@ -7,7 +7,6 @@ export { MiniRow } from './MiniRow'
 export { ReactionBar } from './ReactionBar'
 export { ReportDialog } from './ReportDialog'
 export {
-  ProjectStats,
   TypeBadge,
   StatusPill,
   VisibilityPill,

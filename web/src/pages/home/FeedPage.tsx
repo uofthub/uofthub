@@ -25,9 +25,10 @@ import { LeftRail } from './LeftRail'
 import { Spotlight } from './Spotlight'
 import { profilePath } from '../../lib/paths'
 
-type FeedTab = 'following' | 'campus' | 'program'
+type FeedTab = 'all' | 'following' | 'campus' | 'program'
 
 const TABS: TabOption<FeedTab>[] = [
+  { value: 'all', label: 'All' },
   { value: 'following', label: 'Following' },
   { value: 'campus', label: 'Campus' },
   { value: 'program', label: 'Your program' },
@@ -101,7 +102,7 @@ export default function FeedPage() {
   useDocumentTitle('Home')
 
   const [tab, setTab] = useState<FeedTab>(() =>
-    remembered('feed-tab', 'campus', ['following', 'campus', 'program'])
+    remembered('feed-tab', 'all', ['all', 'following', 'campus', 'program'])
   )
   const [layout, setLayout] = useState<CardLayout>(() =>
     remembered('feed-layout', 'card', ['card', 'list'])
@@ -122,11 +123,11 @@ export default function FeedPage() {
   const projects = active.projects
 
   const empty = (() => {
-    if (tab === 'program' && !user?.faculty) {
+    if (tab === 'program' && !user?.faculty && !user?.courses?.length) {
       return (
         <EmptyState
           icon="users"
-          title="Add your faculty to see work from your program"
+          title="Add your courses to see work from your program"
           action={
             <Button variant="primary" to={user ? profilePath(user) : '/session'}>
               Edit your profile
@@ -174,7 +175,7 @@ export default function FeedPage() {
           <FeedList items={active.items} scope={tab} layout={phone ? 'card' : layout} />
         )}
       </div>
-      {active.hasNextPage && <LoadMore query={active} />}
+      {active.hasNextPage && <LoadMore query={active} auto />}
     </>
   )
 

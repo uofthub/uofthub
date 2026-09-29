@@ -145,7 +145,7 @@ export interface Project {
   pinnedAt?: string
   createdAt: string
   updatedAt: string
-  owner?: Pick<User, 'id' | 'handle' | 'name' | 'faculty' | 'campus' | 'avatarUrl'>
+  owner?: Pick<User, 'id' | 'handle' | 'name' | 'faculty' | 'campus' | 'program' | 'avatarUrl'>
 }
 
 export interface ProjectFile {
@@ -249,7 +249,10 @@ export interface Comment {
   editedAt?: string | null
   /** Deleted, but kept so its replies still read as a thread. Empty and anonymous. */
   deleted?: boolean
-  user?: Pick<User, 'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty'> | null
+  user?: Pick<
+    User,
+    'id' | 'handle' | 'name' | 'avatarUrl' | 'faculty' | 'campus' | 'program'
+  > | null
   helpfulCount: number
   helpfulByMe: boolean
 }

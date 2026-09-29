@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/auth'
 import { useTheme } from '../../lib/theme'
 import { Card, cx, dialogPanel, Eyebrow, Icon, Scrim, type IconName } from '../ui'
 import { Kbd } from './Kbd'
+import { personLine } from '../../lib/campus'
 import { profilePath, projectPath } from '../../lib/paths'
 
 type Command = {
@@ -18,7 +19,7 @@ type Command = {
 }
 
 /**
- * ⌘K / Ctrl+K: search projects, jump to any page, flip the theme. Arrow keys
+ * ⌘K / Ctrl+K: search projects and people, jump to any page, flip the theme. Arrow keys
  * move, Enter runs, Escape closes.
  */
 export function CommandPalette() {
@@ -54,6 +55,11 @@ function Palette({
     queryKey: ['command-search', debounced],
     queryFn: () => api.projects.list({ search: debounced, take: 6 }),
     enabled: debounced.length > 1,
+  })
+  const { data: people = [] } = useQuery({
+    queryKey: ['people-search', debounced, 'command'],
+    queryFn: () => api.users.search(debounced, 4),
+    enabled: !!user && debounced.length > 1,
   })
 
   const commands = useMemo<Command[]>(() => {
@@ -174,10 +180,19 @@ function Palette({
       run: go(projectPath(p)),
     }))
 
+    const found: Command[] = people.map((p) => ({
+      id: p.id,
+      label: p.name,
+      hint: personLine(p),
+      icon: 'user',
+      group: 'People',
+      run: go(profilePath(p)),
+    }))
+
     const q = query.trim().toLowerCase()
     const matches = (c: Command) => !q || c.label.toLowerCase().includes(q)
-    return [...results, ...pages.filter(matches), ...actions.filter(matches)]
-  }, [query, projects, darkMode, user, close, navigate, logout, setDarkMode])
+    return [...results, ...found, ...pages.filter(matches), ...actions.filter(matches)]
+  }, [query, projects, people, darkMode, user, close, navigate, logout, setDarkMode])
 
   // A new query starts the highlight back at the top.
   const [lastQuery, setLastQuery] = useState(query)
@@ -224,7 +239,7 @@ function Palette({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search projects, jump to a page…"
+            placeholder="Search projects and people, jump to a page…"
             aria-label="Search commands"
             className="min-w-0 flex-1 bg-transparent px-0.5 text-17 text-ink outline-none"
           />

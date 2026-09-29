@@ -11,7 +11,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, type Conversation, type Message } from '../../lib/api'
 import { closeShownNotifications } from '../../lib/push'
 import { useAuth } from '../../lib/auth'
-import { campusShort } from '../../lib/campus'
+import { personLine } from '../../lib/campus'
 import { PHONE, useDocumentTitle, useMediaQuery } from '../../lib/hooks'
 import { timeShort } from '../../lib/projectView'
 import {
@@ -212,7 +212,7 @@ function ThreadView({ userId, back }: { userId: string; back: boolean }) {
 
   const other = first.user
   const firstName = other.name.split(/\s+/)[0]
-  const meta = [other.faculty, campusShort(other.campus)].filter(Boolean).join(' · ')
+  const meta = personLine(other)
 
   return (
     <section

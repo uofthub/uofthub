@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, safeUrl, type ProjectDetail, type ProjectVersion } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { campusShort } from '../../lib/campus'
+import { campusShort, personLine } from '../../lib/campus'
 import { copyLink } from '../../lib/clipboard'
 import { previewKindFor } from '../../lib/files'
 import { useFollow } from '../../lib/hooks'
@@ -465,9 +465,7 @@ export function InfoCard({ project, latest }: { project: ProjectDetail; latest?:
           <Maker
             person={project.owner}
             line={project.collaborators.length > 0 ? 'Owner' : undefined}
-            sub={[project.owner.faculty, campusShort(project.owner.campus)]
-              .filter(Boolean)
-              .join(' · ')}
+            sub={personLine(project.owner)}
           />
         )}
         {project.collaborators.map((c) => (

@@ -110,7 +110,6 @@ describe('project fields', () => {
       'app needing help',
     ])
   })
-
 })
 
 describe('what a project card is sent', () => {
@@ -407,12 +406,18 @@ describe('updates', () => {
 describe('feed tabs', () => {
   it('scope to people followed, the campus, or the program — with no strangers topping them up', async () => {
     const me = await createUser()
-    await db.user.update({ where: { id: me.id }, data: { campus: 'UTM', faculty: 'Engineering' } })
+    await db.user.update({
+      where: { id: me.id },
+      data: { campus: 'UTM', faculty: 'Applied Science & Engineering' },
+    })
     const followed = await createUser()
     const utm = await createUser()
     const engineer = await createUser()
     await db.user.update({ where: { id: utm.id }, data: { campus: 'UTM' } })
-    await db.user.update({ where: { id: engineer.id }, data: { faculty: 'Engineering' } })
+    await db.user.update({
+      where: { id: engineer.id },
+      data: { faculty: 'Applied Science & Engineering' },
+    })
     await db.follow.create({ data: { followerId: me.id, followingId: followed.id } })
     await createProject(followed.id, { title: 'from a follow', visibility: 'PUBLIC' })
     await createProject(utm.id, { title: 'from UTM', visibility: 'PUBLIC' })
@@ -432,6 +437,35 @@ describe('feed tabs', () => {
     expect(await tab('following')).toEqual(['from a follow'])
     expect(await tab('campus')).toEqual(['from UTM'])
     expect(await tab('program')).toEqual(['from Engineering'])
+  })
+
+  it('fills the program tab from the subjects of their courses, on any campus, before faculty', async () => {
+    const me = await createUser()
+    await db.user.update({
+      where: { id: me.id },
+      data: {
+        faculty: 'Arts & Science',
+        courses: ['CSC108H1', 'CSC148H1', 'CSC165H1', 'MAT137Y1'],
+      },
+    })
+    const sameFaculty = await createUser()
+    await db.user.update({ where: { id: sameFaculty.id }, data: { faculty: 'Arts & Science' } })
+    const other = await createUser()
+    await createProject(other.id, {
+      title: 'CSC at UTSC',
+      courseCode: 'CSCA08H3',
+      visibility: 'PUBLIC',
+      publishedAt: new Date(Date.now() - 1000),
+    })
+    await createProject(other.id, { title: 'MAT', courseCode: 'MAT223H1', visibility: 'PUBLIC' })
+    await createProject(sameFaculty.id, { title: 'English essay', visibility: 'PUBLIC' })
+
+    const items = (await call('GET', '/feed?scope=program', me)).json().items
+    // Three CSC courses to one MAT: CSC is the main area, and a faculty the
+    // size of Arts & Science no longer pulls in the English essay.
+    expect(titles(items.map((i: { project: { title: string } }) => i.project))).toEqual([
+      'CSC at UTSC',
+    ])
   })
 
   it('narrows any tab to one type of work', async () => {
@@ -592,7 +626,10 @@ describe('profiles', () => {
 
   it('takes a faculty from the list, and keeps an old free-text one if it is sent back unchanged', async () => {
     const me = await createUser()
-    expect((await call('PATCH', '/users/me', me, { faculty: 'Engineering' })).statusCode).toBe(200)
+    expect(
+      (await call('PATCH', '/users/me', me, { faculty: 'Applied Science & Engineering' }))
+        .statusCode
+    ).toBe(200)
     expect(
       (await call('PATCH', '/users/me', me, { faculty: 'Underwater Basketry' })).statusCode
     ).toBe(400)

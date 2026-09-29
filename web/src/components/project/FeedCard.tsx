@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { FeedReason as Reason, ProjectSummary } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { campusShort } from '../../lib/campus'
+import { personLine } from '../../lib/campus'
 import { PHONE, useMediaQuery } from '../../lib/hooks'
 import { actionTarget, cardAction } from '../../lib/outputs'
 import { courseOf, postedAt, timeShort, topicTags } from '../../lib/projectView'
@@ -45,10 +45,7 @@ export function FeedCard({ project, reason }: { project: ProjectSummary; reason?
   const course = courseOf(project)
   const tags = topicTags(project).slice(0, 4)
   const action = cardAction(project)
-  // The phone card drops the campus to keep the line to one row.
-  const meta = [owner?.faculty, !phone && campusShort(owner?.campus), timeShort(postedAt(project))]
-    .filter(Boolean)
-    .join(' · ')
+  const meta = [personLine(owner), timeShort(postedAt(project))].filter(Boolean).join(' · ')
 
   const copy = () => copyLink(`${window.location.origin}${href}`)
 

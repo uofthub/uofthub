@@ -73,8 +73,8 @@ Fill only the fields the request actually implies, and leave every other field n
 
 Examples:
 - "show me machine learning projects" → search: "machine learning"
-- "trending engineering projects" → faculty: "Engineering", sort: "trending"
-- "what are Rotman students making" → faculty: "Rotman Commerce"
+- "trending engineering projects" → faculty: "Applied Science & Engineering", sort: "trending"
+- "what are Rotman students making" → faculty: "Management"
 - "nursing research" → search: "research", faculty: "Nursing"
 - "what have students built in CSC309 this year" → tag: "CSC309", within: "year"
 - "cool stuff from med students lately" → faculty: "Medicine", sort: "new"
