@@ -58,7 +58,10 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const { url: path, notificationId } = event.notification.data || {}
-  const url = new URL(path || '/', self.location.origin).href
+  // Only ever somewhere on this site: an absolute URL in a payload would
+  // otherwise resolve to another origin and open it with our notification.
+  const target = new URL(path || '/', self.location.origin)
+  const url = target.origin === self.location.origin ? target.href : `${self.location.origin}/`
   event.waitUntil(
     Promise.all([
       notificationId && API

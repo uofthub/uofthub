@@ -24,6 +24,8 @@ export async function runMaintenance(now: Date = new Date()): Promise<void> {
     // Normally pruned per project on its first view of the day; this catches
     // the projects nobody has looked at since.
     db.projectViewer.deleteMany({ where: { date: { lt: yesterday } } }),
+    // A revoked session only needs remembering until it would have expired.
+    db.revokedSession.deleteMany({ where: { expiresAt: { lt: now } } }),
   ])
 }
 

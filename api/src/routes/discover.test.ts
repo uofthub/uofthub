@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/helpers.js'
+import { cookieFor, createProject, createUser, getApp, resetDb, uniqueIp } from '../test/helpers.js'
 
 beforeEach(resetDb)
 
@@ -43,7 +43,9 @@ describe('GET /discover', () => {
     // An imperfect search beats an error page.
     expect(body.interpreted).toBe(false)
     expect(body.filters.search).toBe('robotics')
-    expect(body.projects.map((p: { title: string }) => p.title)).toEqual(['Robotics arm controller'])
+    expect(body.projects.map((p: { title: string }) => p.title)).toEqual([
+      'Robotics arm controller',
+    ])
   })
 
   it('matches on description and tags, not just the title', async () => {
@@ -74,5 +76,51 @@ describe('GET /discover', () => {
     const res = await discover(user, 'x'.repeat(2000))
     expect(res.statusCode).toBe(200)
     expect(res.json().filters.search).toHaveLength(300)
+  })
+})
+
+/**
+ * The hourly budget is per account. It used to be keyed on the cookie's raw
+ * bytes while the session could come from an `Authorization` header instead,
+ * so a junk cookie per request was a fresh budget per request.
+ */
+describe('GET /discover rate limit', () => {
+  it('is one budget per account, whatever address or extra cookies it comes with', async () => {
+    const app = await getApp()
+    const user = await createUser()
+    const { token } = await cookieFor(user)
+    const statuses: number[] = []
+    for (let i = 0; i < 21; i++) {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/discover?q=robots',
+        cookies: { token, other: `junk${i}` },
+        remoteAddress: uniqueIp(),
+      })
+      statuses.push(res.statusCode)
+    }
+    expect(statuses.slice(0, 20).every((s) => s === 200)).toBe(true)
+    expect(statuses[20]).toBe(429)
+  })
+
+  it('never takes the session from an Authorization header', async () => {
+    const app = await getApp()
+    const user = await createUser()
+    const { token } = await cookieFor(user)
+    const ip = uniqueIp()
+    const statuses: number[] = []
+    for (let i = 0; i < 21; i++) {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/discover?q=robots',
+        headers: { authorization: `Bearer ${token}` },
+        cookies: { token: `junk${i}` },
+        remoteAddress: ip,
+      })
+      statuses.push(res.statusCode)
+    }
+    // Not signed in, and the junk cookies share the address's one budget.
+    expect(statuses.slice(0, 20).every((s) => s === 401)).toBe(true)
+    expect(statuses[20]).toBe(429)
   })
 })

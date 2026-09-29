@@ -1,6 +1,7 @@
 import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 import { aiModel, openaiClient } from './openai.js'
+import { dailyBudget, envInt } from './dailyBudget.js'
 
 /**
  * The AI half of "Start from a link": given what lib/linkImport.ts read off a
@@ -101,35 +102,13 @@ const TIMEOUT_MS = 20_000
 
 // ── Spending limits ──────────────────────────────────────────────────────────
 //
-// Kept in memory: a restart forgets them, which at worst allows one extra day's
-// budget — not worth a table. Both are overridable per deployment.
+// Per student and for the whole site, both overridable per deployment (see
+// lib/dailyBudget.ts).
 
-const perStudentPerDay = () => envInt('AI_IMPORT_PER_STUDENT_DAY', 5)
-const perSitePerDay = () => envInt('AI_IMPORT_PER_DAY', 200)
-
-function envInt(name: string, fallback: number): number {
-  const n = Number.parseInt(process.env[name] ?? '', 10)
-  return Number.isFinite(n) && n >= 0 ? n : fallback
-}
-
-let day = ''
-let siteCalls = 0
-const studentCalls = new Map<string, number>()
-
-/** Takes one call from today's budgets, or says there is none left. */
-function spend(userId: string): boolean {
-  const today = new Date().toISOString().slice(0, 10)
-  if (today !== day) {
-    day = today
-    siteCalls = 0
-    studentCalls.clear()
-  }
-  const mine = studentCalls.get(userId) ?? 0
-  if (siteCalls >= perSitePerDay() || mine >= perStudentPerDay()) return false
-  siteCalls++
-  studentCalls.set(userId, mine + 1)
-  return true
-}
+const budget = dailyBudget({
+  perStudent: () => envInt('AI_IMPORT_PER_STUDENT_DAY', 5),
+  perSite: () => envInt('AI_IMPORT_PER_DAY', 200),
+})
 
 // ── Cache ────────────────────────────────────────────────────────────────────
 //
@@ -159,9 +138,7 @@ function remember(url: string, value: Enriched) {
 
 /** For tests: forget today's spending and every cached answer. */
 export function resetEnrichState() {
-  day = ''
-  siteCalls = 0
-  studentCalls.clear()
+  budget.reset()
   cache.clear()
 }
 
@@ -185,7 +162,7 @@ export async function enrichImport(source: EnrichSource, userId: string): Promis
 
   const hit = cached(source.url)
   if (hit) return hit
-  if (!spend(userId)) return null
+  if (!budget.spend(userId)) return null
 
   const input = [
     `Link: ${source.url}`,

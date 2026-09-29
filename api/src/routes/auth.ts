@@ -1,9 +1,10 @@
+import { randomBytes } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/password.js'
 import { putObject } from '../lib/storage.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
-import { issueSession, roleFor } from '../lib/session.js'
+import { issueSession, revokeSession } from '../lib/session.js'
 import { consumeToken, issueToken } from '../lib/authTokens.js'
 import {
   sendAlreadyRegisteredEmail,
@@ -14,10 +15,7 @@ import { onEmailVerified } from '../lib/accounts.js'
 import { unconfirmedHandle, withSuggestedHandle } from '../lib/handles.js'
 import { matchesDeclaredType } from '../lib/fileValidation.js'
 import { tenantAllowed, tenantOfIdToken } from '../lib/microsoftTenant.js'
-
-const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
-
-const isUofTEmail = (email: string) => UOFT_DOMAINS.some((domain) => email.endsWith(domain))
+import { isUofTEmail, NOT_UOFT_EMAIL } from '../lib/uoftEmail.js'
 
 const webUrl = () => process.env.WEB_URL ?? 'http://localhost:5173'
 
@@ -80,12 +78,29 @@ function passwordProblem(password: string): string | null {
  */
 const CHECK_EMAIL = { checkEmail: true }
 
+/**
+ * A real hash of nothing anyone knows, made once at boot. Checking a password
+ * against it when the address has no account (or no password) costs the same
+ * scrypt as a real check, so how long a wrong answer takes says nothing about
+ * whether the address is registered.
+ */
+const dummyHash = hashPassword(randomBytes(16).toString('hex'))
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
   // GET /auth/microsoft → handled by @fastify/oauth2 (registered in app.ts)
 
   /** Back to the sign-in page, saying what went wrong, rather than raw JSON on the API's domain. */
   const failSignIn = (reply: Parameters<typeof issueSession>[1], error: string) =>
     reply.redirect(`${webUrl()}/session?error=${error}`)
+
+  /**
+   * Account mail from the routes that answer the same whatever happened. The
+   * request does not wait for the mail API: a reply that took a round trip to
+   * it only when the address has an account would say so by its timing.
+   * sendEmail already logs rather than throws; this catches the rest.
+   */
+  const sendInBackground = (send: Promise<unknown>) =>
+    void send.catch((err: unknown) => app.log.error(err, 'Account email failed'))
 
   // GET /auth/callback — Microsoft redirects here after login
   app.get('/callback', async (request, reply) => {
@@ -129,7 +144,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       userPrincipalName?: string
     }
 
-    const email = (graphUser.mail || graphUser.userPrincipalName || '').toLowerCase()
+    const email = (graphUser.mail || graphUser.userPrincipalName || '').trim().toLowerCase()
     const name = (graphUser.displayName ?? email).slice(0, NAME_MAX)
 
     // Enforce U of T domain
@@ -199,9 +214,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (name.length > NAME_MAX)
         return reply.code(400).send({ error: `A name is at most ${NAME_MAX} characters.` })
       if (!isUofTEmail(email)) {
-        return reply
-          .code(403)
-          .send({ error: 'Sign up with your @mail.utoronto.ca or @utoronto.ca address.' })
+        return reply.code(403).send({ error: NOT_UOFT_EMAIL, code: 'NOT_UOFT' })
       }
       const problem = passwordProblem(password)
       if (problem) return reply.code(400).send({ error: problem })
@@ -211,27 +224,30 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true, emailVerifiedAt: true, passwordHash: true },
       })
 
+      // Hashed whichever way this goes, so a known address does not answer
+      // faster than a new one.
+      const passwordHash = await hashPassword(password)
+
       if (existing?.emailVerifiedAt) {
-        if (existing.passwordHash) await sendAlreadyRegisteredEmail(email)
+        if (existing.passwordHash) sendInBackground(sendAlreadyRegisteredEmail(email))
         else
-          await sendPasswordResetEmail(
-            email,
-            await issueToken(existing.id, 'RESET_PASSWORD'),
-            'set'
+          sendInBackground(
+            sendPasswordResetEmail(email, await issueToken(existing.id, 'RESET_PASSWORD'), 'set')
           )
         return reply.code(202).send(CHECK_EMAIL)
       }
 
       // A confirmed account is somebody's; an unconfirmed one is not yet, so
       // signing up again simply starts it over with the new details.
-      const passwordHash = await hashPassword(password)
       const user = existing
         ? await db.user.update({ where: { email }, data: { name, passwordHash } })
         : await db.user.create({
             data: { email, name, passwordHash, handle: unconfirmedHandle() },
           })
 
-      await sendVerificationEmail(email, name, await issueToken(user.id, 'VERIFY_EMAIL'))
+      sendInBackground(
+        sendVerificationEmail(email, name, await issueToken(user.id, 'VERIFY_EMAIL'))
+      )
       return reply.code(202).send(CHECK_EMAIL)
     }
   )
@@ -276,7 +292,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           })
         : null
       if (user && !user.emailVerifiedAt && user.passwordHash)
-        await sendVerificationEmail(email, user.name, await issueToken(user.id, 'VERIFY_EMAIL'))
+        sendInBackground(
+          sendVerificationEmail(email, user.name, await issueToken(user.id, 'VERIFY_EMAIL'))
+        )
       return reply.code(202).send(CHECK_EMAIL)
     }
   )
@@ -293,10 +311,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         ? await db.user.findUnique({ where: { email }, select: { id: true, passwordHash: true } })
         : null
       if (user)
-        await sendPasswordResetEmail(
-          email,
-          await issueToken(user.id, 'RESET_PASSWORD'),
-          user.passwordHash ? 'reset' : 'set'
+        sendInBackground(
+          sendPasswordResetEmail(
+            email,
+            await issueToken(user.id, 'RESET_PASSWORD'),
+            user.passwordHash ? 'reset' : 'set'
+          )
         )
       return reply.code(202).send(CHECK_EMAIL)
     }
@@ -368,17 +388,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         },
       })
 
-      // Distinguishing "no password set" from "wrong password" is worth the small
-      // disclosure here: without it, OAuth users get stuck with no way to know why.
-      if (user && !user.passwordHash) {
-        return reply.code(409).send({
+      // One answer, in one amount of time, for every way this can fail: no
+      // such account, an account that only signs in with Microsoft, or the
+      // wrong password. Telling them apart would tell anyone who is
+      // registered, and how. The message covers the Microsoft case for
+      // everybody instead.
+      const ok = await verifyPassword(password, user?.passwordHash ?? (await dummyHash))
+      if (!user?.passwordHash || !ok) {
+        return reply.code(401).send({
           error:
-            'That account signs in with Microsoft. Use the UTORid button, or “Forgot password” to add one.',
+            'Incorrect email or password. If you signed up with your UTORid, use that button — or “Forgot password” to add a password.',
         })
-      }
-
-      if (!user || !(await verifyPassword(password, user.passwordHash!))) {
-        return reply.code(401).send({ error: 'Incorrect email or password.' })
       }
 
       // Checked after the password, so it says nothing to someone guessing.
@@ -429,8 +449,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
-  // POST /auth/logout
-  app.post('/logout', { config: { allowSuspended: true } }, async (_request, reply) => {
+  // POST /auth/logout — ends this session (only this one: see lib/session.ts)
+  app.post('/logout', { config: { allowSuspended: true } }, async (request, reply) => {
+    await revokeSession(request)
     reply.clearCookie('token', { path: '/' }).send({ ok: true })
   })
 
@@ -484,6 +505,6 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!user) return reply.code(404).send({ error: 'User not found' })
     const { passwordHash, ...rest } = user
-    return { ...rest, hasPassword: !!passwordHash, role: roleFor(user.email) }
+    return { ...rest, hasPassword: !!passwordHash }
   })
 }

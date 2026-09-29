@@ -35,7 +35,6 @@ import type { ProjectSection } from '@uofthub/types'
 import { buildApp } from '../app.js'
 import { db } from '../db/client.js'
 import { hashPassword } from '../lib/password.js'
-import { roleFor } from '../lib/session.js'
 
 const PASSWORD = '12345678'
 const DAY = 24 * 60 * 60 * 1000
@@ -1003,7 +1002,6 @@ async function as<T = any>(
   const token = app.jwt.sign({
     sub: user.id,
     email: user.email,
-    role: roleFor(user.email),
     sv: user.sessionVersion,
   })
   const res = await app.inject({

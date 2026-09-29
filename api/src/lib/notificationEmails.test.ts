@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const outbox = vi.hoisted(() => [] as { to: string; subject: string }[])
@@ -36,8 +37,17 @@ describe('emailed notifications', () => {
     await notify(user.id, 'FOLLOWED_YOU', { actorName: 'Bo' })
     await settle()
     expect(outbox).toEqual([
-      { to: user.email, subject: 'Ada invited you to collaborate on uofthub' },
+      { to: user.email, subject: 'You were invited to collaborate on a uofthub project' },
     ])
+  })
+
+  it('keeps names other students chose out of the subject line', async () => {
+    const user = await createUser()
+    const lure = 'IT Services: verify your UTORid at utoronto-login.co'
+    await notify(user.id, 'COLLABORATOR_INVITED', { inviterName: lure, projectTitle: lure })
+    await settle()
+    expect(outbox[0]!.subject).not.toContain('IT Services')
+    expect(lastEmail.html).toContain('IT Services')
   })
 
   it('respects the opt-out', async () => {
@@ -56,7 +66,7 @@ describe('emailed notifications', () => {
     for (const body of ['hi', 'are you there', '?'])
       await app.inject({ method: 'POST', url: `/messages/${b.id}`, cookies, payload: { body } })
     await settle()
-    expect(outbox).toEqual([{ to: b.email, subject: 'Ada sent you a message on uofthub' }])
+    expect(outbox).toEqual([{ to: b.email, subject: 'You have a new message on uofthub' }])
   })
 })
 
@@ -92,6 +102,15 @@ describe('unsubscribing', () => {
       payload: { token: `${user.id}.${unsubscribeToken('someone-else').split('.')[1]}` },
     })
     expect(res.statusCode).toBe(400)
+  })
+
+  it('still honours links in mail sent before tokens had a key of their own', () => {
+    const legacy = `abc.${createHmac('sha256', process.env.JWT_SECRET!)
+      .update('unsubscribe:abc')
+      .digest('base64url')}`
+    expect(readUnsubscribeToken(legacy)).toBe('abc')
+    // And new tokens are not signed with the session secret itself.
+    expect(unsubscribeToken('abc')).not.toBe(legacy)
   })
 
   it('writes a plain-text part', () => {

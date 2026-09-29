@@ -83,6 +83,14 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 /**
+ * Delete storage objects nothing points at any more. Best effort: a failure
+ * leaves an unreferenced object behind, which costs bytes, not correctness.
+ */
+export async function deleteObjects(keys: (string | null | undefined)[]): Promise<void> {
+  await Promise.all(keys.flatMap((k) => (k ? [deleteObject(k).catch(() => undefined)] : [])))
+}
+
+/**
  * The first `maxBytes` of an object. Ranged rather than whole-object because
  * the text preview shows the head of a file and has no reason to pull 25MB
  * through the API to throw most of it away. A range past the end of a short

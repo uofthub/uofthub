@@ -67,11 +67,13 @@ describe('GET /users/:id', () => {
     const fan = await createUser({ name: 'Fan' })
     await db.follow.create({ data: { followerId: fan.id, followingId: user.id } })
     const app = await getApp()
+    // Signed in: the lists are not for browsing signed out (see the route).
+    const cookies = await cookieFor(user)
     const followers = (
-      await app.inject({ method: 'GET', url: `/users/${user.id}/followers` })
+      await app.inject({ method: 'GET', url: `/users/${user.id}/followers`, cookies })
     ).json()
     const following = (
-      await app.inject({ method: 'GET', url: `/users/${fan.id}/following` })
+      await app.inject({ method: 'GET', url: `/users/${fan.id}/following`, cookies })
     ).json()
     expect(followers.map((p: { name: string }) => p.name)).toEqual(['Fan'])
     expect(following.map((p: { name: string }) => p.name)).toEqual(['Centre'])

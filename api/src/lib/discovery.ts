@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { CAMPUSES } from './campus.js'
 import { FACULTIES } from './faculties.js'
 import { aiModel, DEFAULT_MODEL, openaiClient } from './openai.js'
+import { dailyBudget, envInt } from './dailyBudget.js'
 
 /**
  * Turns "AI projects from Engineering students this year" into the filters the
@@ -89,13 +90,26 @@ export const discoveryModel = aiModel
 export const isAiConfigured = (): boolean => openaiClient() !== null
 
 /**
- * Parses one query. Returns null when there is no API key, or when the call
- * fails — the caller falls back to a plain keyword search either way, because
- * a search that returns something imperfect beats an error page.
+ * The hard ceiling on model calls behind the route's hourly rate limit: an
+ * hourly limit bounds calls per window, not what a day of windows costs.
  */
-export async function parseQuery(query: string): Promise<DiscoverFilters | null> {
+const budget = dailyBudget({
+  perStudent: () => envInt('AI_SEARCH_PER_STUDENT_DAY', 40),
+  perSite: () => envInt('AI_SEARCH_PER_DAY', 2000),
+})
+
+/** For tests: forget today's spending. */
+export const resetDiscoveryBudget = () => budget.reset()
+
+/**
+ * Parses one query for this student. Returns null when there is no API key,
+ * when today's budget for the student or the site is spent, or when the call
+ * fails — the caller falls back to a plain keyword search in every case,
+ * because a search that returns something imperfect beats an error page.
+ */
+export async function parseQuery(query: string, userId: string): Promise<DiscoverFilters | null> {
   const openai = openaiClient()
-  if (!openai) return null
+  if (!openai || !budget.spend(userId)) return null
 
   const response = await openai.responses.parse({
     model: discoveryModel(),

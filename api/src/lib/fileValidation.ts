@@ -17,7 +17,10 @@ const MB = 1024 * 1024
 export const FILE_CATEGORIES: FileCategory[] = [
   {
     name: 'docs',
-    extensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'md'],
+    // No legacy .doc/.ppt/.xls: their OLE2 container is the one that carries
+    // VBA macros, and the OOXML formats cover every modern use. Files uploaded
+    // before this still download (their content types stay below).
+    extensions: ['pdf', 'docx', 'pptx', 'xlsx', 'csv', 'txt', 'md'],
     maxSizeBytes: 25 * MB,
   },
   {
@@ -33,6 +36,18 @@ export const FILE_CATEGORIES: FileCategory[] = [
 ]
 
 export const PROJECT_FILE_COUNT_CAP = 20
+
+/**
+ * Bytes of project files one owner's projects may hold between them — an
+ * abuse ceiling, not a plan limit. Without it the per-file and per-project
+ * caps bound nothing: projects are free to make, so one account could keep
+ * uploading 250MB videos indefinitely at our cost. Set well above anything a
+ * student has needed; overridable per deployment.
+ */
+export const storageQuotaBytes = (): number => {
+  const n = Number.parseInt(process.env.STORAGE_QUOTA_BYTES ?? '', 10)
+  return Number.isFinite(n) && n > 0 ? n : 5 * 1024 * MB
+}
 
 /**
  * How a browser can display a file, if at all. Anything absent from the map is

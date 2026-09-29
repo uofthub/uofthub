@@ -129,10 +129,11 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
     body: (
       <>
         <p>
-          An account requires a current <code>@mail.utoronto.ca</code> or <code>@utoronto.ca</code>{' '}
-          address, proven by signing in with Microsoft or following the link we email you. That is
-          the only thing we verify — we do not check your program, your year, or whether you are
-          still enrolled.
+          An account requires a current U of T address — one ending in <code>utoronto.ca</code>{' '}
+          (such as <code>@mail.utoronto.ca</code>) or <code>toronto.edu</code> (such as{' '}
+          <code>@cs.toronto.edu</code>) — proven by signing in with Microsoft or following the link
+          we email you. That is the only thing we verify — we do not check your program, your year,
+          or whether you are still enrolled.
         </p>
         <p>
           We may suspend an account that repeatedly publishes material covered above. A suspended

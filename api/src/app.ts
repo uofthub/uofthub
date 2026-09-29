@@ -22,6 +22,7 @@ import { emailRoutes } from './routes/email.js'
 import { pushRoutes } from './routes/push.js'
 import { pathRoutes } from './routes/paths.js'
 import { sessionAccount } from './lib/session.js'
+import { jwtSecret } from './lib/keys.js'
 
 export async function buildApp() {
   // A default secret is fine for local work but would silently ship forgeable
@@ -71,11 +72,38 @@ export async function buildApp() {
       reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   })
 
+  // Cross-site request forgery, belt and braces. The session cookie is
+  // SameSite=Lax, which stops other *sites* from sending it on a POST — but
+  // not other origins on the same site (any uofthub.com subdomain, including
+  // one left pointing somewhere it shouldn't), and "simple" requests — a
+  // text/plain body, or none — skip the CORS preflight entirely. So a
+  // browser's write must come from the web app itself. Browsers always send
+  // Origin on a cross-origin write; a request without one is not a browser
+  // being tricked, and is left to authenticate like any other.
+  //
+  // The one exception is unsubscribing, which mail providers POST themselves
+  // and which is authorized by its signed token, not by a session.
+  const webOrigin = process.env.WEB_URL ?? 'http://localhost:5173'
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS')
+      return
+    if (request.url.startsWith('/email/unsubscribe')) return
+    const origin = request.headers.origin
+    const crossSite = request.headers['sec-fetch-site'] === 'cross-site'
+    if ((origin !== undefined && origin !== webOrigin) || (origin === undefined && crossSite))
+      return reply.code(403).send({ error: 'This request did not come from uofthub' })
+  })
+
   await app.register(cookie)
 
+  // The session is only ever the httpOnly cookie. Left to its default, the
+  // plugin prefers an `Authorization: Bearer` header when one is present,
+  // which the web app never sends — it would be a second way in that nothing
+  // else (the rate limiter's key above all) accounts for.
   await app.register(jwt, {
-    secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
+    secret: jwtSecret(),
     cookie: { cookieName: 'token', signed: false },
+    verify: { onlyCookie: true },
   })
 
   // Matches the largest per-category cap (video, see lib/fileValidation.ts) so

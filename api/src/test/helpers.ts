@@ -77,8 +77,6 @@ export async function cookieFor(user: { id: string; email: string }): Promise<{ 
     token: app.jwt.sign({
       sub: user.id,
       email: user.email,
-      // Mirrors getRole() in routes/auth.ts: staff addresses are FACULTY.
-      role: user.email.endsWith('@utoronto.ca') ? 'FACULTY' : 'STUDENT',
       sv: (user as { sessionVersion?: number }).sessionVersion ?? 0,
     }),
   }

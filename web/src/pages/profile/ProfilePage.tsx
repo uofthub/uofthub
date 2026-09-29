@@ -305,19 +305,11 @@ export default function ProfilePage({ id: resolved }: { id?: string }) {
             <h1 className="font-display text-30 leading-[1.1] font-bold tracking-tightest md:text-40">
               {profile.name}
             </h1>
-            {/* Every account signed up with a U of T address; the API checks.
-                Which address — @utoronto.ca or @mail.utoronto.ca — is what
-                tells faculty from students, and nobody can set it: a student
-                who names themselves after a professor still reads as one. */}
-            <span
-              title={
-                profile.isFaculty
-                  ? 'Signed up with a @utoronto.ca address'
-                  : 'Signed up with a U of T student address'
-              }
-            >
+            {/* Every account proved a U of T address; the API checks. There
+                is no separate faculty badge for now (docs/future.md). */}
+            <span title="Signed up with a U of T address">
               <Chip size="sm" tone="navy" icon="shieldCheck" className="h-6.5 font-semibold">
-                {profile.isFaculty ? 'U of T faculty & staff' : 'U of T verified'}
+                U of T verified
               </Chip>
             </span>
           </div>

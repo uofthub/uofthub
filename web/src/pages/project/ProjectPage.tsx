@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api, isNotFound } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { facultyByName } from '../../lib/faculties'
@@ -12,12 +12,10 @@ import {
   Button,
   cx,
   EmptyState,
-  ErrorText,
   Icon,
   Notice,
   Page,
   Spinner,
-  SuccessText,
 } from '../../components/ui'
 import { Gallery } from './Gallery'
 import { InfoCard } from './InfoCard'
@@ -27,24 +25,6 @@ import { Comments, Related, Updates } from './Sections'
 
 /** The page's two columns: the story, and a 440px column of facts beside it. */
 const grid = 'grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_440px] xl:gap-8'
-
-/**
- * For a TA or instructor handed a link to work they can't see yet — a draft,
- * or course work hidden until after grading. The owner decides.
- */
-function RequestAccess({ projectId }: { projectId: string }) {
-  const ask = useMutation({ mutationFn: () => api.projects.requestAccess(projectId) })
-  if (ask.isSuccess)
-    return <SuccessText>Asked. You’ll get a notification when they decide.</SuccessText>
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <Button variant="primary" icon="lock" onClick={() => ask.mutate()} disabled={ask.isPending}>
-        Request access
-      </Button>
-      {ask.isError && <ErrorText>{ask.error.message}</ErrorText>}
-    </div>
-  )
-}
 
 /** The Project page board. */
 /** A project, by `id` — given by the /@handle/slug route, or from /projects/:id. */
@@ -101,19 +81,13 @@ export default function ProjectPage({ id: resolved }: { id?: string }) {
           icon="eyeOff"
           title="This project isn’t here"
           action={
-            user?.role === 'FACULTY' && id ? (
-              <RequestAccess projectId={id} />
-            ) : (
-              <Button variant="primary" to={user ? '/explore' : '/session'}>
-                {user ? 'Explore projects' : 'Log in'}
-              </Button>
-            )
+            <Button variant="primary" to={user ? '/explore' : '/session'}>
+              {user ? 'Explore projects' : 'Log in'}
+            </Button>
           }
         >
           It may have been deleted, or it is private to the people who made it
           {user ? '.' : ' — if you were given the link, log in; it may be shared with U of T only.'}
-          {user?.role === 'FACULTY' &&
-            ' If a student gave you this link to review their work, ask them for access.'}
         </EmptyState>
       </Page>
     )

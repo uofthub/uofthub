@@ -1,8 +1,21 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Captured rather than sent: which addresses were emailed an invitation.
+const invited = vi.hoisted(() => [] as string[])
+vi.mock('../lib/authEmails.js', async (original) => ({
+  ...(await original<object>()),
+  sendOrgInviteEmail: async (to: string) => {
+    invited.push(to)
+  },
+}))
 import { db } from '../db/client.js'
+import { onEmailVerified } from '../lib/accounts.js'
 import { cookieFor, createOrg, createUser, getApp, resetDb } from '../test/helpers.js'
 
-beforeEach(resetDb)
+beforeEach(async () => {
+  await resetDb()
+  invited.length = 0
+})
 
 type User = { id: string; email: string }
 
@@ -36,7 +49,7 @@ describe('joining a group', () => {
     const friend = await createUser()
     expect(
       (await call('POST', '/orgs/robots/members', admin, { email: friend.email })).statusCode
-    ).toBe(201)
+    ).toBe(202)
     expect(await statusOf(org.id, friend.id)).toBe('INVITED')
     expect(await db.notification.count({ where: { userId: friend.id, type: 'ORG_INVITED' } })).toBe(
       1
@@ -67,6 +80,43 @@ describe('joining a group', () => {
 
     await call('PATCH', `/orgs/robots/members/${student.id}`, admin, { approve: true })
     expect(await statusOf(org.id, student.id)).toBe('ACTIVE')
+  })
+
+  it('answers the same whether or not the address has an account', async () => {
+    const { admin, org } = await seed()
+    const friend = await createUser()
+    const known = await call('POST', '/orgs/robots/members', admin, { email: friend.email })
+    const unknown = await call('POST', '/orgs/robots/members', admin, {
+      email: 'new.person@mail.utoronto.ca',
+    })
+    expect(unknown.statusCode).toBe(known.statusCode)
+    expect(Object.keys(unknown.json()).sort()).toEqual(Object.keys(known.json()).sort())
+    // Only the address without an account is emailed; the member gets a notification.
+    expect(invited).toEqual(['new.person@mail.utoronto.ca'])
+
+    // Admins see both by address, not by profile.
+    const page = (await call('GET', '/orgs/robots', admin)).json()
+    expect(page.invited.map((i: { email: string }) => i.email).sort()).toEqual(
+      [friend.email, 'new.person@mail.utoronto.ca'].sort()
+    )
+    expect(JSON.stringify(page.invited)).not.toContain(friend.id)
+
+    // The waiting invitation becomes a real one once the address is proven.
+    const newcomer = await createUser({ email: 'new.person@mail.utoronto.ca' })
+    await onEmailVerified(newcomer.id)
+    expect(await statusOf(org.id, newcomer.id)).toBe('INVITED')
+    expect(await db.orgEmailInvite.count()).toBe(0)
+
+    // And either kind is withdrawn by address.
+    await call('DELETE', `/orgs/robots/invites/${encodeURIComponent(friend.email)}`, admin)
+    expect(await statusOf(org.id, friend.id)).toBeNull()
+  })
+
+  it('refuses an address that is not a U of T one', async () => {
+    const { admin } = await seed()
+    const res = await call('POST', '/orgs/robots/members', admin, { email: 'x@gmail.com' })
+    expect(res.statusCode).toBe(400)
+    expect(await db.orgEmailInvite.count()).toBe(0)
   })
 
   it('refuses a role that is not MEMBER or ADMIN', async () => {

@@ -423,7 +423,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (!decision || !(decision in MESSAGE_DECISIONS)) {
         return reply.code(400).send({ error: 'Decision must be DISMISS, WARN or SUSPEND' })
       }
-      const note = (request.body?.note ?? '').trim().slice(0, 1000) || null
+      const note =
+        typeof request.body?.note === 'string'
+          ? request.body.note.trim().slice(0, 1000) || null
+          : null
 
       const report = await db.messageReport.findUnique({
         where: { id: request.params.id },
@@ -514,7 +517,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     adminOnly,
     async (request, reply) => {
       const { projectId, weekOf } = request.body ?? {}
-      const note = request.body?.note?.trim().slice(0, 200) || null
+      const note =
+        typeof request.body?.note === 'string'
+          ? request.body.note.trim().slice(0, 200) || null
+          : null
       if (!projectId) return reply.code(400).send({ error: 'A project is required' })
 
       const project = await db.project.findUnique({

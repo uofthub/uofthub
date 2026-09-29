@@ -1,0 +1,6 @@
+# False positives from the secret scan (CI `security` job), one fingerprint per
+# line. Each is checked by hand before it goes here.
+#
+# api/src/routes/push.ts: `p256dh.length > 200` — a Web Push key's length
+# check, not a key.
+c09bf6a4d7d7fd3bd3602647e5de342144df9d0d:api/src/routes/push.ts:generic-api-key:31

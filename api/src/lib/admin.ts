@@ -9,14 +9,14 @@ import { db } from '../db/client.js'
  * different thing entirely — it separates students from faculty, not
  * moderators from everyone else.
  */
-export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
   const user = await db.user.findUnique({
     where: { id: request.user.sub },
     select: { isAdmin: true },
   })
-  if (!user?.isAdmin) {
-    reply.code(403).send({ error: 'Forbidden' })
-  }
+  // Returned, not just sent: an async hook that replies without returning the
+  // reply leaves Fastify to decide whether the handler still runs.
+  if (!user?.isAdmin) return reply.code(403).send({ error: 'Forbidden' })
 }
 
 /** Whether this account is a moderator, for routes open to others too. */

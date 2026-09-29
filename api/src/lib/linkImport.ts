@@ -66,9 +66,18 @@ for (const [net, prefix] of [
 ] as const)
   blocked.addSubnet(net, prefix, 'ipv4')
 for (const [net, prefix] of [
-  ['::', 128],
+  // Also covers ::1 and the deprecated IPv4-compatible range (::127.0.0.1).
+  ['::', 96],
   ['::1', 128],
+  // No rule for IPv4-mapped (::ffff:0:0/96): BlockList already checks a
+  // mapped address, however it is written, against the IPv4 rules above —
+  // and a rule for the whole range would match every IPv4 address too.
+  // NAT64, well-known and local-use: a gateway translating to IPv4 inside.
   ['64:ff9b::', 96],
+  ['64:ff9b:1::', 48],
+  // Tunnels that embed an IPv4 address: 6to4 and Teredo.
+  ['2002::', 16],
+  ['2001::', 32],
   ['100::', 64],
   ['2001:db8::', 32],
   ['fc00::', 7],
@@ -183,10 +192,17 @@ function getOnce(
         res.on('error', (e) => (truncated ? undefined : reject(e)))
       }
     )
-    req.on('timeout', () => req.destroy(new ImportError('That page took too long to answer')))
-    req.on('error', (e) =>
+    const tooSlow = () => req.destroy(new ImportError('That page took too long to answer'))
+    // `timeout` above is an idle timeout: every byte resets it, so a server
+    // dripping one byte a second would hold this open for days. This is the
+    // whole request's deadline, however the bytes arrive.
+    const deadline = setTimeout(tooSlow, TIMEOUT_MS)
+    req.on('close', () => clearTimeout(deadline))
+    req.on('timeout', tooSlow)
+    req.on('error', (e) => {
+      clearTimeout(deadline)
       reject(e instanceof ImportError ? e : new ImportError('That page could not be reached'))
-    )
+    })
   })
 }
 

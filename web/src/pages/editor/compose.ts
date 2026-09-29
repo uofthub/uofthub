@@ -161,7 +161,7 @@ export const TYPE_FORMS: Record<ProjectType, { fields: ExtraField[]; drop: Dropz
     drop: {
       title: 'Your piece',
       hint: 'PDF, DOCX or plain text',
-      accept: '.pdf,.doc,.docx,.txt,.md',
+      accept: '.pdf,.docx,.txt,.md',
     },
   },
   OTHER: {

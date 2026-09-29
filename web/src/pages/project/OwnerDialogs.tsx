@@ -459,8 +459,9 @@ export function PeopleDialog({
         </Button>
       </form>
       <Intro>
-        They need a uofthub account first, and they confirm before they appear on the project.
-        Collaborators can edit the project’s content; only you choose who can see it.
+        They confirm before they appear on the project — if they haven’t joined uofthub yet, we
+        email them to sign up and the invitation waits for them. Collaborators can edit the
+        project’s content; only you choose who can see it.
       </Intro>
       {invite.isSuccess && <SuccessText>Invitation sent.</SuccessText>}
       {error && <ErrorText>{error.message}</ErrorText>}
@@ -494,9 +495,7 @@ export function PeopleDialog({
 
           <section className="flex flex-col gap-2">
             <Eyebrow as="h3">Collaborators</Eyebrow>
-            {people.collaborators.length === 0 &&
-            people.pending.length === 0 &&
-            people.emailInvites.length === 0 ? (
+            {people.collaborators.length === 0 && people.invites.length === 0 ? (
               <p className="text-14 text-muted">Nobody yet — just you.</p>
             ) : (
               <ManageList>
@@ -507,14 +506,7 @@ export function PeopleDialog({
                     </Button>
                   </PersonRow>
                 ))}
-                {people.pending.map((p) => (
-                  <PersonRow key={p.userId} person={p} note={`Invited ${timeAgo(p.invitedAt)}`}>
-                    <Button size="sm" disabled={busy} onClick={() => remove.mutate(p.userId)}>
-                      Withdraw
-                    </Button>
-                  </PersonRow>
-                ))}
-                {people.emailInvites.map((i) => (
+                {people.invites.map((i) => (
                   <ManageRow
                     key={i.email}
                     icon={<Icon name="inbox" size={18} />}
@@ -526,7 +518,7 @@ export function PeopleDialog({
                   >
                     <span className="text-14 font-semibold wrap-anywhere">{i.email}</span>
                     <span className="text-13 text-muted">
-                      {[i.title, 'No account yet — invited by email'].filter(Boolean).join(' · ')}
+                      {[i.title, `Invited ${timeAgo(i.invitedAt)}`].filter(Boolean).join(' · ')}
                     </span>
                   </ManageRow>
                 ))}

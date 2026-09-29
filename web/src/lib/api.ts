@@ -64,7 +64,6 @@ type ReportBody = { reason: ReportReason; details?: string }
 export type MeUser = User & {
   /** When they last chose a handle; another is allowed 30 days on. */
   handleChangedAt: string | null
-  role: 'STUDENT' | 'FACULTY'
   isAdmin: boolean
   /** False for an account that only signs in with Microsoft. */
   hasPassword: boolean
@@ -229,8 +228,6 @@ export type ProfileUser = {
   _count: { ownedProjects: number; followers: number; following: number; collaborations: number }
   /** Whether the signed-in caller has blocked this person. */
   blockedByMe: boolean
-  /** Signed up with a @utoronto.ca address — faculty or staff, never a student. */
-  isFaculty: boolean
 }
 
 /** What a readable address names — see lib/paths.ts. */
@@ -465,10 +462,11 @@ export type ProjectPerson = {
 
 export type ProjectPeople = {
   collaborators: ProjectPerson[]
-  /** Invited, not yet answered. */
-  pending: ProjectPerson[]
-  /** Invited by an address that has no account yet. */
-  emailInvites: { email: string; title: string | null; invitedAt: string }[]
+  /**
+   * Invited, not yet answered — by the address the owner typed, whether or not
+   * it has an account yet. Who is behind it shows once they accept.
+   */
+  invites: { email: string; title: string | null; invitedAt: string }[]
   /** TAs and instructors granted access to read it. */
   viewers: ProjectPerson[]
   accessRequests: ProjectPerson[]
@@ -520,8 +518,12 @@ export type OrgInvite = OrgRef & { role: OrgRole; invitedAt: string }
 export type OrgDetail = Org & {
   /** Active members. */
   members: OrgMember[]
-  /** Admins only: invitations out, and requests to join. */
-  invited?: OrgMember[]
+  /**
+   * Admins only: invitations out — by the address each went to, whether or
+   * not it has an account yet; who is behind it shows once they accept.
+   */
+  invited?: { email: string; role: OrgRole; invitedAt: string }[]
+  /** Admins only: requests to join. */
   requests?: OrgMember[]
   /** Where the caller stands with the group, and their role in it. */
   myStatus: OrgMemberStatus | null
@@ -733,8 +735,6 @@ export const api = {
     createVersion: (id: string, note?: string) =>
       request<ProjectVersion>(`/projects/${id}/versions`, post({ note })),
     analytics: (id: string) => request<Analytics>(`/projects/${id}/analytics`),
-    requestAccess: (id: string) =>
-      request<{ ok: boolean }>(`/projects/${id}/request-access`, post()),
     approveAccessRequest: (id: string, userId: string) =>
       request<unknown>(`/projects/${id}/collaborators/${userId}`, {
         method: 'PATCH',
@@ -859,8 +859,19 @@ export const api = {
     activities: (slug: string) => request<OrgActivity[]>(`/orgs/${slug}/activities`),
     addActivity: (
       slug: string,
-      body: { title: string; description?: string; date?: string; link?: string; imageUrl?: string }
+      body: { title: string; description?: string; date?: string; link?: string }
     ) => request<OrgActivity>(`/orgs/${slug}/activities`, post(body)),
+    /** A poster or photo for the event: PNG, JPEG or WebP, up to 2MB. */
+    setActivityImage: (slug: string, id: string, image: File) => {
+      const form = new FormData()
+      form.append('file', image)
+      return request<OrgActivity>(`/orgs/${slug}/activities/${id}/image`, {
+        method: 'PUT',
+        body: form,
+      })
+    },
+    removeActivityImage: (slug: string, id: string) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/activities/${id}/image`, { method: 'DELETE' }),
     deleteActivity: (slug: string, id: string) =>
       request<{ ok: boolean }>(`/orgs/${slug}/activities/${id}`, { method: 'DELETE' }),
     reportActivity: (slug: string, id: string, body: ReportBody) =>
@@ -884,6 +895,10 @@ export const api = {
       }),
     removeMember: (slug: string, userId: string) =>
       request<{ ok: boolean }>(`/orgs/${slug}/members/${userId}`, { method: 'DELETE' }),
+    withdrawInvite: (slug: string, email: string) =>
+      request<{ ok: boolean }>(`/orgs/${slug}/invites/${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+      }),
     delete: (slug: string) => request<{ ok: boolean }>(`/orgs/${slug}`, { method: 'DELETE' }),
     updateActivity: (
       slug: string,
@@ -893,7 +908,6 @@ export const api = {
         description?: string
         date?: string
         link?: string
-        imageUrl?: string
       }
     ) =>
       request<OrgActivity>(`/orgs/${slug}/activities/${id}`, {
@@ -1017,10 +1031,14 @@ export const api = {
   messages: {
     conversations: () => request<Conversation[]>('/messages'),
     unread: () => request<{ count: number }>('/messages/unread'),
-    thread: (userId: string, before?: string) =>
-      request<Thread>(
+    /** A page of the conversation; the newest page also marks their messages read. */
+    thread: async (userId: string, before?: string) => {
+      const thread = await request<Thread>(
         `/messages/${userId}${before ? `?before=${encodeURIComponent(before)}` : ''}`
-      ),
+      )
+      if (!before) await request<{ ok: boolean }>(`/messages/${userId}/read`, post())
+      return thread
+    },
     send: (userId: string, body: string) => request<Message>(`/messages/${userId}`, post({ body })),
     block: (userId: string) => request<{ blocked: boolean }>(`/messages/${userId}/block`, post()),
     unblock: (userId: string) =>
