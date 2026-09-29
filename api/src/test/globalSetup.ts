@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { testDatabaseUrl } from './env.js'
 
@@ -15,7 +16,9 @@ export default async function setup(): Promise<void> {
   // CREATE DATABASE has to run from a connection to a different database.
   const adminUrl = new URL(url)
   adminUrl.pathname = '/postgres'
-  const admin = new PrismaClient({ datasourceUrl: adminUrl.toString() })
+  const admin = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: adminUrl.toString() }),
+  })
   try {
     await admin.$executeRawUnsafe(`CREATE DATABASE "${dbName}"`)
     console.log(`Created test database ${dbName}`)
