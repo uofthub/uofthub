@@ -9,7 +9,7 @@
 # Pinned by digest, so a rebuild is the image that was reviewed rather than
 # whatever the tag points at that day. Dependabot (.github/dependabot.yml)
 # proposes the bump when the tag moves.
-FROM node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS base
+FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS base
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
