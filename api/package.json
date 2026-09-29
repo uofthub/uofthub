@@ -30,7 +30,7 @@
     "@fastify/multipart": "^10.0.0",
     "@fastify/oauth2": "^8.0.0",
     "@fastify/rate-limit": "^11.2.0",
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "^7.10.0",
     "@resvg/resvg-js": "^2.6.2",
     "@uofthub/types": "workspace:*",
     "fastify": "^5.0.0",
