@@ -1,0 +1,24 @@
+# Weekly update PRs for everything this repo pins: npm packages (the pnpm
+# lockfile), the GitHub Actions in .github/workflows (pinned by SHA), and the
+# API image's base (pinned by digest in api/Dockerfile).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for the routine minor and patch bumps; majors come one by one.
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly

@@ -154,25 +154,28 @@ function ActivityDialog({
     description: activity?.description ?? '',
     date: (activity?.date ?? new Date().toISOString()).slice(0, 10),
     link: activity?.link ?? '',
-    imageUrl: activity?.imageUrl ?? '',
   })
+  // Uploaded, not linked: an image from any address would let whoever posted
+  // it see who viewed the page. Null means "take the current one off".
+  const [image, setImage] = useState<File | null | undefined>(undefined)
   const post = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body = {
         title: form.title,
         description: form.description,
         date: form.date || undefined,
         link: form.link,
-        imageUrl: form.imageUrl,
       }
-      return activity
-        ? api.orgs.updateActivity(slug, activity.id, body)
-        : api.orgs.addActivity(slug, {
+      const saved = activity
+        ? await api.orgs.updateActivity(slug, activity.id, body)
+        : await api.orgs.addActivity(slug, {
             ...body,
             description: body.description || undefined,
             link: body.link || undefined,
-            imageUrl: body.imageUrl || undefined,
           })
+      if (image) await api.orgs.setActivityImage(slug, saved.id, image)
+      else if (image === null && activity?.imageUrl)
+        await api.orgs.removeActivityImage(slug, saved.id)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org', slug] })
@@ -215,8 +218,20 @@ function ActivityDialog({
       <Field label="Link" hint="Optional — signup form, recap, photos.">
         <Input value={form.link} onChange={set('link')} placeholder="https://" />
       </Field>
-      <Field label="Image URL" hint="Optional — a poster or photo.">
-        <Input value={form.imageUrl} onChange={set('imageUrl')} placeholder="https://" />
+      <Field label="Image" hint="Optional — a poster or photo. PNG, JPEG or WebP, up to 2MB.">
+        <span className="flex flex-wrap items-center gap-2.5">
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => setImage(e.target.files?.[0] ?? undefined)}
+            className="min-w-0 text-14"
+          />
+          {activity?.imageUrl && image !== null && (
+            <Button size="sm" variant="ghost" onClick={() => setImage(null)}>
+              Remove current image
+            </Button>
+          )}
+        </span>
       </Field>
       {post.isError && <ErrorText>{(post.error as Error).message}</ErrorText>}
     </Dialog>
@@ -285,8 +300,12 @@ function MembersPanel({ org }: { org: OrgDetail }) {
     mutationFn: (userId: string) => api.orgs.removeMember(org.slug, userId),
     onSuccess: refresh,
   })
-  const busy = update.isPending || remove.isPending
-  const error = [invite, update, remove].find((m) => m.isError)?.error
+  const withdraw = useMutation({
+    mutationFn: (address: string) => api.orgs.withdrawInvite(org.slug, address),
+    onSuccess: refresh,
+  })
+  const busy = update.isPending || remove.isPending || withdraw.isPending
+  const error = [invite, update, remove, withdraw].find((m) => m.isError)?.error
 
   return (
     <Panel title="Members">
@@ -366,12 +385,19 @@ function MembersPanel({ org }: { org: OrgDetail }) {
       {isAdmin && (org.invited?.length ?? 0) > 0 && (
         <>
           <Eyebrow as="h3">Invited</Eyebrow>
-          {org.invited!.map((m) => (
-            <MemberRow key={m.userId} member={m} note={`Invited as ${m.role.toLowerCase()}`}>
-              <Button size="sm" disabled={busy} onClick={() => remove.mutate(m.userId)}>
+          {org.invited!.map((i) => (
+            <div key={i.email} className="flex items-center gap-2.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-muted">
+                <Icon name="inbox" size={18} />
+              </span>
+              <span className="min-w-0 grow">
+                <b className="block text-15 font-semibold wrap-anywhere">{i.email}</b>
+                <span className="text-13 text-muted">Invited as {i.role.toLowerCase()}</span>
+              </span>
+              <Button size="sm" disabled={busy} onClick={() => withdraw.mutate(i.email)}>
                 Withdraw
               </Button>
-            </MemberRow>
+            </div>
           ))}
         </>
       )}

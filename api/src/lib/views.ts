@@ -1,22 +1,22 @@
-import { createHash } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import type { FastifyRequest } from 'fastify'
 import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
+import { derivedKey } from './keys.js'
 
 /**
  * Counting a view: one person, once a day.
  *
- * A signed-in viewer is keyed by their id. Anyone else is keyed by a salted
- * hash of their address and browser, which is enough to tell a reload from a
- * second person without storing anything that identifies them — the salt is
+ * A signed-in viewer is keyed by their id. Anyone else is keyed by an HMAC
+ * of their address and browser, which is enough to tell a reload from a
+ * second person without storing anything that identifies them — the key is
  * the server's own secret, and only today's keys are ever kept.
  */
 
 function viewerKey(request: FastifyRequest, callerId: string | null): string {
   if (callerId) return `u:${callerId}`
-  const salt = process.env.JWT_SECRET ?? 'dev-secret-change-in-prod'
   const who = `${request.ip}|${request.headers['user-agent'] ?? ''}`
-  return `a:${createHash('sha256').update(`${salt}|${who}`).digest('hex').slice(0, 32)}`
+  return `a:${createHmac('sha256', derivedKey('view-salt-v1')).update(who).digest('hex').slice(0, 32)}`
 }
 
 function todayUtc(): Date {

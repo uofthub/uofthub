@@ -2,13 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Storage is not configured for tests. Signing returns the key it was given,
 // so a test can see which object a cover or thumbnail came from.
-const storage = vi.hoisted(() => ({
-  putObject: vi.fn(async () => undefined),
-  deleteObject: vi.fn(async () => undefined),
-  signedDownloadUrl: vi.fn(async (key: string) => `signed:${key}`),
-  getObjectHead: vi.fn(),
-  objectKey: vi.fn((projectId: string, name: string) => `projects/${projectId}/${name}`),
-}))
+const storage = vi.hoisted(() => {
+  const deleteObject = vi.fn(async (_key: string) => undefined)
+  return {
+    putObject: vi.fn(async () => undefined),
+    deleteObject,
+    deleteObjects: async (keys: (string | null | undefined)[]) => {
+      for (const key of keys) if (key) await deleteObject(key)
+    },
+    signedDownloadUrl: vi.fn(async (key: string) => `signed:${key}`),
+    getObjectHead: vi.fn(),
+    objectKey: vi.fn((projectId: string, name: string) => `projects/${projectId}/${name}`),
+  }
+})
 vi.mock('../lib/storage.js', () => storage)
 
 import { db } from '../db/client.js'
@@ -90,7 +96,9 @@ describe('saving outputs', () => {
     })
     expect(res.statusCode).toBe(200)
     const outputs = res.json().outputs
-    expect(outputs.map((o: Output & { label: string | null }) => [o.kind, o.label, o.primary])).toEqual([
+    expect(
+      outputs.map((o: Output & { label: string | null }) => [o.kind, o.label, o.primary])
+    ).toEqual([
       ['POSTER', null, true],
       ['VIDEO', 'Talk', false],
     ])

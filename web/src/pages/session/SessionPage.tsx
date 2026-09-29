@@ -18,9 +18,9 @@ import {
   SegmentedTabs,
   type IconName,
 } from '../../components/ui'
+import { CONTACT_EMAIL } from '../../lib/site'
+import { domainHelpHref, isUofTEmail } from '../../lib/uoftEmail'
 
-/** Matches the domain rule the API enforces on /auth/register. */
-const UOFT_DOMAINS = ['@mail.utoronto.ca', '@utoronto.ca']
 const MIN_PASSWORD_LENGTH = 10
 
 const HIGHLIGHTS: { icon: IconName; text: string }[] = [
@@ -33,7 +33,7 @@ type Mode = 'login' | 'signup' | 'forgot'
 
 /** What the Microsoft round trip can come back with, as `?error=`. */
 const OAUTH_ERRORS: Record<string, string> = {
-  domain: 'That Microsoft account isn’t a U of T one. Sign in with your utoronto.ca account.',
+  domain: `That Microsoft account isn’t a U of T one — its address doesn’t end in utoronto.ca or toronto.edu. If it is a U of T account, email ${CONTACT_EMAIL} and we’ll sort it out.`,
   oauth: 'Microsoft sign-in didn’t go through. Try again, or use your email and password.',
   unavailable: 'Microsoft sign-in isn’t set up here. Use your email and password instead.',
 }
@@ -100,7 +100,7 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
     )
 
   const unverified = submit.error instanceof ApiError && submit.error.code === 'UNVERIFIED'
-  const domainOk = !email || UOFT_DOMAINS.some((d) => email.endsWith(d))
+  const domainOk = !email || isUofTEmail(email)
   const complete =
     !!email &&
     (mode === 'forgot' ||
@@ -132,7 +132,18 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
           />
         </Field>
       )}
-      <Field label="U of T email" hint={domainOk ? undefined : 'Use your utoronto.ca address.'}>
+      <Field
+        label="U of T email"
+        hint={
+          domainOk ? undefined : (
+            <>
+              That address doesn’t end in utoronto.ca or toronto.edu. If it is a U of T address,{' '}
+              <a href={domainHelpHref(email)}>email us at {CONTACT_EMAIL}</a> from it and we’ll sort
+              it out.
+            </>
+          )
+        }
+      >
         <Input
           type="email"
           value={form.email}

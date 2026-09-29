@@ -5,6 +5,9 @@ import { getOptionalUserId, isListed, visibleProjectWhere } from '../lib/visibil
 import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { withCovers } from '../lib/covers.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
+import { bySession } from '../lib/rateLimit.js'
+import { pageSkip, pageTake } from '../lib/paging.js'
+import { withLock } from '../lib/locks.js'
 
 /**
  * Collections: a student's hand-picked set of projects ("Best of UTM 2026").
@@ -32,7 +35,9 @@ const OWNER = {
 } as const
 
 // Creating is cheap and each one is a public page, so it gets a budget.
-const writeRateLimit = { rateLimit: { max: 30, timeWindow: '10 minutes' } }
+const writeRateLimit = {
+  rateLimit: { max: 30, timeWindow: '10 minutes', keyGenerator: bySession },
+}
 
 function cleanText(raw: unknown, max: number): string | null | undefined {
   if (raw === undefined) return undefined
@@ -124,8 +129,8 @@ export const collectionRoutes: FastifyPluginAsync = async (app) => {
     '/',
     async (request) => {
       const callerId = await getOptionalUserId(request)
-      const take = Math.min(Math.max(Number(request.query.take) || PAGE_SIZE, 1), MAX_PAGE_SIZE)
-      const skip = Math.max(Number(request.query.skip) || 0, 0)
+      const take = pageTake(request.query.take, PAGE_SIZE, MAX_PAGE_SIZE)
+      const skip = pageSkip(request.query.skip)
       const hasVisible = { items: { some: { project: visibleProjectWhere(callerId) } } }
 
       const rows = await db.collection.findMany({
@@ -208,20 +213,24 @@ export const collectionRoutes: FastifyPluginAsync = async (app) => {
       if (projectId && !(await listable(projectId)))
         return reply.code(400).send({ error: 'Only public or U of T projects can be collected' })
 
-      if ((await db.collection.count({ where: { ownerId } })) >= COLLECTIONS_PER_USER_MAX)
+      // Counted and created under one lock per curator (see lib/locks.ts).
+      const collection = await withLock(`collections:${ownerId}`, async (tx) => {
+        if ((await tx.collection.count({ where: { ownerId } })) >= COLLECTIONS_PER_USER_MAX)
+          return null
+        return tx.collection.create({
+          data: {
+            ownerId,
+            title,
+            description: description ?? null,
+            ...(projectId && { items: { create: { projectId } } }),
+          },
+          include: { owner: OWNER },
+        })
+      })
+      if (!collection)
         return reply
           .code(400)
           .send({ error: `You can have at most ${COLLECTIONS_PER_USER_MAX} collections` })
-
-      const collection = await db.collection.create({
-        data: {
-          ownerId,
-          title,
-          description: description ?? null,
-          ...(projectId && { items: { create: { projectId } } }),
-        },
-        include: { owner: OWNER },
-      })
       return reply.code(201).send(collection)
     }
   )
@@ -300,22 +309,20 @@ export const collectionRoutes: FastifyPluginAsync = async (app) => {
       if (!(await listable(projectId)))
         return reply.code(400).send({ error: 'Only public or U of T projects can be collected' })
 
-      const where = { collectionId_projectId: { collectionId: found.collection.id, projectId } }
-      if (!(await db.collectionItem.findUnique({ where }))) {
-        const count = await db.collectionItem.count({
-          where: { collectionId: found.collection.id },
-        })
-        if (count >= ITEMS_MAX)
-          return reply.code(400).send({ error: `A collection holds at most ${ITEMS_MAX} projects` })
-        await db.collectionItem.create({
-          data: { collectionId: found.collection.id, projectId },
-        })
+      const collectionId = found.collection.id
+      const where = { collectionId_projectId: { collectionId, projectId } }
+      // Checked and added under one lock per collection (see lib/locks.ts), so
+      // neither the cap nor "already there" can be raced.
+      const full = await withLock(`collection-items:${collectionId}`, async (tx) => {
+        if (await tx.collectionItem.findUnique({ where })) return false
+        if ((await tx.collectionItem.count({ where: { collectionId } })) >= ITEMS_MAX) return true
+        await tx.collectionItem.create({ data: { collectionId, projectId } })
         // Touched so "recently updated" means a project was added.
-        await db.collection.update({
-          where: { id: found.collection.id },
-          data: { updatedAt: new Date() },
-        })
-      }
+        await tx.collection.update({ where: { id: collectionId }, data: { updatedAt: new Date() } })
+        return false
+      })
+      if (full)
+        return reply.code(400).send({ error: `A collection holds at most ${ITEMS_MAX} projects` })
       return { ok: true, inCollection: true }
     }
   )

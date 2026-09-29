@@ -1,4 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Captured rather than sent: which addresses were emailed an invitation.
+const invited = vi.hoisted(() => [] as string[])
+vi.mock('../lib/authEmails.js', async (original) => ({
+  ...(await original<object>()),
+  sendProjectInviteEmail: async (to: string) => {
+    invited.push(to)
+  },
+}))
 
 import { db } from '../db/client.js'
 import { onEmailVerified } from '../lib/accounts.js'
@@ -6,6 +15,7 @@ import { cookieFor, createProject, createUser, getApp, resetDb } from '../test/h
 
 beforeEach(async () => {
   await resetDb()
+  invited.length = 0
 })
 
 type User = { id: string; email: string }
@@ -39,7 +49,7 @@ describe('inviting collaborators', () => {
       email: friend.email,
       title: 'Designer',
     })
-    expect(first.statusCode).toBe(201)
+    expect(first.statusCode).toBe(202)
     const again = await call('POST', `/projects/${project.id}/collaborators`, owner, {
       email: friend.email,
     })
@@ -47,9 +57,11 @@ describe('inviting collaborators', () => {
     expect(await db.notification.count({ where: { userId: friend.id } })).toBe(1)
 
     const people = (await call('GET', `/projects/${project.id}/people`, owner)).json()
-    expect(people.pending).toEqual([
-      expect.objectContaining({ userId: friend.id, title: 'Designer' }),
+    // By the address typed, not the profile behind it, until they accept.
+    expect(people.invites).toEqual([
+      expect.objectContaining({ email: friend.email, title: 'Designer' }),
     ])
+    expect(JSON.stringify(people)).not.toContain(friend.id)
   })
 
   it('lists invitations for the invitee until they answer', async () => {
@@ -71,7 +83,7 @@ describe('inviting collaborators', () => {
     expect(
       (await call('POST', `/projects/${project.id}/collaborators`, owner, { email: friend.email }))
         .statusCode
-    ).toBe(201)
+    ).toBe(202)
   })
 
   it('lets the owner remove someone and a collaborator leave', async () => {
@@ -92,13 +104,61 @@ describe('inviting collaborators', () => {
     expect(await db.projectCollaborator.count()).toBe(0)
   })
 
-  it('refuses an address with no account, and emails nobody', async () => {
-    const { owner, project } = await seed()
-    const res = await call('POST', `/projects/${project.id}/collaborators`, owner, {
+  it('answers exactly the same whether or not the address has an account', async () => {
+    const { owner, friend, project } = await seed()
+    const known = await call('POST', `/projects/${project.id}/collaborators`, owner, {
+      email: friend.email,
+      title: 'Writer',
+    })
+    const unknown = await call('POST', `/projects/${project.id}/collaborators`, owner, {
       email: 'new.person@mail.utoronto.ca',
       title: 'Writer',
     })
-    expect(res.statusCode).toBe(404)
+    expect(unknown.statusCode).toBe(known.statusCode)
+    expect(Object.keys(unknown.json()).sort()).toEqual(Object.keys(known.json()).sort())
+    expect(known.json()).not.toHaveProperty('user')
+    // The unknown address waits for an account, and is told so — once.
+    expect(await db.projectEmailInvite.count()).toBe(1)
+    expect(invited).toEqual(['new.person@mail.utoronto.ca'])
+    const again = await call('POST', `/projects/${project.id}/collaborators`, owner, {
+      email: 'new.person@mail.utoronto.ca',
+    })
+    expect(again.statusCode).toBe(409)
+    expect(invited).toHaveLength(1)
+
+    const people = (await call('GET', `/projects/${project.id}/people`, owner)).json()
+    expect(people.invites.map((i: { email: string }) => i.email).sort()).toEqual(
+      [friend.email, 'new.person@mail.utoronto.ca'].sort()
+    )
+  })
+
+  it('treats an unconfirmed account like no account at all', async () => {
+    const { owner, project } = await seed()
+    const squatter = await createUser({ email: 'someone@mail.utoronto.ca', verified: false })
+    const res = await call('POST', `/projects/${project.id}/collaborators`, owner, {
+      email: squatter.email,
+    })
+    expect(res.statusCode).toBe(202)
+    expect(await db.projectCollaborator.count()).toBe(0)
+    expect(await db.notification.count({ where: { userId: squatter.id } })).toBe(0)
+    expect(await db.projectEmailInvite.count()).toBe(1)
+  })
+
+  it('withdraws an unanswered invitation by address, account or not', async () => {
+    const { owner, friend, project } = await seed()
+    for (const email of [friend.email, 'new.person@mail.utoronto.ca'])
+      await call('POST', `/projects/${project.id}/collaborators`, owner, { email })
+    for (const email of [friend.email, 'new.person@mail.utoronto.ca'])
+      expect(
+        (
+          await call(
+            'DELETE',
+            `/projects/${project.id}/email-invites/${encodeURIComponent(email)}`,
+            owner
+          )
+        ).statusCode
+      ).toBe(200)
+    expect(await db.projectCollaborator.count()).toBe(0)
     expect(await db.projectEmailInvite.count()).toBe(0)
   })
 
@@ -125,10 +185,11 @@ describe('inviting collaborators', () => {
 
   it('refuses an address outside U of T', async () => {
     const { owner, project } = await seed()
-    const res = await call('POST', `/projects/${project.id}/collaborators`, owner, {
-      email: 'x@gmail.com',
-    })
-    expect(res.statusCode).toBe(404)
+    for (const email of ['x@gmail.com', 'x@gmail.com,y@mail.utoronto.ca']) {
+      const res = await call('POST', `/projects/${project.id}/collaborators`, owner, { email })
+      expect(res.statusCode).toBe(400)
+    }
+    expect(await db.projectEmailInvite.count()).toBe(0)
   })
 })
 
@@ -159,13 +220,28 @@ describe('what a collaborator may do', () => {
   })
 })
 
+// Asking for access is paused (docs/future.md); requests and grants made
+// before then are still decided and honoured.
 describe('TA access', () => {
+  const asked = (projectId: string, userId: string) =>
+    db.projectCollaborator.create({
+      data: { projectId, userId, role: 'VIEWER', accepted: false },
+    })
+
+  it('can no longer be asked for', async () => {
+    const owner = await createUser()
+    const ta = await createUser({ email: 'ta@utoronto.ca' })
+    const project = await createProject(owner.id, { visibility: 'PRIVATE' })
+    expect((await call('POST', `/projects/${project.id}/request-access`, ta)).statusCode).toBe(404)
+    expect(await db.projectCollaborator.count()).toBe(0)
+  })
+
   it('is not a credit once granted', async () => {
     const owner = await createUser()
     const ta = await createUser({ email: 'ta@utoronto.ca' })
     const project = await createProject(owner.id, { visibility: 'PRIVATE' })
 
-    expect((await call('POST', `/projects/${project.id}/request-access`, ta)).statusCode).toBe(202)
+    await asked(project.id, ta.id)
     const people = (await call('GET', `/projects/${project.id}/people`, owner)).json()
     expect(people.accessRequests).toEqual([expect.objectContaining({ userId: ta.id })])
 
@@ -178,18 +254,11 @@ describe('TA access', () => {
     )
   })
 
-  it('is refused for a project the TA can already see', async () => {
-    const owner = await createUser()
-    const ta = await createUser({ email: 'ta@utoronto.ca' })
-    const project = await createProject(owner.id, { visibility: 'UOFT' })
-    expect((await call('POST', `/projects/${project.id}/request-access`, ta)).statusCode).toBe(409)
-  })
-
   it('cannot be granted by the requester to themself', async () => {
     const owner = await createUser()
     const ta = await createUser({ email: 'ta@utoronto.ca' })
     const project = await createProject(owner.id, { visibility: 'PRIVATE' })
-    await call('POST', `/projects/${project.id}/request-access`, ta)
+    await asked(project.id, ta.id)
     const res = await call('PATCH', `/projects/${project.id}/collaborators/${ta.id}`, ta, {
       accepted: true,
     })

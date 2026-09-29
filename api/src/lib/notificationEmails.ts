@@ -17,16 +17,23 @@ const webUrl = () => process.env.WEB_URL ?? 'http://localhost:5173'
 type Payload = Record<string, unknown>
 const str = (v: unknown) => escapeHtml(String(v ?? ''))
 
+/*
+ * Subjects never carry text another student chose — a name, a project title.
+ * A subject line is the part a mail client shows as ours, sent from our
+ * domain, and a display name like "IT Services: verify your UTORid at …"
+ * would make it a phishing line with our reputation behind it. The body can
+ * name them: there it reads as content, set in bold, next to our own words.
+ */
 const EMAILS: Partial<
   Record<NotificationType, (p: Payload) => { subject: string; line: string; path: string }>
 > = {
   COLLABORATOR_INVITED: (p) => ({
-    subject: `${p.inviterName} invited you to collaborate on uofthub`,
+    subject: 'You were invited to collaborate on a uofthub project',
     line: `<b>${str(p.inviterName)}</b> invited you to be credited on <b>${str(p.projectTitle)}</b>. Accept or decline from the bell on uofthub.`,
     path: '/feed',
   }),
   ACCESS_REQUESTED: (p) => ({
-    subject: `${p.requesterName} asked to see "${p.projectTitle}"`,
+    subject: 'Someone asked to see your project on uofthub',
     line: `<b>${str(p.requesterName)}</b> asked for viewer access to <b>${str(p.projectTitle)}</b>.`,
     path: `/projects/${p.projectId}?people=1`,
   }),
@@ -36,7 +43,7 @@ const EMAILS: Partial<
     path: `/projects/${p.projectId}`,
   }),
   PROJECT_MODERATED: (p) => ({
-    subject: `A moderator reviewed "${p.projectTitle}"`,
+    subject: 'A moderator reviewed your project',
     line: `${
       p.action === 'TAKEN_DOWN'
         ? `<b>${str(p.projectTitle)}</b> was taken down after a report. It is private to you now; nothing was deleted.`
@@ -65,12 +72,12 @@ const EMAILS: Partial<
     path: '/messages',
   }),
   ORG_INVITED: (p) => ({
-    subject: `${p.inviterName} invited you to join ${p.orgName}`,
+    subject: 'You were invited to join a group on uofthub',
     line: `<b>${str(p.inviterName)}</b> invited you to join <b>${str(p.orgName)}</b> on uofthub.`,
     path: `/orgs/${p.slug}`,
   }),
   ORG_JOIN_REQUESTED: (p) => ({
-    subject: `${p.actorName} asked to join ${p.orgName}`,
+    subject: 'Someone asked to join your group on uofthub',
     line: `<b>${str(p.actorName)}</b> asked to join <b>${str(p.orgName)}</b>. Approve or deny from the group’s page.`,
     path: `/orgs/${p.slug}`,
   }),
@@ -125,7 +132,7 @@ export function emailNewMessage(recipientId: string, senderName: string): void {
     if (!recipient?.emailNotifications) return
     await sendEmail({
       to: recipient.email,
-      subject: `${senderName} sent you a message on uofthub`,
+      subject: 'You have a new message on uofthub',
       html: layout(
         `<p><b>${escapeHtml(senderName)}</b> sent you a message.</p>${button(`${webUrl()}/messages`)}${footer(recipientId)}`
       ),

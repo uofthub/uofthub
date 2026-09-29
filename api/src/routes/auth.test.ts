@@ -57,6 +57,21 @@ const tokenCookie = (res: Awaited<ReturnType<typeof post>>) =>
   res.cookies.find((c) => c.name === 'token')
 
 describe('POST /auth/register', () => {
+  it('refuses anything that is not exactly one U of T address', async () => {
+    for (const email of [
+      'me@gmail.com,x@mail.utoronto.ca',
+      '"me@gmail.com"@mail.utoronto.ca',
+      'a b@mail.utoronto.ca',
+      'me@gmail.com <x@mail.utoronto.ca>',
+      'x@toronto.com',
+    ]) {
+      const res = await register({ name: 'Mallory', email, password: GOOD_PASSWORD })
+      expect(res.statusCode, email).toBe(403)
+    }
+    expect(await db.user.count()).toBe(0)
+    expect(sent.verify).toHaveLength(0)
+  })
+
   it('creates an unconfirmed account and emails a link, without signing in', async () => {
     const res = await register({
       name: 'Ada',
@@ -339,13 +354,36 @@ describe('POST /auth/login', () => {
     expect(unknown.json()).toEqual(wrong.json())
   })
 
-  it('tells a Microsoft-only account to use the other button rather than 401ing', async () => {
+  it('answers a Microsoft-only account exactly as it answers a wrong password', async () => {
     await createUser({ email: 'oauth@mail.utoronto.ca' })
-    const res = await login({ email: 'oauth@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const oauth = await login({ email: 'oauth@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const unknown = await login({ email: 'nobody@mail.utoronto.ca', password: GOOD_PASSWORD })
 
-    // A deliberate disclosure: without it an OAuth user has no way to learn why
-    // their password never works. See the comment on the route.
-    expect(res.statusCode).toBe(409)
+    // A different answer would tell anyone which addresses are registered and
+    // how; the shared message points at the UTORid button for everybody.
+    expect(oauth.statusCode).toBe(401)
+    expect(oauth.json()).toEqual(unknown.json())
+    expect(oauth.json().error).toMatch(/UTORid/)
+  })
+
+  it('takes as long to refuse an unknown address as a wrong password', async () => {
+    const time = async (email: string) => {
+      const start = performance.now()
+      await login({ email, password: 'wrong horse battery' })
+      return performance.now() - start
+    }
+    // Warm-up, then alternate so a slow moment on the machine lands on both.
+    await time('nobody@mail.utoronto.ca')
+    const known: number[] = []
+    const unknown: number[] = []
+    for (let i = 0; i < 4; i++) {
+      known.push(await time('ada@mail.utoronto.ca'))
+      unknown.push(await time(`nobody${i}@mail.utoronto.ca`))
+    }
+    const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)]!
+    // Without the dummy hash an unknown address skipped scrypt entirely and
+    // answered in a fraction of the time.
+    expect(median(unknown)).toBeGreaterThan(median(known) * 0.5)
   })
 
   it('requires both fields', async () => {
@@ -369,26 +407,6 @@ describe('GET /auth/me', () => {
     expect(res.json()).toMatchObject({ id: user.id, email: user.email, isAdmin: false })
     expect(res.json()).not.toHaveProperty('passwordHash')
   })
-
-  it('reports a staff address as FACULTY and a student address as STUDENT', async () => {
-    const app = await getApp()
-    const student = await createUser({ email: 'stu@mail.utoronto.ca' })
-    const staff = await createUser({ email: 'prof@utoronto.ca' })
-
-    const asStudent = await app.inject({
-      method: 'GET',
-      url: '/auth/me',
-      cookies: await cookieFor(student),
-    })
-    const asStaff = await app.inject({
-      method: 'GET',
-      url: '/auth/me',
-      cookies: await cookieFor(staff),
-    })
-
-    expect(asStudent.json().role).toBe('STUDENT')
-    expect(asStaff.json().role).toBe('FACULTY')
-  })
 })
 
 describe('POST /auth/logout', () => {
@@ -402,6 +420,22 @@ describe('POST /auth/logout', () => {
     expect(out.statusCode).toBe(200)
     const cleared = out.cookies.find((c) => c.name === 'token')
     expect(cleared?.value).toBe('')
+  })
+
+  it('ends a copy of the token too, but no other session', async () => {
+    const app = await getApp()
+    await signUp('ada@mail.utoronto.ca')
+    const here = tokenCookie(
+      await login({ email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    )!
+    const there = tokenCookie(
+      await login({ email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    )!
+    await app.inject({ method: 'POST', url: '/auth/logout', cookies: { token: here.value } })
+
+    const me = (token: string) => app.inject({ method: 'GET', url: '/auth/me', cookies: { token } })
+    expect((await me(here.value)).statusCode).toBe(401)
+    expect((await me(there.value)).statusCode).toBe(200)
   })
 })
 

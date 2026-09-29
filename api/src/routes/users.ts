@@ -17,6 +17,7 @@ import { notifyOnce } from '../lib/notifications.js'
 import { publish } from '../lib/live.js'
 import { blockedBetween } from '../lib/blocks.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
+import { bySession } from '../lib/rateLimit.js'
 import { PIN_LIMIT } from '../lib/pins.js'
 import { listablePeopleWhere, PERSON_RESULT_SELECT, toPersonResult } from '../lib/people.js'
 import {
@@ -35,8 +36,9 @@ import {
   handleProblem,
   normalizeHandle,
 } from '../lib/handles.js'
-import { roleFor } from '../lib/session.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
+import { pageSkip, pageTake } from '../lib/paging.js'
+import { createUnlessExists } from '../lib/locks.js'
 
 const ME_SELECT = {
   id: true,
@@ -87,7 +89,9 @@ function optionalText(raw: unknown, max: number): string | null | undefined | fa
 
 // Avatars are small and infrequent — a lighter budget than project uploads,
 // same pattern as auth.ts's credentialRateLimit.
-const avatarRateLimit = { rateLimit: { max: 10, timeWindow: '10 minutes' } }
+const avatarRateLimit = {
+  rateLimit: { max: 10, timeWindow: '10 minutes', keyGenerator: bySession },
+}
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/handle-check?handle= — whether the caller could take a handle,
@@ -138,7 +142,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         .toLowerCase()
       const terms = q.split(/\s+/).filter(Boolean).slice(0, 5)
       if (!terms.length) return []
-      const take = Math.min(Math.max(Number(request.query.take) || 6, 1), 20)
+      const take = pageTake(request.query.take, 6, 20)
       const me = request.user.sub
 
       const rows = await db.user.findMany({
@@ -197,8 +201,6 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       select: {
         id: true,
         handle: true,
-        // Only to tell faculty and staff from students; never sent.
-        email: true,
         name: true,
         faculty: true,
         campus: true,
@@ -239,28 +241,32 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
             .then(Boolean)
         : false,
     ])
-    const { email, ...profile } = user
     return {
-      ...profile,
-      // From the address's domain, which nobody can set: what tells a real
-      // professor from a student who named themselves after one.
-      isFaculty: roleFor(email) === 'FACULTY',
+      ...user,
       _count: { ...user._count, ownedProjects, collaborations },
       blockedByMe,
     }
   })
 
   // GET /users/:id/followers?skip and /following?skip — who, a page at a time
+  //
+  // Signed in only, for the reason people search is (see /search above):
+  // walking the follower lists of a few popular accounts would otherwise
+  // rebuild, signed out, much of the directory that search keeps behind
+  // sign-in. The counts stay on the public profile. Lists only people the
+  // viewer could find by searching.
   for (const direction of ['followers', 'following'] as const) {
     app.get<{ Params: { id: string }; Querystring: { skip?: string } }>(
       `/:id/${direction}`,
+      { preHandler: [app.authenticate] },
       async (request) => {
-        const skip = Math.max(Number(request.query.skip) || 0, 0)
+        const skip = pageSkip(request.query.skip)
+        const listable = listablePeopleWhere(request.user.sub)
         const rows = await db.follow.findMany({
           where:
             direction === 'followers'
-              ? { followingId: request.params.id }
-              : { followerId: request.params.id },
+              ? { followingId: request.params.id, follower: listable }
+              : { followerId: request.params.id, following: listable },
           select: {
             createdAt: true,
             [direction === 'followers' ? 'follower' : 'following']: {
@@ -307,8 +313,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         },
         include: CARD_INCLUDE,
         orderBy: { createdAt: 'desc' },
-        take: Math.min(Math.max(Number(take) || 24, 1), 50),
-        skip: Math.max(Number(skip) || 0, 0),
+        take: pageTake(take, 24, 50),
+        skip: pageSkip(skip),
       })
       return decorate(projects, callerId)
     }
@@ -358,8 +364,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         },
         include: CARD_INCLUDE,
         orderBy: { createdAt: 'desc' },
-        take: Math.min(Math.max(Number(take) || 24, 1), 50),
-        skip: Math.max(Number(skip) || 0, 0),
+        take: pageTake(take, 24, 50),
+        skip: pageSkip(skip),
       })
       return decorate(projects, callerId)
     }
@@ -424,8 +430,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         where: { userId, project: { is: visibleProjectWhere(userId) } },
         include: { project: { include: CARD_INCLUDE } },
         orderBy: { createdAt: 'desc' },
-        take: Math.min(Math.max(Number(take) || 24, 1), 50),
-        skip: Math.max(Number(skip) || 0, 0),
+        take: pageTake(take, 24, 50),
+        skip: pageSkip(skip),
       })
       return decorate(
         saves.map((s) => s.project),
@@ -630,7 +636,10 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/me/export — everything the student put here, as a JSON download
   app.get(
     '/me/export',
-    { preHandler: [app.authenticate], config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    {
+      preHandler: [app.authenticate],
+      config: { rateLimit: { max: 5, timeWindow: '1 hour', keyGenerator: bySession } },
+    },
     async (request, reply) => {
       const userId = request.user.sub
       const [account, projects, comments, collections, messages, reactions, saves, follows] =
@@ -790,13 +799,17 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       })
 
       if (existing) {
-        await db.follow.delete({ where: { followerId_followingId: { followerId, followingId } } })
+        await db.follow.deleteMany({ where: { followerId, followingId } })
         return { following: false }
       }
       if (await blockedBetween(followerId, followingId))
         return reply.code(403).send({ error: 'You can’t follow this person' })
 
-      await db.follow.create({ data: { followerId, followingId } })
+      // A second click that lost the race: already following, already announced.
+      if (
+        !(await createUnlessExists(() => db.follow.create({ data: { followerId, followingId } })))
+      )
+        return { following: true }
 
       // Keyed on the follower, so unfollow-refollow is not a way to ping
       // somebody repeatedly — you announce yourself to a person once.

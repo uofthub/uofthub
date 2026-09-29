@@ -159,8 +159,22 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
     return { count }
   })
 
+  // POST /messages/:userId/read — the other person's messages have been seen.
+  //
+  // Its own POST, called by the web app once a conversation is on screen,
+  // rather than a side effect of reading it: a GET is what any other site can
+  // make a browser send with its cookies (a link, an image), and a GET that
+  // changes something is one they could change for the student.
+  app.post<{ Params: { userId: string } }>('/:userId/read', auth, async (request) => {
+    await db.message.updateMany({
+      where: { senderId: request.params.userId, recipientId: request.user.sub, readAt: null },
+      data: { readAt: new Date() },
+    })
+    return { ok: true }
+  })
+
   // GET /messages/:userId?before — one conversation, oldest first, a page at a
-  // time going back. Reading it marks the other person's messages read.
+  // time going back. Changes nothing: see POST /:userId/read.
   app.get<{ Params: { userId: string }; Querystring: { before?: string } }>(
     '/:userId',
     auth,
@@ -189,13 +203,6 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true, senderId: true, body: true, createdAt: true, readAt: true },
       })
 
-      if (!before) {
-        await db.message.updateMany({
-          where: { senderId: other.id, recipientId: me, readAt: null },
-          data: { readAt: new Date() },
-        })
-      }
-
       const { allowMessages, ...user } = other
       const [closed, reported] = await Promise.all([
         whyClosed(me, { id: other.id, allowMessages }),
@@ -223,7 +230,7 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
     { ...auth, config: sendRateLimit },
     async (request, reply) => {
       const me = request.user.sub
-      const body = (request.body?.body ?? '').trim()
+      const body = typeof request.body?.body === 'string' ? request.body.body.trim() : ''
       if (!body) return reply.code(400).send({ error: 'Write something first' })
       if (body.length > MESSAGE_MAX)
         return reply.code(400).send({ error: `A message is at most ${MESSAGE_MAX} characters` })

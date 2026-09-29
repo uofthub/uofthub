@@ -22,6 +22,13 @@
       "@prisma/engines",
       "esbuild",
       "prisma"
-    ]
+    ],
+    "overrides": {
+      "fast-uri@<3.1.7": "^3.1.7",
+      "fast-uri@>=4 <4.1.4": "^4.1.4",
+      "fflate@<0.7.5": "^0.7.5",
+      "undici@>=8 <8.10.2": "^8.10.2",
+      "ip-address@<10.5.1": "^10.5.1"
+    }
   }
 }

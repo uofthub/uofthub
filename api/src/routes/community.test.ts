@@ -205,7 +205,7 @@ describe('collections', () => {
 })
 
 describe('messages', () => {
-  it('sends, lists the conversation with an unread count, and marks it read on opening', async () => {
+  it('sends, lists the conversation with an unread count, and marks it read once seen', async () => {
     const a = await createUser({ name: 'Aisha' })
     const b = await createUser({ name: 'Ben' })
 
@@ -223,6 +223,9 @@ describe('messages', () => {
       'Hi Ben',
       'About your project',
     ])
+    // Reading is not marking: a GET must change nothing (see the route).
+    expect((await call('GET', '/messages/unread', b)).json()).toEqual({ count: 2 })
+    expect((await call('POST', `/messages/${a.id}/read`, b)).statusCode).toBe(200)
     expect((await call('GET', '/messages/unread', b)).json()).toEqual({ count: 0 })
   })
 
@@ -412,10 +415,18 @@ describe('import from a link', () => {
       'fd00::1',
       'fe80::1',
       '::ffff:127.0.0.1',
+      '::ffff:7f00:1',
       '0.0.0.0',
+      // IPv4 hidden in IPv6: compatible, NAT64 (both ranges), 6to4, Teredo.
+      '::7f00:1',
+      '64:ff9b::a00:1',
+      '64:ff9b:1::a00:1',
+      '2002:7f00:1::',
+      '2001::1',
     ])
       expect(isPublicAddress(a), a).toBe(false)
     expect(() => checkUrl('https://example.com/a')).not.toThrow()
+    expect(() => checkUrl('http://[::127.0.0.1]/')).toThrow()
   })
 
   it('reads a page’s own title, description and image', () => {

@@ -191,14 +191,12 @@ describe('project addresses', () => {
   })
 })
 
-describe('telling faculty from students', () => {
-  it('comes from the address, never the profile', async () => {
+describe('impersonation', () => {
+  it('a profile never carries the address behind it', async () => {
     const prof = await createUser({ email: 'jane.smith@utoronto.ca' })
-    const student = await createUser({ name: 'Prof. Jane Smith' })
-    const profile = async (u: User) => (await call('GET', `/users/${u.id}`)).json()
-    expect((await profile(prof)).isFaculty).toBe(true)
-    expect((await profile(student)).isFaculty).toBe(false)
-    expect(await profile(prof)).not.toHaveProperty('email')
+    const profile = (await call('GET', `/users/${prof.id}`)).json()
+    expect(profile).not.toHaveProperty('email')
+    expect(JSON.stringify(profile)).not.toContain('jane.smith@')
   })
 
   it('takes impersonation reports', async () => {

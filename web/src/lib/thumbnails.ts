@@ -125,9 +125,10 @@ async function pdfThumbnail(file: File): Promise<Blob | null> {
     import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
   ])
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-  // pdf.js 5 has no eval path left to turn off: the font compiler behind
+  // pdf.js 5 and later have no eval path left to turn off: the font compiler behind
   // CVE-2024-4367 was removed along with the `isEvalSupported` option.
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
+  const doc = await task.promise
   try {
     const page = await doc.getPage(1)
     const base = page.getViewport({ scale: 1 })
@@ -138,7 +139,8 @@ async function pdfThumbnail(file: File): Promise<Blob | null> {
     await page.render({ canvas, viewport, background: '#ffffff' }).promise
     return encodeCanvas(canvas)
   } finally {
-    await doc.destroy()
+    // The loading task owns the worker since pdf.js 6; destroying it frees both.
+    await task.destroy()
   }
 }
 

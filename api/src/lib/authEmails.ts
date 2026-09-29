@@ -68,3 +68,40 @@ ${button(link, 'Sign in')}`,
     link
   )
 }
+
+/*
+ * Invitations to an address with no confirmed account yet. The subject is
+ * ours alone — never the inviter's name or the project's title, which another
+ * student chose (see lib/notificationEmails.ts) — and the body says plainly
+ * that the invitation waits for them to sign up with this address.
+ */
+
+export async function sendProjectInviteEmail(
+  to: string,
+  inviterName: string,
+  projectTitle: string
+) {
+  const link = `${webUrl()}/session`
+  await deliver(
+    to,
+    'You were invited to collaborate on uofthub',
+    `<p><b>${escapeHtml(inviterName)}</b> invited you to be credited as a collaborator on <b>${escapeHtml(projectTitle)}</b> on uofthub, where U of T students share what they build.</p>
+<p>Sign up with this address and the invitation will be waiting for you to accept.</p>
+${button(link, 'Sign up')}
+<p style="color:#767676;font-size:13px">Not expecting this? Ignore it — nothing happens unless you sign up.</p>`,
+    link
+  )
+}
+
+export async function sendOrgInviteEmail(to: string, inviterName: string, orgName: string) {
+  const link = `${webUrl()}/session`
+  await deliver(
+    to,
+    'You were invited to join a group on uofthub',
+    `<p><b>${escapeHtml(inviterName)}</b> invited you to join <b>${escapeHtml(orgName)}</b> on uofthub, where U of T students share what they build.</p>
+<p>Sign up with this address and the invitation will be waiting for you to accept.</p>
+${button(link, 'Sign up')}
+<p style="color:#767676;font-size:13px">Not expecting this? Ignore it — nothing happens unless you sign up.</p>`,
+    link
+  )
+}

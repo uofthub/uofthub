@@ -15,6 +15,9 @@ vi.mock('../lib/storage.js', async (original) => ({
   deleteObject: async (key: string) => {
     stored.delete(key)
   },
+  deleteObjects: async (keys: (string | null | undefined)[]) => {
+    for (const key of keys) if (key) stored.delete(key)
+  },
 }))
 
 import { db } from '../db/client.js'
@@ -119,6 +122,55 @@ describe('POST /projects/:id/files', () => {
       cookies: await cookieFor(user),
     })
   }
+
+  it('refuses the macro-capable legacy Office formats', async () => {
+    const owner = await createUser()
+    const project = await createProject(owner.id)
+    const ole2 = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...Array(64).fill(0)])
+    for (const name of ['report.doc', 'sheet.xls', 'deck.ppt']) {
+      const res = await upload(project.id, owner, name, ole2, 'application/msword')
+      expect(res.statusCode, name).toBe(400)
+    }
+    expect(stored.size).toBe(0)
+  })
+
+  it('stops an owner at the storage ceiling, and stores nothing past it', async () => {
+    const owner = await createUser()
+    const project = await createProject(owner.id)
+    const other = await createProject(owner.id)
+    // Counted across every project the owner has.
+    await db.projectFile.create({
+      data: { projectId: other.id, name: 'big.mp4', storageKey: 'k', sizeBytes: 1000 },
+    })
+    process.env.STORAGE_QUOTA_BYTES = String(1000 + PNG.length - 1)
+    try {
+      const res = await upload(project.id, owner, 'photo.png', PNG)
+      expect(res.statusCode).toBe(413)
+      expect(stored.size).toBe(0)
+    } finally {
+      delete process.env.STORAGE_QUOTA_BYTES
+    }
+  })
+
+  it('never lets uploads that start together pass the file limit', async () => {
+    const owner = await createUser()
+    const project = await createProject(owner.id)
+    await db.projectFile.createMany({
+      data: Array.from({ length: 19 }, (_, i) => ({
+        projectId: project.id,
+        name: `f${i}.txt`,
+        storageKey: `k${i}`,
+        sizeBytes: 1,
+      })),
+    })
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => upload(project.id, owner, `p${i}.png`, PNG))
+    )
+    expect(results.filter((r) => r.statusCode === 201)).toHaveLength(1)
+    expect(await db.projectFile.count({ where: { projectId: project.id } })).toBe(20)
+    // The refused ones' bytes do not linger in storage.
+    expect(stored.size).toBe(1)
+  })
 
   it('stores a real image as what it is, whatever the browser claimed', async () => {
     const owner = await createUser()

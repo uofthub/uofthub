@@ -274,6 +274,7 @@ model User {
   messageReportsReviewed MessageReport[]       @relation("MessageReviewer")
   authTokens             AuthToken[]
   emailInvitesSent       ProjectEmailInvite[]  @relation("EmailInvitesSent")
+  orgEmailInvitesSent    OrgEmailInvite[]      @relation("OrgEmailInvitesSent")
   versionsAuthored       ProjectVersion[]
   pushSubscriptions      PushSubscription[]
   handleHistory          HandleHistory[]
@@ -578,10 +579,10 @@ model ProjectCollaborator {
   @@index([userId])
 }
 
-/// An invitation to collaborate sent to an address with no account yet. It
-/// becomes an ordinary pending collaborator invitation the moment an account
-/// with that address is confirmed (lib/accounts.ts). No longer created —
-/// invitations now need an account — so this only drains the ones sent before.
+/// An invitation to collaborate made to an address with no confirmed account
+/// yet. It becomes an ordinary pending collaborator invitation the moment an
+/// account with that address is confirmed (lib/accounts.ts). The address is
+/// emailed once, when the invitation is made, asking them to sign up.
 model ProjectEmailInvite {
   projectId   String
   /// Lower-cased, and always a U of T address.
@@ -792,9 +793,10 @@ model Organization {
   contactRole  String?
   createdAt    DateTime @default(now())
 
-  members    OrgMember[]
-  projects   OrgProject[]
-  activities OrgActivity[]
+  members      OrgMember[]
+  emailInvites OrgEmailInvite[]
+  projects     OrgProject[]
+  activities   OrgActivity[]
 }
 
 /// A meeting, event, workshop or recap — lighter than a Project, and only
@@ -807,7 +809,12 @@ model OrgActivity {
   description String?
   date        DateTime
   link        String?
+  /// Legacy: an image hotlinked from anywhere, which let whoever posted the
+  /// event log the address of everyone who viewed the page. No longer written
+  /// or shown; images are uploaded now (imageKey).
   imageUrl    String?
+  /// The uploaded poster or photo, in storage; served by signed URL.
+  imageKey    String?
   createdAt   DateTime @default(now())
 
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -829,6 +836,37 @@ model OrgMember {
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([orgId, userId])
+}
+
+/// The group's counterpart of ProjectEmailInvite: an invitation to an address
+/// with no confirmed account yet, which becomes an ordinary INVITED membership
+/// once one is confirmed (lib/accounts.ts). Emailed once, when made.
+model OrgEmailInvite {
+  orgId       String
+  /// Lower-cased, and always a U of T address.
+  email       String
+  /// MEMBER or ADMIN, as with OrgMember.
+  role        String   @default("MEMBER")
+  invitedById String
+  invitedAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy User         @relation("OrgEmailInvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@id([orgId, email])
+  @@index([email])
+}
+
+/// A session ended by signing out on the device that held it. Sessions are
+/// JWTs, so without this a token copied before sign-out — off a shared lab
+/// computer, say — would keep working until it expired. Keyed by the token's
+/// `jti`; the row is only needed until the token would have expired anyway,
+/// and the maintenance job prunes it after.
+model RevokedSession {
+  jti       String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model Notification {

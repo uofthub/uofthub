@@ -6,8 +6,8 @@ import { isUnconfirmedHandle, withSuggestedHandle } from './handles.js'
  * What happens once an account's email address is proven — by Microsoft
  * sign-in, the confirmation link, or a password reset link.
  *
- * Invitations sent to the address before it had an account become ordinary
- * pending invitations now, each announced the way it would have been had the
+ * Invitations to the address — to a project or a group — made before it had
+ * a confirmed account become ordinary pending invitations now, each announced the way it would have been had the
  * account existed. Only now, and not at sign-up: until the address is proven,
  * the account is not necessarily the person who was invited.
  *
@@ -51,6 +51,37 @@ export async function onEmailVerified(userId: string): Promise<void> {
     }
     await db.projectEmailInvite.delete({
       where: { projectId_email: { projectId: invite.projectId, email: invite.email } },
+    })
+  }
+
+  // The same for groups. An invitation lapses if whoever made it is no longer
+  // one of the group's admins.
+  const orgInvites = await db.orgEmailInvite.findMany({
+    where: { email: user.email },
+    include: {
+      org: { select: { id: true, slug: true, name: true } },
+      invitedBy: { select: { name: true } },
+    },
+  })
+  for (const invite of orgInvites) {
+    const [inviterStillAdmin, existing] = await Promise.all([
+      db.orgMember.findFirst({
+        where: { orgId: invite.orgId, userId: invite.invitedById, status: 'ACTIVE', role: 'ADMIN' },
+      }),
+      db.orgMember.findUnique({ where: { orgId_userId: { orgId: invite.orgId, userId } } }),
+    ])
+    if (inviterStillAdmin && !existing) {
+      await db.orgMember.create({
+        data: { orgId: invite.orgId, userId, role: invite.role, status: 'INVITED' },
+      })
+      await notify(userId, 'ORG_INVITED', {
+        slug: invite.org.slug,
+        orgName: invite.org.name,
+        inviterName: invite.invitedBy.name,
+      })
+    }
+    await db.orgEmailInvite.delete({
+      where: { orgId_email: { orgId: invite.orgId, email: invite.email } },
     })
   }
 }

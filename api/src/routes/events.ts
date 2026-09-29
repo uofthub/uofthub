@@ -20,11 +20,22 @@ export const HEARTBEAT_MS = 25_000
  */
 export const MAX_STREAM_MS = 30 * 60 * 1000
 
+/**
+ * Open streams one account may hold: a tab each on a few devices. Each one is
+ * a socket held for up to half an hour, so without a cap one client could
+ * hold thousands. Past it the account's oldest stream is ended rather than
+ * the new one refused — the tab just opened is the one being looked at, and
+ * an old one reconnects if it is still open.
+ */
+export const MAX_STREAMS_PER_USER = 8
+
 export const eventRoutes: FastifyPluginAsync = async (app) => {
   // Streams are hijacked, so the server would wait on them forever when it
   // closes. Ending them lets a shutdown finish; the browser reconnects to
   // whichever instance takes over.
   const open = new Set<() => void>()
+  /** Each account's open streams, oldest first. */
+  const byUser = new Map<string, (() => void)[]>()
   app.addHook('onClose', async () => {
     for (const end of open) end()
   })
@@ -62,10 +73,14 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS)
     const lifetime = setTimeout(() => res.end(), MAX_STREAM_MS)
 
+    const userId = request.user.sub
     const close = () => {
       if (closed) return
       closed = true
       open.delete(end)
+      const mine = byUser.get(userId)?.filter((e) => e !== end) ?? []
+      if (mine.length > 0) byUser.set(userId, mine)
+      else byUser.delete(userId)
       clearInterval(heartbeat)
       clearTimeout(lifetime)
       unsubscribe()
@@ -75,6 +90,10 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       res.end()
     }
     open.add(end)
+    const mine = [...(byUser.get(userId) ?? []), end]
+    byUser.set(userId, mine)
+    // Ending one removes it from the list, so read the oldest off a copy.
+    for (const oldest of mine.slice(0, Math.max(mine.length - MAX_STREAMS_PER_USER, 0))) oldest()
     res.on('close', close)
     request.raw.on('close', close)
   })

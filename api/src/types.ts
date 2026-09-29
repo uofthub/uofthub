@@ -18,9 +18,12 @@ declare module 'fastify' {
 export interface JwtPayload {
   sub: string
   email: string
-  role: 'STUDENT' | 'FACULTY'
   /** The account's sessionVersion when this token was issued — see lib/session.ts. */
   sv?: number
+  /** This session's own id, so signing out can end it alone — see lib/session.ts. */
+  jti?: string
+  /** Expiry, in seconds since the epoch; set by the signer. */
+  exp?: number
 }
 
 declare module '@fastify/jwt' {

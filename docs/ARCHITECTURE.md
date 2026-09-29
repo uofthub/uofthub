@@ -141,7 +141,7 @@ One direct message (sender, recipient, body, read_at). A conversation is just th
 | title      | string? | what they did, as the owner put it ("Designer")                                |
 | accepted   | bool    | false while an invitation or a TA's access request waits; a no deletes the row |
 
-An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited. Invitations go only to addresses that already have an account: emailing an address nobody signed up with is unasked-for mail, and a typo in one is a bounce, both of which count against the sender reputation every other email depends on. `ProjectEmailInvite` holds invitations sent before that rule, which still become a pending row once their address is proven (`lib/accounts.ts`).
+An accepted `collaborator` edits the project's content — text, files, links, outputs, updates — through the same routes as the owner (`canEditProject` in `lib/visibility.ts`). Who can see it and when, whether it exists, who is credited, pinning and group links stay the owner's. A `viewer` is a TA's read access and is never credited; asking for it is paused for now ([future.md](future.md#who-can-ask-to-see-a-hidden-project)), but grants made before still work. Inviting answers the same whether or not the address has an account, so it can't be used to test who is registered. An address with a confirmed account gets a pending row and a notification. Any other U of T address gets a `ProjectEmailInvite` and one email asking them to sign up, and the invitation becomes a pending row once their address is proven (`lib/accounts.ts`). Until someone accepts, the owner sees only the address they typed. Groups work the same way through `OrgEmailInvite`.
 
 ### ProjectFile
 
@@ -280,7 +280,7 @@ Default: `private`. Students must explicitly open visibility up.
 
 A **show-from date** hides a project from everyone but its owner and accepted collaborators until that moment, whatever its level — course work posted before grading appears after it. This rule, like every other, lives only in `lib/visibility.ts`; nothing else decides who may see a project.
 
-TA/professor access is granted per-project by the student owner (generates a view-only invite link), never platform-wide.
+TA/professor access is granted per-project by the student owner, never platform-wide. Asking for it is paused for now; see [future.md](future.md#who-can-ask-to-see-a-hidden-project).
 
 ---
 
@@ -372,15 +372,15 @@ Object storage: Cloudflare R2 (S3-compatible). The bucket is private — files a
 
 **Allowed file types** — allowlisted by category rather than a short fixed list, so students aren't forced to convert files before uploading:
 
-| Category | Extensions                                                                       |
-| -------- | -------------------------------------------------------------------------------- |
-| Docs     | `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, `.csv`, `.txt`, `.md` |
-| Images   | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`                                 |
-| Video    | `.mp4`, `.webm`                                                                  |
-| Audio    | `.mp3`, `.wav`                                                                   |
-| Archives | `.zip`                                                                           |
+| Category | Extensions                                               |
+| -------- | -------------------------------------------------------- |
+| Docs     | `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.csv`, `.txt`, `.md` |
+| Images   | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`         |
+| Video    | `.mp4`, `.webm`                                          |
+| Audio    | `.mp3`, `.wav`                                           |
+| Archives | `.zip`                                                   |
 
-Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a security boundary, not a friction one. Storage cost is controlled via per-file/per-project size limits, not by narrowing formats.
+Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a security boundary, not a friction one. So are the legacy Office formats (`.doc`, `.ppt`, `.xls`): their OLE2 container is the one that carries VBA macros, and the OOXML formats cover every modern use. Files uploaded before that still download. Storage cost is controlled via per-file/per-project size limits, not by narrowing formats.
 
 **Limits — individual accounts**
 
@@ -391,7 +391,9 @@ Executables and scripts (`.exe`, `.sh`, `.bat`, etc.) are always rejected — a 
 | Per-file (archives)    | 100MB                                                                                                                |
 | Per-project file count | 20 files (soft cap)                                                                                                  |
 
-There is no per-account or per-group storage quota. The 2GB personal quota and the 10GB per-term group allowance were removed with the redesign — they were enforcement for a scale the platform hasn't reached, and the per-file limits and file-count cap above already bound what any one project can hold. When storage costs make a quota worth having again, it should be designed then against real usage, not restored from the old numbers. See [redesign.md](redesign.md#student-groups-and-quotas).
+There is no per-account storage plan. The 2GB personal quota and the 10GB per-term group allowance were removed with the redesign — they were enforcement for a scale the platform hasn't reached. See [redesign.md](redesign.md#student-groups-and-quotas).
+
+What remains is an abuse ceiling: an owner's projects hold at most 5GB of files between them (`STORAGE_QUOTA_BYTES`). The per-file and per-project caps alone bound nothing, because projects are free to make — without the ceiling one account could keep uploading 250MB videos indefinitely. It is set far above anything a student has needed; it is not a plan limit, and when storage costs make a real quota worth having it should be designed then against real usage. The file-count cap and the ceiling are checked again, under a per-owner lock, before an upload is recorded, so parallel uploads cannot race past either.
 
 All checks (type and size) run server-side against the actual file, not the client-declared extension or MIME type.
 
@@ -438,7 +440,7 @@ Two, in process. The **maintenance sweep** (`lib/maintenance.ts`) runs hourly an
 
 The two that existed before — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Other housekeeping that would need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
-`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, so there it is `pnpm grant-admin:prod <email>` from `/repo/api` (Render: the service's Shell tab or `render ssh`). See [Moderation](#moderation).
+`pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, and no package manager, so there it is `node dist/scripts/grantAdmin.js <email>` from `/repo/api` (Render: the service's Shell tab or `render ssh`). See [Moderation](#moderation).
 
 On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update streams, closes the `LISTEN` connection and the query pool, and exits — or exits anyway after ten seconds.
 
@@ -507,7 +509,7 @@ On Cloudflare Pages, set `VITE_API_URL` (the build reads it, and so do the Funct
 - An account gets a handle from its name once its address is confirmed. Until then it holds `unconfirmed-<uuid>`, longer than any handle can be, so signing up with somebody else's address can't squat their name.
 - A student may change their handle once every 30 days (Settings). The old one redirects to them until somebody else takes it, as on GitHub; handles given out unasked keep clear of old ones, so only a deliberate choice ends a redirect. A deleted account's handles are free at once.
 - A project's slug is its title, slugged and unique among the owner's projects, and follows the title; old slugs redirect until another of their projects takes them.
-- A handle proves nothing about who someone is, and neither does the display name. The "U of T faculty & staff" badge does: it comes from the `@utoronto.ca` domain, which nobody can set. Profiles can be reported for impersonation, and a moderator can rename a handle (Admin → Accounts), which frees it for its rightful owner.
+- A handle proves nothing about who someone is, and neither does the display name. Every profile carries the same "U of T verified" badge, which only says the account proved a U of T address; there is no separate faculty badge for now ([future.md](future.md#who-can-ask-to-see-a-hidden-project)). Profiles can be reported for impersonation, and a moderator can rename a handle (Admin → Accounts), which frees it for its rightful owner.
 - `/u/:id` and `/projects/:id` still work: the app moves the address bar once the page loads (`useCanonicalPath`), and the Pages Functions answer them with a 301. `GET /paths/:handle[/:slug]` turns an address into ids, with the current handle and slug so an old one can redirect; a project the reader may not see is a 404 there, as everywhere.
 
 **Link previews and search** — the app is a single page, so without help every shared link and every crawler would see index.html's generic head and an empty `#root`. The Pages Functions in `web/functions` fix that at the edge; nothing is server-rendered beyond them.

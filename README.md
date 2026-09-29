@@ -31,7 +31,7 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 
 The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.
 
-See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond, and [not-decided-yet.md](docs/not-decided-yet.md) for ideas still being weighed.
+See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond, and [future.md](docs/future.md) for ideas still being weighed and features parked for later.
 
 ---
 
@@ -111,7 +111,7 @@ The API tests create their own `_test` database and refuse to run against any da
 | `web/src/App.tsx` | Every route in the web app |
 | `web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
 | `web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |
-| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md), [not decided yet](docs/not-decided-yet.md) |
+| `docs/` | [Roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [PRD](docs/prd.md), [redesign](docs/redesign.md), [structured projects](docs/structured-projects.md), [student groups](docs/student-groups.md), [future](docs/future.md) |
 
 ---
 

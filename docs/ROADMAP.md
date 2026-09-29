@@ -51,7 +51,7 @@ Goal: depth for the projects that already exist, and a home for the groups behin
 
 **Projects**
 - [x] Project versioning (v1 → v2 → v3) — snapshot current state; version history panel on project page
-- [ ] ~~Fork / remix~~ — removed before launch: a one-click copy owned by someone else, with weak attribution, made taking credit for another student's work (coursework above all) too easy. Remixing is [not decided yet](not-decided-yet.md#remixing)
+- [ ] ~~Fork / remix~~ — removed before launch: a one-click copy owned by someone else, with weak attribution, made taking credit for another student's work (coursework above all) too easy. Remixing is in [future](future.md#remixing)
 
 **Analytics**
 - [x] Project view counts and engagement metrics (visible to owner) — daily view chart + totals panel

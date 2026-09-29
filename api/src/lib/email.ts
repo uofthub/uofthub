@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Resend } from 'resend'
+import { derivedKey, jwtSecret } from './keys.js'
 
 /**
  * Resend transport (see ARCHITECTURE.md § Stack decisions). A missing API key
@@ -73,14 +74,17 @@ export function htmlToText(html: string): string {
  * it cannot be made up for somebody else, and needs no table. It turns off
  * notification email and nothing else, which is why it may never expire —
  * people unsubscribe from mail months old.
+ *
+ * Signed with a key of its own (lib/keys.ts). Tokens in mail sent before that
+ * were signed with the session secret itself, and are still honoured when
+ * read, since that mail is still sitting in inboxes.
  */
-function unsubscribeSignature(userId: string): string {
-  return createHmac('sha256', process.env.JWT_SECRET ?? 'dev-secret-change-in-prod')
-    .update(`unsubscribe:${userId}`)
-    .digest('base64url')
+function unsubscribeSignature(userId: string, key: Buffer | string): string {
+  return createHmac('sha256', key).update(`unsubscribe:${userId}`).digest('base64url')
 }
 
-export const unsubscribeToken = (userId: string) => `${userId}.${unsubscribeSignature(userId)}`
+export const unsubscribeToken = (userId: string) =>
+  `${userId}.${unsubscribeSignature(userId, derivedKey('unsubscribe-v1'))}`
 
 /** The user a token was made for, or null when it is not one of ours. */
 export function readUnsubscribeToken(token: string): string | null {
@@ -88,9 +92,19 @@ export function readUnsubscribeToken(token: string): string | null {
   if (dot <= 0) return null
   const userId = token.slice(0, dot)
   const given = Buffer.from(token.slice(dot + 1))
-  const expected = Buffer.from(unsubscribeSignature(userId))
-  return given.length === expected.length && timingSafeEqual(given, expected) ? userId : null
+  const matches = (key: Buffer | string) => {
+    const expected = Buffer.from(unsubscribeSignature(userId, key))
+    return given.length === expected.length && timingSafeEqual(given, expected)
+  }
+  return matches(derivedKey('unsubscribe-v1')) || matches(jwtSecret()) ? userId : null
 }
+
+/**
+ * Exactly one plain address, nothing a mail API could read as a list, a
+ * display name or a header. Every address we send to has been through
+ * lib/uoftEmail.ts already; this is the last check before one leaves.
+ */
+const SINGLE_ADDRESS = /^[^\s@,;<>"()\[\]\\]+@[^\s@,;<>"()\[\]\\]+$/
 
 export async function sendEmail(options: {
   to: string
@@ -106,13 +120,18 @@ export async function sendEmail(options: {
 }): Promise<void> {
   const resend = getClient()
   if (!resend) return
+  if (!SINGLE_ADDRESS.test(options.to)) {
+    console.error('Refusing to send email to a malformed address')
+    return
+  }
 
   const from = process.env.EMAIL_FROM ?? 'uofthub <notifications@notifications.uofthub.com>'
   const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
   try {
     const { error } = await resend.emails.send({
       from,
-      to: options.to,
+      // An array of one, so the address is never reparsed as a list.
+      to: [options.to],
       // Replies reach a person rather than an inbox nobody reads.
       replyTo: CONTACT_EMAIL,
       subject: options.subject,

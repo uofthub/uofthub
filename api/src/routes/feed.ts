@@ -7,6 +7,7 @@ import { CARD_INCLUDE, decorate, inOrder } from '../lib/projectShape.js'
 import { trendingIds, trendingScores } from '../lib/trending.js'
 import { parseCampus } from '../lib/campus.js'
 import { startOfUtcDay } from '../lib/dates.js'
+import { pageSkip, pageTake } from '../lib/paging.js'
 
 /**
  * The signed-in home page.
@@ -191,8 +192,8 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     Querystring: { skip?: string; take?: string; scope?: string; campus?: string; type?: string }
   }>('/', { preHandler: [app.authenticate] }, async (request) => {
     const userId = request.user.sub
-    const take = Math.min(Math.max(Number(request.query.take) || PAGE_SIZE, 1), MAX_PAGE_SIZE)
-    const skip = Math.max(Number(request.query.skip) || 0, 0)
+    const take = pageTake(request.query.take, PAGE_SIZE, MAX_PAGE_SIZE)
+    const skip = pageSkip(request.query.skip)
     const scope = SCOPES.includes(request.query.scope as Scope)
       ? (request.query.scope as Scope)
       : 'all'

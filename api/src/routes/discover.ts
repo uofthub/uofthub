@@ -29,7 +29,7 @@ export const discoverRoutes: FastifyPluginAsync = async (app) => {
 
       let filters: DiscoverFilters | null = null
       try {
-        filters = await parseQuery(q)
+        filters = await parseQuery(q, request.user.sub)
       } catch (err) {
         // A failed or unconfigured model call degrades to keyword search
         // rather than an error page: an imperfect result beats none.

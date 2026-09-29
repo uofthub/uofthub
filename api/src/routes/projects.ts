@@ -23,6 +23,7 @@ import { PNG_HEADERS } from '../lib/ogImage.js'
 import { safeExternalUrl } from '../lib/url.js'
 import {
   PROJECT_FILE_COUNT_CAP,
+  storageQuotaBytes,
   TEXT_PREVIEW_MAX_BYTES,
   UploadError,
   categoryFor,
@@ -37,6 +38,7 @@ import {
   objectKey,
   putObject,
   putObjectStream,
+  deleteObjects,
   signedDownloadUrl,
 } from '../lib/storage.js'
 import {
@@ -70,6 +72,10 @@ import { parseDetails, parseSections } from '../lib/projectContent.js'
 import { courseWhere, facultyWhere, normalizeCourseCode } from '../lib/faculties.js'
 import { isKnownTemplate } from '../lib/courseTemplates.js'
 import { parseReferences, type ReferenceRow } from '../lib/references.js'
+import { isUofTEmail } from '../lib/uoftEmail.js'
+import { sendProjectInviteEmail } from '../lib/authEmails.js'
+import { pageSkip, pageTake } from '../lib/paging.js'
+import { createUnlessExists, withLock } from '../lib/locks.js'
 import {
   OutputError,
   THUMBNAIL_MAX_BYTES,
@@ -80,8 +86,11 @@ import {
 } from '../lib/outputs.js'
 
 // Upload/delete cost real storage and bandwidth, so they get a tighter budget
-// than the global ceiling — same pattern as auth.ts's credentialRateLimit.
-const uploadRateLimit = { rateLimit: { max: 20, timeWindow: '10 minutes' } }
+// than the global ceiling, per student like the other costly routes (see
+// lib/rateLimit.ts) — a new IP is cheap, a new verified account is not.
+const uploadRateLimit = {
+  rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession },
+}
 
 // Each import is the server fetching somebody else's site on a student's
 // behalf, so it is budgeted per student.
@@ -271,6 +280,8 @@ function parseFields(body: {
   if (references && 'error' in references) return { error: references.error }
   let courseCode: string | null | undefined
   if (body.courseCode !== undefined) {
+    if (body.courseCode !== null && typeof body.courseCode !== 'string')
+      return { error: 'A course code must be text' }
     courseCode = body.courseCode?.trim() ? normalizeCourseCode(body.courseCode) : null
     if (body.courseCode?.trim() && !courseCode)
       return { error: 'That doesn’t look like a course code — try CSC309 or CSC211H5' }
@@ -286,6 +297,8 @@ function parseFields(body: {
   }
   let pitch: string | null | undefined
   if (body.pitch !== undefined) {
+    if (body.pitch !== null && typeof body.pitch !== 'string')
+      return { error: 'A pitch must be text' }
     pitch = body.pitch?.trim() || null
     if (pitch && pitch.length > PITCH_MAX)
       return { error: `A pitch is at most ${PITCH_MAX} characters` }
@@ -325,14 +338,6 @@ async function ownOutput(projectId: string, outputId: string, userId: string) {
   if (!output) return { status: 404 as const }
   if (!(await canEditProject(output.project, userId))) return { status: 403 as const }
   return output
-}
-
-/**
- * Delete storage objects nothing points at any more. Best effort: a failure
- * leaves an unreferenced object behind, which costs bytes, not correctness.
- */
-async function deleteObjects(keys: (string | null | undefined)[]) {
-  await Promise.all(keys.flatMap((k) => (k ? [deleteObject(k).catch(() => undefined)] : [])))
 }
 
 /** How a link is named on the Updates timeline: its label, or where it goes. */
@@ -422,8 +427,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       ],
     }
     const page = {
-      take: Math.min(Math.max(Number(take) || 20, 1), 50),
-      skip: Math.max(Number(skip) || 0, 0),
+      take: pageTake(take, 20, 50),
+      skip: pageSkip(skip),
     }
 
     if (sort === 'trending') {
@@ -818,11 +823,12 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!(await canViewProjectId(id, userId))) return reply.code(404).send({ error: 'Not found' })
 
       const where = { userId_projectId: { userId, projectId: id } }
+      // deleteMany and createUnlessExists: two quick clicks must not 500.
       if (await db.projectSave.findUnique({ where })) {
-        await db.projectSave.delete({ where })
+        await db.projectSave.deleteMany({ where: { userId, projectId: id } })
         return { saved: false }
       }
-      await db.projectSave.create({ data: { userId, projectId: id } })
+      await createUnlessExists(() => db.projectSave.create({ data: { userId, projectId: id } }))
       return { saved: true }
     }
   )
@@ -845,10 +851,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const where = { userId_projectId: { userId, projectId: id } }
       if (await db.projectFollow.findUnique({ where })) {
-        await db.projectFollow.delete({ where })
+        await db.projectFollow.deleteMany({ where: { userId, projectId: id } })
         return { following: false }
       }
-      await db.projectFollow.create({ data: { userId, projectId: id } })
+      await createUnlessExists(() => db.projectFollow.create({ data: { userId, projectId: id } }))
       return { following: true }
     }
   )
@@ -876,13 +882,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       const existing = await db.projectReaction.findUnique({ where })
 
       if (existing) {
-        await db.projectReaction.delete({ where })
+        await db.projectReaction.deleteMany({
+          where: { projectId: id, userId, kind: kind as ReactionKind },
+        })
         return { kind, reacted: false }
       }
 
-      await db.projectReaction.create({
-        data: { projectId: id, userId, kind: kind as ReactionKind },
-      })
+      const created = await createUnlessExists(() =>
+        db.projectReaction.create({ data: { projectId: id, userId, kind: kind as ReactionKind } })
+      )
+      // A click that lost the race to its twin: already on, already announced.
+      if (!created) return { kind, reacted: true }
       if (kind === 'COLLAB') {
         // Its own notification: "Want to collab" is an offer to one person,
         // and the owner is the only one who ever sees who made it. Keyed, so
@@ -946,16 +956,19 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return { pinned: false }
       }
 
-      const pinned = await db.project.count({
-        where: { ownerId: project.ownerId, pinnedAt: { not: null } },
+      // Counted and set under one lock per owner (see lib/locks.ts).
+      const pinned = await withLock(`pins:${project.ownerId}`, async (tx) => {
+        const count = await tx.project.count({
+          where: { ownerId: project.ownerId, pinnedAt: { not: null } },
+        })
+        if (count >= PIN_LIMIT) return false
+        await tx.project.update({ where: { id: project.id }, data: { pinnedAt: new Date() } })
+        return true
       })
-      if (pinned >= PIN_LIMIT) {
+      if (!pinned)
         return reply
           .code(400)
           .send({ error: `You can pin ${PIN_LIMIT} projects — unpin one to make room.` })
-      }
-
-      await db.project.update({ where: { id: project.id }, data: { pinnedAt: new Date() } })
       return { pinned: true }
     }
   )
@@ -1041,7 +1054,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     '/:id/comments',
     { preHandler: [app.authenticate], config: commentRateLimit },
     async (request, reply) => {
-      const body = request.body?.body?.trim()
+      const body = typeof request.body?.body === 'string' ? request.body.body.trim() : ''
       if (!body) return reply.code(400).send({ error: 'Comment body is required' })
       if (body.length > COMMENT_MAX)
         return reply.code(400).send({ error: `A comment is at most ${COMMENT_MAX} characters` })
@@ -1252,8 +1265,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const where = { commentId_userId: { commentId, userId } }
       const had = await db.commentHelpful.findUnique({ where })
-      if (had) await db.commentHelpful.delete({ where })
-      else await db.commentHelpful.create({ data: { commentId, userId } })
+      if (had) await db.commentHelpful.deleteMany({ where: { commentId, userId } })
+      else await createUnlessExists(() => db.commentHelpful.create({ data: { commentId, userId } }))
       const helpfulCount = await db.commentHelpful.count({ where: { commentId } })
       return { helpful: !had, helpfulCount }
     }
@@ -1304,10 +1317,17 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         title: r.title,
         invitedAt: r.invitedAt,
       })
+      // Unanswered invitations are listed by the address the owner typed, the
+      // same whether or not it has an account (see the invite route): who is
+      // behind an address is theirs to reveal, by accepting.
+      const unanswered = rows
+        .filter((r) => r.role === 'COLLABORATOR' && !r.accepted)
+        .map((r) => ({ email: r.user.email, title: r.title, invitedAt: r.invitedAt }))
       return {
         collaborators: rows.filter((r) => r.role === 'COLLABORATOR' && r.accepted).map(person),
-        pending: rows.filter((r) => r.role === 'COLLABORATOR' && !r.accepted).map(person),
-        emailInvites,
+        invites: [...unanswered, ...emailInvites].sort(
+          (a, b) => a.invitedAt.getTime() - b.invitedAt.getTime()
+        ),
         viewers: rows.filter((r) => r.role === 'VIEWER' && r.accepted).map(person),
         accessRequests: rows.filter((r) => r.role === 'VIEWER' && !r.accepted).map(person),
       }
@@ -1316,11 +1336,19 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /projects/:id/collaborators — { email, title? } invite
   //
-  // A pending collaborator row and a notification, to an existing account
-  // only. Mail to an address nobody has signed up with is mail its owner never
-  // asked for, and a typo in one is a bounce: both count against the sender
-  // reputation every other email depends on. The owner asks them to sign up
-  // first instead.
+  // The same answer whether or not the address has an account. Saying which —
+  // and, as this route once did, whose handle and name sit behind it — let any
+  // student with a draft test U of T addresses one by one, and put a real name
+  // to a pseudonymous handle. So:
+  //
+  //   - a confirmed account gets a pending collaborator row and a notification;
+  //   - any other U of T address gets an invitation that waits for it, and an
+  //     email saying so; it becomes the ordinary kind once an account with
+  //     that address is confirmed (lib/accounts.ts). The email is sent in the
+  //     background, so how long this takes says nothing either.
+  //
+  // Either way the owner sees only the address they typed until the invitee
+  // accepts (see GET /:id/people).
   app.post<{ Params: { id: string }; Body: { email?: string; title?: string } }>(
     '/:id/collaborators',
     { preHandler: [app.authenticate], config: inviteRateLimit },
@@ -1336,20 +1364,41 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         .trim()
         .toLowerCase()
       if (!email) return reply.code(400).send({ error: 'An email address is required' })
+      // Only the address's shape, which says nothing about who has an account.
+      if (!isUofTEmail(email))
+        return reply.code(400).send({
+          error: 'Invite them by their U of T address — one ending in utoronto.ca or toronto.edu',
+        })
       if (email === project.owner.email)
         return reply.code(400).send({ error: 'Cannot invite yourself' })
-      const title = String(request.body?.title ?? '').trim() || null
+      const title =
+        typeof request.body?.title === 'string' ? request.body.title.trim() || null : null
       if (title && title.length > COLLABORATOR_TITLE_MAX)
         return reply
           .code(400)
           .send({ error: `A role is at most ${COLLABORATOR_TITLE_MAX} characters` })
 
-      const invitee = await db.user.findUnique({ where: { email }, select: { id: true } })
-      if (!invitee)
-        return reply.code(404).send({
-          error:
-            'Nobody has signed up to uofthub with that address yet. Ask them to join, then invite them.',
+      const invited = { email, title, pending: true }
+      const invitee = await db.user.findUnique({
+        where: { email },
+        select: { id: true, emailVerifiedAt: true },
+      })
+
+      // Not somebody yet — no account, or one whose address is unproven — so
+      // the invitation waits for whoever proves it.
+      if (!invitee?.emailVerifiedAt) {
+        const waiting = await db.projectEmailInvite.findUnique({
+          where: { projectId_email: { projectId: project.id, email } },
         })
+        if (waiting) return reply.code(409).send({ error: 'Already invited' })
+        await db.projectEmailInvite.create({
+          data: { projectId: project.id, email, title, invitedById: project.ownerId },
+        })
+        void sendProjectInviteEmail(email, project.owner.name, project.title).catch((err) =>
+          request.log.error(err, 'Invitation email failed')
+        )
+        return reply.code(202).send(invited)
+      }
 
       const existing = await db.projectCollaborator.findUnique({
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
@@ -1361,11 +1410,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       // A TA with viewer access (or asking for it) becomes an invited
       // collaborator instead: one row per person per project.
-      const collab = await db.projectCollaborator.upsert({
+      await db.projectCollaborator.upsert({
         where: { projectId_userId: { projectId: project.id, userId: invitee.id } },
         update: { role: 'COLLABORATOR', accepted: false, title, invitedAt: new Date() },
         create: { projectId: project.id, userId: invitee.id, role: 'COLLABORATOR', title },
-        include: { user: { select: { id: true, handle: true, name: true, avatarUrl: true } } },
       })
 
       await notify(invitee.id, 'COLLABORATOR_INVITED', {
@@ -1375,13 +1423,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         title,
       })
 
-      return reply.code(201).send({ ...collab, pending: true, hasAccount: true })
+      return reply.code(202).send(invited)
     }
   )
 
   // DELETE /projects/:id/email-invites/:email — the owner withdraws an
-  // invitation to an address that has no account yet. None are made any more
-  // (see the invite route above); this clears the ones sent before that.
+  // unanswered invitation, by the address it went to, whether or not that
+  // address has an account (see the invite route above).
   app.delete<{ Params: { id: string; email: string } }>(
     '/:id/email-invites/:email',
     { preHandler: [app.authenticate] },
@@ -1392,9 +1440,18 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!project) return reply.code(404).send({ error: 'Not found' })
       if (project.ownerId !== request.user.sub) return reply.code(403).send({ error: 'Forbidden' })
-      await db.projectEmailInvite.deleteMany({
-        where: { projectId: request.params.id, email: request.params.email.toLowerCase() },
-      })
+      const email = request.params.email.trim().toLowerCase()
+      await db.$transaction([
+        db.projectEmailInvite.deleteMany({ where: { projectId: request.params.id, email } }),
+        db.projectCollaborator.deleteMany({
+          where: {
+            projectId: request.params.id,
+            role: 'COLLABORATOR',
+            accepted: false,
+            user: { email },
+          },
+        }),
+      ])
       return { ok: true }
     }
   )
@@ -1428,8 +1485,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!invite) return reply.code(404).send({ error: 'No invitation found' })
 
       const isSelf = userId === request.user.sub
-      // A VIEWER row is a TA/professor access request (see POST
-      // .../request-access) rather than an owner-issued invite, so it's the
+      // A VIEWER row is an access request (made while faculty could still ask
+      // — see docs/future.md) rather than an owner-issued invite, so it's the
       // owner — not the requester — who decides it.
       const isOwnerDecidingAccessRequest =
         !isSelf && request.user.sub === project.ownerId && invite.role === 'VIEWER'
@@ -1489,9 +1546,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         where: { projectId_userId: { projectId: id, userId } },
       })
 
-      // Owner denying a still-pending VIEWER access request (see
-      // POST .../request-access) — let the requester know rather than
-      // leaving the request to silently vanish.
+      // Owner denying a still-pending VIEWER access request — let the
+      // requester know rather than leaving the request to silently vanish.
       if (isOwner && !isSelf && collab.role === 'VIEWER' && !collab.accepted) {
         await notify(userId, 'ACCESS_REQUEST_DECIDED', {
           projectId: project.id,
@@ -1576,13 +1632,32 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!(await canEditProject(project, request.user.sub)))
         return reply.code(403).send({ error: 'Forbidden' })
 
-      // Before reading a byte of the body.
-      const fileCount = await db.projectFile.count({ where: { projectId: project.id } })
-      if (fileCount >= PROJECT_FILE_COUNT_CAP) {
-        return reply
+      const full = () =>
+        reply
           .code(400)
           .send({ error: `This project already has the ${PROJECT_FILE_COUNT_CAP}-file limit` })
-      }
+      const overQuota = () =>
+        reply.code(413).send({
+          error: `Your projects have reached their ${storageQuotaBytes() / 1024 ** 3}GB storage limit — delete some files to make room.`,
+        })
+      // Both paid against the owner, whoever uploads: collaborators are
+      // adding to the owner's project.
+      const usage = (tx: Pick<typeof db, 'projectFile'> = db) =>
+        Promise.all([
+          tx.projectFile.count({ where: { projectId: project.id } }),
+          tx.projectFile
+            .aggregate({
+              where: { project: { ownerId: project.ownerId } },
+              _sum: { sizeBytes: true },
+            })
+            .then((r) => r._sum.sizeBytes ?? 0),
+        ])
+
+      // Before reading a byte of the body — the quick refusal. The same checks
+      // run again, under a lock, before the file is recorded (below).
+      const [fileCount, used] = await usage()
+      if (fileCount >= PROJECT_FILE_COUNT_CAP) return full()
+      if (used >= storageQuotaBytes()) return overQuota()
 
       const data = await request.file()
       if (!data) return reply.code(400).send({ error: 'No file uploaded' })
@@ -1595,8 +1670,6 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: `Unsupported file type: .${ext || '?'}` })
       }
 
-      // No storage quota for now — per-file size and per-project count above
-      // are the only limits (docs/redesign.md).
       const key = objectKey(project.id, name)
       let sizeBytes: number
       try {
@@ -1609,16 +1682,28 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         throw err
       }
 
-      const file = await db.projectFile.create({
-        data: {
-          projectId: project.id,
-          name,
-          storageKey: key,
-          sizeBytes,
-          mimeType: contentTypeFor(ext),
-        },
-        select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
+      // Checked again now the size is known, and counted and recorded under one
+      // lock per owner (lib/locks.ts): uploads that started together each
+      // passed the quick check above, and must not all land.
+      const file = await withLock(`files:${project.ownerId}`, async (tx) => {
+        const [count, usedNow] = await usage(tx)
+        if (count >= PROJECT_FILE_COUNT_CAP) return 'full' as const
+        if (usedNow + sizeBytes > storageQuotaBytes()) return 'quota' as const
+        return tx.projectFile.create({
+          data: {
+            projectId: project.id,
+            name,
+            storageKey: key,
+            sizeBytes,
+            mimeType: contentTypeFor(ext),
+          },
+          select: { id: true, name: true, sizeBytes: true, mimeType: true, uploadedAt: true },
+        })
       })
+      if (typeof file === 'string') {
+        await deleteObjects([key])
+        return file === 'full' ? full() : overQuota()
+      }
       await logChanges(project.id, request.user.sub, [
         { kind: 'added', what: 'file', name: file.name },
       ])
@@ -1873,7 +1958,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!(await canEditProject(project, request.user.sub)))
         return reply.code(403).send({ error: 'Forbidden' })
 
-      const note = request.body?.note?.trim() || null
+      const note = typeof request.body?.note === 'string' ? request.body.note.trim() || null : null
       if (note && note.length > NOTE_MAX) {
         return reply.code(400).send({ error: `An update note is at most ${NOTE_MAX} characters` })
       }
@@ -1994,62 +2079,6 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         })),
         dailyViews: dailyViews.map((d) => ({ date: d.date, count: d.count })),
       }
-    }
-  )
-
-  // ── TA / FACULTY ACCESS REQUESTS ────────────────────────────────────────────
-
-  // POST /projects/:id/request-access — a TA or instructor asks to see a
-  // project they cannot see yet: a draft, or course work still hidden until
-  // its show-from date. Somebody has to have given them the link, so the
-  // request goes to the owner, who approves or denies it (PATCH/DELETE
-  // .../collaborators/:userId).
-  //
-  // The answer is the same whether or not the project exists, so a request is
-  // never a way to learn which ids are real.
-  app.post<{ Params: { id: string } }>(
-    '/:id/request-access',
-    { preHandler: [app.authenticate], config: accessRequestRateLimit },
-    async (request, reply) => {
-      if (request.user.role !== 'FACULTY') {
-        return reply.code(403).send({ error: 'Only faculty and TAs can request access' })
-      }
-      const sent = { ok: true, message: 'If the project exists, its owner has been asked' }
-
-      const project = await db.project.findUnique({
-        where: { id: request.params.id },
-        include: { collaborators: { select: { userId: true, accepted: true } } },
-      })
-      if (!project || project.ownerId === request.user.sub) return reply.code(202).send(sent)
-      // Anything they can already open needs no request.
-      if (canViewProject(project, request.user.sub))
-        return reply.code(409).send({ error: 'You can already see this project' })
-
-      const existing = await db.projectCollaborator.findUnique({
-        where: { projectId_userId: { projectId: project.id, userId: request.user.sub } },
-      })
-      if (existing) return reply.code(202).send(sent)
-
-      const [requester] = await Promise.all([
-        db.user.findUnique({ where: { id: request.user.sub }, select: { name: true } }),
-        db.projectCollaborator.create({
-          data: {
-            projectId: project.id,
-            userId: request.user.sub,
-            role: 'VIEWER',
-            accepted: false,
-          },
-        }),
-      ])
-
-      await notify(project.ownerId, 'ACCESS_REQUESTED', {
-        projectId: project.id,
-        projectTitle: project.title,
-        requesterId: request.user.sub,
-        requesterName: requester?.name,
-      })
-
-      return reply.code(202).send(sent)
     }
   )
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import type { Campus } from '@prisma/client'
 import { db } from '../db/client.js'
@@ -9,8 +10,13 @@ import { parseCampus } from '../lib/campus.js'
 import { fileReport, isReportReason, reportRateLimit } from '../lib/reports.js'
 import { notify, notifyMany } from '../lib/notifications.js'
 import { bySession } from '../lib/rateLimit.js'
+import { isUofTEmail } from '../lib/uoftEmail.js'
+import { sendOrgInviteEmail } from '../lib/authEmails.js'
 import { orgCardPng, orgShare } from '../lib/shareCards.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
+import { pageTake } from '../lib/paging.js'
+import { deleteObjects, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { thumbnailContentType, thumbnailType } from '../lib/outputs.js'
 
 const ORG_NAME_MAX = 100
 const ORG_DESCRIPTION_MAX = 2000
@@ -25,6 +31,11 @@ const PAGE_PROJECTS = 50
 // Every invitation and join request lands in somebody's notifications.
 const membershipRateLimit = {
   rateLimit: { max: 30, timeWindow: '1 hour', keyGenerator: bySession },
+}
+
+// Uploads cost storage, so event images get a budget like project uploads.
+const imageRateLimit = {
+  rateLimit: { max: 20, timeWindow: '10 minutes', keyGenerator: bySession },
 }
 
 /** A group's address: lower-case letters, digits and single dashes, no dash at either end. */
@@ -57,7 +68,6 @@ function parseActivity(
     description?: unknown
     date?: unknown
     link?: unknown
-    imageUrl?: unknown
   },
   creating: boolean
 ):
@@ -67,7 +77,6 @@ function parseActivity(
       description?: string | null
       date?: Date
       link?: string | null
-      imageUrl?: string | null
     } {
   let title: string | undefined
   if (body.title !== undefined || creating) {
@@ -90,12 +99,12 @@ function parseActivity(
     // Defaults to now, so "we ran this today" needs no date picking.
     date = new Date()
   }
-  // Both render as an href / img src, so both go through the same guard.
   const link = parseLinkField(body.link, safeExternalUrl)
   if (link === false) return { error: 'Link must be an http(s) URL' }
-  const imageUrl = parseLinkField(body.imageUrl, safeExternalUrl)
-  if (imageUrl === false) return { error: 'Image must be an http(s) URL' }
-  return { title, description, date, link, imageUrl }
+  // No image URL: an image hotlinked from anywhere is a request every
+  // viewer's browser makes to a server the poster chose, which logs who
+  // looked. Images are uploaded instead (PUT /:slug/activities/:id/image).
+  return { title, description, date, link }
 }
 
 const PERSON = {
@@ -109,6 +118,49 @@ const PERSON = {
     program: true,
   },
 } as const
+
+/**
+ * A group's unanswered invitations, for its admins: by the address each went
+ * to, whether or not it has an account yet — who is behind an address is
+ * theirs to reveal, by accepting (see POST /:slug/members).
+ */
+async function pendingInvites(orgId: string) {
+  const [members, waiting] = await Promise.all([
+    db.orgMember.findMany({
+      where: { orgId, status: 'INVITED' },
+      select: { role: true, joinedAt: true, user: { select: { email: true } } },
+    }),
+    db.orgEmailInvite.findMany({
+      where: { orgId },
+      select: { email: true, role: true, invitedAt: true },
+    }),
+  ])
+  return [
+    ...members.map((m) => ({ email: m.user.email, role: m.role, invitedAt: m.joinedAt })),
+    ...waiting,
+  ].sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
+}
+
+const ACTIVITY_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+
+/**
+ * An activity as the API answers it: its uploaded image as a short-lived
+ * signed URL, and nothing of the legacy hotlinked one (see the schema).
+ */
+async function withImage<A extends { imageKey: string | null; imageUrl?: string | null }>(
+  activity: A
+): Promise<Omit<A, 'imageKey' | 'imageUrl'> & { imageUrl: string | null }> {
+  const { imageKey, imageUrl: _legacy, ...rest } = activity
+  return {
+    ...rest,
+    imageUrl: imageKey
+      ? await signedDownloadUrl(imageKey, 'image', {
+          disposition: 'inline',
+          contentType: thumbnailContentType(imageKey),
+        })
+      : null,
+  }
+}
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   /** A group by slug, or null. */
@@ -138,7 +190,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   // GET /orgs/events/upcoming — the next few events across all groups, for
   // the home feed's "Coming up"
   app.get<{ Querystring: { take?: string } }>('/events/upcoming', async (request) => {
-    const take = Math.min(Math.max(Number(request.query.take) || 3, 1), 10)
+    const take = pageTake(request.query.take, 3, 10)
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     return db.orgActivity.findMany({
@@ -171,7 +223,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     const name = String(body.name ?? '').trim()
     const slug = slugify(String(body.slug ?? ''))
     const type = body.type ?? 'CLUB'
-    if (!name || !body.slug?.trim())
+    if (!name || !String(body.slug ?? '').trim())
       return reply.code(400).send({ error: 'name and slug are required' })
     if (name.length > ORG_NAME_MAX)
       return reply.code(400).send({ error: `A name is at most ${ORG_NAME_MAX} characters` })
@@ -286,14 +338,15 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     const mine = org.members.find((m) => m.userId === callerId)
     const isMember = mine?.status === 'ACTIVE'
     const isAdmin = isMember && mine?.role === 'ADMIN'
-    const { contactEmail, contactRole, members, ...rest } = org
+    const { contactEmail, contactRole, members, activities, ...rest } = org
 
     return {
       ...rest,
+      activities: await Promise.all(activities.map(withImage)),
       members: members.filter((m) => m.status === 'ACTIVE'),
       // Only the group's admins see who is waiting, either way.
       ...(isAdmin && {
-        invited: members.filter((m) => m.status === 'INVITED'),
+        invited: await pendingInvites(org.id),
         requests: members.filter((m) => m.status === 'REQUESTED'),
       }),
       // Where the caller stands: ACTIVE, INVITED, REQUESTED, or null.
@@ -376,7 +429,12 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       if (!org) return reply.code(404).send({ error: 'Not found' })
       if (!(await isOrgAdmin(org.id, request.user.sub)) && !(await isModerator(request.user.sub)))
         return reply.code(403).send({ error: 'Forbidden' })
+      const images = await db.orgActivity.findMany({
+        where: { orgId: org.id, imageKey: { not: null } },
+        select: { imageKey: true },
+      })
       await db.organization.delete({ where: { id: org.id } })
+      await deleteObjects(images.map((a) => a.imageKey))
       return { ok: true }
     }
   )
@@ -385,6 +443,14 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /orgs/:slug/members — { email, role? } an admin invites someone. If
   // they had already asked to join, this approves them instead.
+  //
+  // Answers the same whether or not the address has an account, as project
+  // invitations do (routes/projects.ts): anyone can start a group, so an
+  // answer that differed would let anyone test U of T addresses one by one.
+  // An address with no confirmed account gets an invitation that waits for
+  // it (OrgEmailInvite) and an email saying so, sent in the background so the
+  // timing says nothing either; admins see invitations by address until they
+  // are accepted.
   app.post<{ Params: { slug: string }; Body: { email?: string; role?: string } }>(
     '/:slug/members',
     { preHandler: [app.authenticate], config: membershipRateLimit },
@@ -398,15 +464,36 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       if (!isOrgRole(role)) return reply.code(400).send({ error: 'role must be MEMBER or ADMIN' })
 
       // Emails are stored lowercased at sign-up, so normalize before lookup.
+      const email =
+        typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : ''
+      if (!isUofTEmail(email))
+        return reply.code(400).send({
+          error: 'Invite them by their U of T address — one ending in utoronto.ca or toronto.edu',
+        })
+
+      const invited = { email, role }
       const user = await db.user.findUnique({
-        where: {
-          email: String(request.body?.email ?? '')
-            .trim()
-            .toLowerCase(),
-        },
-        select: { id: true },
+        where: { email },
+        select: { id: true, emailVerifiedAt: true },
       })
-      if (!user) return reply.code(404).send({ error: 'No uofthub account with that email yet' })
+
+      if (!user?.emailVerifiedAt) {
+        const waiting = await db.orgEmailInvite.findUnique({
+          where: { orgId_email: { orgId: org.id, email } },
+        })
+        if (waiting) return reply.code(409).send({ error: 'Already invited' })
+        await db.orgEmailInvite.create({
+          data: { orgId: org.id, email, role, invitedById: request.user.sub },
+        })
+        const inviter = await db.user.findUnique({
+          where: { id: request.user.sub },
+          select: { name: true },
+        })
+        void sendOrgInviteEmail(email, inviter?.name ?? 'Someone', org.name).catch((err) =>
+          request.log.error(err, 'Invitation email failed')
+        )
+        return reply.code(202).send(invited)
+      }
 
       const where = { orgId_userId: { orgId: org.id, userId: user.id } }
       const existing = await db.orgMember.findUnique({ where })
@@ -414,33 +501,31 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       if (existing?.status === 'INVITED') return reply.code(409).send({ error: 'Already invited' })
 
       if (existing?.status === 'REQUESTED') {
-        const member = await db.orgMember.update({
+        await db.orgMember.update({
           where,
           data: { status: 'ACTIVE', role, joinedAt: new Date() },
-          include: { user: PERSON },
         })
         await notify(user.id, 'ORG_MEMBERSHIP_DECIDED', {
           slug: org.slug,
           orgName: org.name,
           accepted: true,
         })
-        return reply.code(201).send(member)
+        return reply.code(202).send(invited)
       }
 
       const inviter = await db.user.findUnique({
         where: { id: request.user.sub },
         select: { name: true },
       })
-      const member = await db.orgMember.create({
+      await db.orgMember.create({
         data: { orgId: org.id, userId: user.id, role, status: 'INVITED' },
-        include: { user: PERSON },
       })
       await notify(user.id, 'ORG_INVITED', {
         slug: org.slug,
         orgName: org.name,
         inviterName: inviter?.name,
       })
-      return reply.code(201).send(member)
+      return reply.code(202).send(invited)
     }
   )
 
@@ -542,6 +627,25 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return updated
   })
 
+  // DELETE /orgs/:slug/invites/:email — an admin withdraws an unanswered
+  // invitation, by the address it went to, account or not.
+  app.delete<{ Params: { slug: string; email: string } }>(
+    '/:slug/invites/:email',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const org = await bySlug(request.params.slug)
+      if (!org) return reply.code(404).send({ error: 'Not found' })
+      if (!(await isOrgAdmin(org.id, request.user.sub)))
+        return reply.code(403).send({ error: 'Admins only' })
+      const email = request.params.email.trim().toLowerCase()
+      await db.$transaction([
+        db.orgEmailInvite.deleteMany({ where: { orgId: org.id, email } }),
+        db.orgMember.deleteMany({ where: { orgId: org.id, status: 'INVITED', user: { email } } }),
+      ])
+      return { ok: true }
+    }
+  )
+
   // DELETE /orgs/:slug/members/:userId — an admin removes someone, withdraws
   // an invitation or turns down a request; anyone leaves by removing themself.
   // A group always keeps an admin while it has other members.
@@ -587,18 +691,19 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { slug: string } }>('/:slug/activities', async (request, reply) => {
     const org = await bySlug(request.params.slug)
     if (!org) return reply.code(404).send({ error: 'Not found' })
-    return db.orgActivity.findMany({
+    const activities = await db.orgActivity.findMany({
       where: { orgId: org.id },
       orderBy: { date: 'desc' },
       take: PAGE_ACTIVITIES,
       include: { createdBy: { select: { id: true, handle: true, name: true } } },
     })
+    return Promise.all(activities.map(withImage))
   })
 
   // POST /orgs/:slug/activities — any member can post
   app.post<{
     Params: { slug: string }
-    Body: { title?: string; description?: string; date?: string; link?: string; imageUrl?: string }
+    Body: { title?: string; description?: string; date?: string; link?: string }
   }>('/:slug/activities', { preHandler: [app.authenticate] }, async (request, reply) => {
     const org = await bySlug(request.params.slug)
     if (!org) return reply.code(404).send({ error: 'Not found' })
@@ -616,11 +721,10 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         description: fields.description ?? null,
         date: fields.date!,
         link: fields.link ?? null,
-        imageUrl: fields.imageUrl ?? null,
       },
       include: { createdBy: { select: { id: true, handle: true, name: true } } },
     })
-    return reply.code(201).send(activity)
+    return reply.code(201).send(await withImage(activity))
   })
 
   /** An activity of this group the caller may change: its author, or an admin. */
@@ -628,7 +732,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     slug: string,
     id: string,
     userId: string
-  ): Promise<{ status: 404 | 403 } | { activity: { id: string } }> {
+  ): Promise<{ status: 404 | 403 } | { activity: { id: string; imageKey: string | null } }> {
     const org = await bySlug(slug)
     if (!org) return { status: 404 }
     // Scoped to this org: being an admin of one group must not reach another
@@ -643,7 +747,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /orgs/:slug/activities/:id — its author, or an org admin
   app.patch<{
     Params: { slug: string; id: string }
-    Body: { title?: string; description?: string; date?: string; link?: string; imageUrl?: string }
+    Body: { title?: string; description?: string; date?: string; link?: string }
   }>('/:slug/activities/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
     const found = await ownActivity(request.params.slug, request.params.id, request.user.sub)
     if (!('activity' in found))
@@ -652,12 +756,67 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: found.status === 404 ? 'Not found' : 'Forbidden' })
     const fields = parseActivity(request.body ?? {}, false)
     if ('error' in fields) return reply.code(400).send({ error: fields.error })
-    return db.orgActivity.update({
-      where: { id: found.activity.id },
-      data: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)),
-      include: { createdBy: { select: { id: true, handle: true, name: true } } },
-    })
+    return withImage(
+      await db.orgActivity.update({
+        where: { id: found.activity.id },
+        data: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)),
+        include: { createdBy: { select: { id: true, handle: true, name: true } } },
+      })
+    )
   })
+
+  // PUT /orgs/:slug/activities/:id/image — multipart; its author, or an org admin
+  //
+  // The event's poster or photo. Checked by its bytes (PNG, JPEG or WebP only
+  // — never SVG), capped small, and served back from our storage by signed
+  // URL, like an output's thumbnail.
+  app.put<{ Params: { slug: string; id: string } }>(
+    '/:slug/activities/:id/image',
+    { preHandler: [app.authenticate], config: imageRateLimit },
+    async (request, reply) => {
+      const found = await ownActivity(request.params.slug, request.params.id, request.user.sub)
+      if (!('activity' in found))
+        return reply
+          .code(found.status)
+          .send({ error: found.status === 404 ? 'Not found' : 'Forbidden' })
+
+      const data = await request.file({ limits: { fileSize: ACTIVITY_IMAGE_MAX_BYTES + 1 } })
+      if (!data) return reply.code(400).send({ error: 'No image uploaded' })
+      const buffer = await data.toBuffer()
+      if (data.file.truncated || buffer.length > ACTIVITY_IMAGE_MAX_BYTES)
+        return reply.code(413).send({ error: 'An event image is at most 2MB' })
+      const contentType = await thumbnailType(buffer)
+      if (!contentType)
+        return reply.code(400).send({ error: 'An event image must be a PNG, JPEG or WebP image' })
+
+      const { activity } = found
+      const key = `orgs/activities/${activity.id}-${randomUUID()}.${contentType.split('/')[1]}`
+      await putObject(key, buffer, contentType)
+      const updated = await db.orgActivity.update({
+        where: { id: activity.id },
+        data: { imageKey: key },
+        include: { createdBy: { select: { id: true, handle: true, name: true } } },
+      })
+      await deleteObjects([activity.imageKey])
+      return withImage(updated)
+    }
+  )
+
+  // DELETE /orgs/:slug/activities/:id/image — back to no image
+  app.delete<{ Params: { slug: string; id: string } }>(
+    '/:slug/activities/:id/image',
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const found = await ownActivity(request.params.slug, request.params.id, request.user.sub)
+      if (!('activity' in found))
+        return reply
+          .code(found.status)
+          .send({ error: found.status === 404 ? 'Not found' : 'Forbidden' })
+      await db.orgActivity.update({ where: { id: found.activity.id }, data: { imageKey: null } })
+      await deleteObjects([found.activity.imageKey])
+      return { ok: true }
+    }
+  )
 
   // DELETE /orgs/:slug/activities/:id — its author, an org admin or a moderator
   app.delete<{ Params: { slug: string; id: string } }>(
@@ -672,7 +831,12 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .code(found.status)
           .send({ error: found.status === 404 ? 'Not found' : 'Forbidden' })
+      const gone = await db.orgActivity.findUnique({
+        where: { id: request.params.id },
+        select: { imageKey: true },
+      })
       await db.orgActivity.deleteMany({ where: { id: request.params.id } })
+      await deleteObjects([gone?.imageKey])
       return { ok: true }
     }
   )
