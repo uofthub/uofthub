@@ -16,9 +16,12 @@ Thanks for your interest in contributing. uofthub is an open-source project buil
 
 ## Before you start
 
-1. Check [open issues](https://github.com/renfrrd-ai/uofthub/issues) to avoid duplicating work.
+New to the codebase? Issues labelled [good first issue](https://github.com/uofthub/uofthub/labels/good%20first%20issue) are small, self-contained and say where to look. Comment on one to claim it.
+
+1. Check [open issues](https://github.com/uofthub/uofthub/issues) to avoid duplicating work.
 2. For anything non-trivial, open or comment on an issue first so we can align on approach before you write code.
 3. Fork the repo and create a branch from `main`.
+4. Set up locally with the steps in the [README](../README.md#getting-started): `pnpm install`, `docker compose up -d` for Postgres and the S3 mock, copy the two `.env.example` files, then `pnpm dev`.
 
 ---
 
@@ -45,10 +48,17 @@ Web tests (Vitest, Testing Library, jsdom) cover the pieces with logic rather th
 ## Pull request process
 
 1. Keep PRs focused — one logical change per PR.
-2. Write a clear description: what changed and why.
-3. Make sure tests pass and linting is clean.
-4. Request review from a maintainer.
-5. Address review feedback; PRs are merged once approved.
+2. Write a clear description: what changed and why, and how you checked it. The PR template has the checklist.
+3. Make sure the checks above pass locally. CI runs them on every PR (typecheck, tests, build, lint), plus a dependency audit, a secret scan and CodeQL.
+4. Add or update tests for what you changed.
+5. Mark the PR ready for review; a maintainer is requested automatically.
+
+### How PRs are reviewed
+
+- **CI must be green.** `main` is protected: a PR can't merge until every required check passes and a maintainer has approved it.
+- **Expect a first response within about a week.** It may be a review, a question, or a note that the change doesn't fit the [roadmap](ROADMAP.md) right now.
+- **Reviews look at:** whether the change does what it says; tests for anything that decides who can see or do something; privacy and security (see below); and whether it reads like the code around it.
+- **Changes requested are normal.** Push fixes to the same branch; there's no need to open a new PR. PRs quiet for a month without a reply may be closed, and can be reopened any time.
 
 ---
 
@@ -80,17 +90,26 @@ Update profile page to show faculty
 
 ---
 
+## License of contributions
+
+uofthub is licensed under the [GNU AGPL v3.0 or later](../LICENSE). By opening a pull request you agree that your contribution is licensed under the same terms, and that you have the right to contribute it.
+
+---
+
 ## Privacy & safety
 
 uofthub handles student data. If your contribution touches auth, file uploads, visibility controls, or user data, note it explicitly in the PR description and flag any privacy implications.
 
 Do not introduce features that:
+
 - Automatically access or scrape university systems (Canvas, ACORN, etc.)
 - Bypass student-controlled visibility settings
 - Claim rights to student-uploaded content
+
+**Found a vulnerability?** Don't open an issue or a PR that describes it — report it privately as [SECURITY.md](../SECURITY.md) explains.
 
 ---
 
 ## Questions?
 
-Open a discussion or reach out via the issue tracker.
+Open an issue, or email hello@uofthub.com.

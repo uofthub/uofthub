@@ -1,0 +1,45 @@
+name: Bug report
+description: Something on uofthub doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Found a security problem?** Don't file it here — see [SECURITY.md](https://github.com/uofthub/uofthub/blob/main/SECURITY.md).
+        Please leave out anything private: other people's names, emails, or private projects.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - uofthub.com
+        - Running it locally
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 140 on macOS, Safari on iPhone…
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: Anything else that helps — console errors, a screenshot, the API's log output.

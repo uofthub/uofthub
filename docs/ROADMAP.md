@@ -256,6 +256,6 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Security headers on the API and a Content-Security-Policy on the web app
 - [x] Graceful shutdown; hourly maintenance sweep
 - [ ] Error monitoring — pick a provider (see [ARCHITECTURE.md § Error monitoring](ARCHITECTURE.md#error-monitoring))
-- [x] Licence: proprietary, all rights reserved (`LICENSE`)
+- [x] Licence: open source under AGPL-3.0-or-later (`LICENSE`), with the source linked from the site's footer
 - [x] Course templates beyond CSC211H5: CSC301H1, CSC309H1, ECE496Y1, APS112H1, STA302H1, ECO375H1, ENV461H1
 - [ ] Database backups on Render

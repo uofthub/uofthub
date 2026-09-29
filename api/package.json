@@ -2,7 +2,7 @@
   "name": "@uofthub/api",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "predev": "prisma migrate deploy && prisma generate",

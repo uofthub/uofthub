@@ -1,7 +1,7 @@
 {
   "name": "@uofthub/web",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-or-later",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
