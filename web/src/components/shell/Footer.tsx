@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { CONTACT_EMAIL, GITHUB_URL } from '../../lib/site'
+import { CONTACT_EMAIL, GITHUB_URL, SOURCE_URL } from '../../lib/site'
 import Mark from '../brand/Mark'
 import { cx, Eyebrow, Icon } from '../ui'
 
@@ -149,7 +149,12 @@ export function LandingFooter() {
           ))}
         </div>
         <Bottom>
-          <p className="text-14 text-ink-3">Copyright © {year} uofthub. All Rights Reserved.</p>
+          <p className="text-14 text-ink-3">
+            © {year} uofthub contributors · Free software under the{' '}
+            <a href={SOURCE_URL} className="underline hover:text-navy-ink">
+              AGPL-3.0 — get the source
+            </a>
+          </p>
           <Social />
         </Bottom>
       </div>

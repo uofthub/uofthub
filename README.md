@@ -2,7 +2,9 @@
 
 An open-source platform where University of Toronto students can create, showcase, and share what they build — course projects, research, startups, hackathon work, club projects, and personal side projects.
 
-**Website:** [uofthub.com](https://uofthub.com) · **Status:** Early development
+**Website:** [uofthub.com](https://uofthub.com) · **Status:** Early development · **License:** [AGPL-3.0](LICENSE)
+
+![The uofthub home page: a search bar for projects, people and course codes, under the heading "Everything students build at U of T, in one place"](docs/images/home.png)
 
 ---
 
@@ -23,7 +25,7 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Visibility** — Draft / U of T / Public / Unlisted, defaulting to Draft, plus an optional show-from date that keeps course work hidden until after grading
 - **Profiles** — name, faculty, campus, program, year, courses, "Open to" and personal links; pinned projects above the rest
 - **Discovery** — Explore (search and filter by faculty, course, type, campus or topic), a feed at `/feed` with Following, Campus and Your program tabs, this week's trending, a weekly spotlight, Looking for help, collections, and AI search at `/discover`
-- **Collaboration** — invite collaborators (by the U of T email they signed up with) who then edit the project with you; TAs and instructors can ask for read access to a draft
+- **Collaboration** — invite collaborators by their U of T email; they edit the project with you once they accept, and anyone not on uofthub yet is emailed to join
 - **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, and one-to-one messages; block and report
 - **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
 - **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer (one-click unsubscribe), push notifications on any device that turns them on, data export and account deletion at `/settings`
@@ -37,7 +39,7 @@ See [ROADMAP.md](docs/ROADMAP.md) for Phase 2 and beyond, and [future.md](docs/f
 
 ## Privacy & IP
 
-Your work stays yours. The platform does not claim any rights to uploaded content. Visibility defaults to private and is always student-controlled. TA/professor access is opt-in per project, never automatic.
+Your work stays yours. The platform does not claim any rights to uploaded content. Visibility defaults to private and is always student-controlled. Nobody sees a draft unless its owner invites them.
 
 The live pages are `/terms` (ownership, acceptable use, how moderation works) and `/privacy` (what is collected, and which third parties see any of it). The design behind them is [docs/prd.md](docs/prd.md) §9.
 
@@ -53,7 +55,7 @@ A pnpm workspace with two apps and one shared package.
 | **API** (`api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
-| **Auth** | Microsoft OAuth restricted to `@mail.utoronto.ca` / `@utoronto.ca`, or email + password with the address confirmed by email |
+| **Auth** | Microsoft OAuth, or email + password with the address confirmed by email — U of T addresses only (any `utoronto.ca` or `toronto.edu` domain) |
 | **Email** | Resend (required in production: sign-up confirmation and password reset) · **AI search** OpenAI — degrades to keyword search when its key is unset |
 | **Tests / CI** | Vitest against a real Postgres, GitHub Actions on every PR |
 
@@ -71,7 +73,7 @@ Every decision above, with the reasoning: [docs/ARCHITECTURE.md](docs/ARCHITECTU
 ### Getting started
 
 ```bash
-git clone https://github.com/renfrrd-ai/uofthub.git
+git clone https://github.com/uofthub/uofthub.git
 cd uofthub
 pnpm install
 
@@ -117,12 +119,20 @@ The API tests create their own `_test` database and refuse to run against any da
 
 ## Contributing
 
-Contributions are welcome — please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) before opening a PR. Anything touching auth, uploads, visibility or user data should say so in the PR description.
+Contributions are welcome — please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) before opening a PR. New here? Start with an issue labelled [good first issue](https://github.com/uofthub/uofthub/labels/good%20first%20issue). Anything touching auth, uploads, visibility or user data should say so in the PR description.
+
+---
+
+## Security
+
+uofthub handles student sign-ins and data. Please **don't** open a public issue for a vulnerability — report it privately as described in [SECURITY.md](SECURITY.md).
 
 ---
 
 ## License
 
-Proprietary. Copyright © 2026 Renfred Alonge. All rights reserved — see [LICENSE](LICENSE). The source is not open source: no permission to use, copy, modify or redistribute it is granted, whether or not the repository is publicly readable.
+uofthub is free software, licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). Copyright © 2026 Renfred Alonge and the uofthub contributors.
 
-This does not affect your own work: projects, files and everything else students publish on uofthub stay theirs, as [/terms](docs/prd.md) sets out. The licence covers this codebase only.
+You can use, study, change and share it. If you run a modified version as a service people use over a network, you must offer them its source code under the same license — so improvements to uofthub stay open.
+
+This does not affect your own work: projects, files and everything else students publish on uofthub stay theirs, as [/terms](docs/prd.md) sets out. The license covers this codebase only.

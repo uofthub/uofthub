@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/uofthub/uofthub/security/advisories/new
+    about: Please report vulnerabilities privately, never in a public issue. See SECURITY.md.
+  - name: Something about your account or a take-down
+    url: mailto:hello@uofthub.com
+    about: Account problems, reports about content, and appeals go to a person by email.
