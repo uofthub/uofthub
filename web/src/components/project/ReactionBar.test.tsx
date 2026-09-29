@@ -25,6 +25,7 @@ const project = (
   mine: ReactionKind[] = []
 ) => ({
   id: 'p1',
+  slug: 'p1',
   reactions: { USEFUL: 0, IMPRESSIVE: 0, COLLAB: 0, ...counts },
   myReactions: mine,
   _count: { comments: 9 },
