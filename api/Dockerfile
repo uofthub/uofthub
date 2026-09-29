@@ -29,7 +29,8 @@ RUN pnpm install --frozen-lockfile --filter @uofthub/api...
 
 COPY packages/types packages/types
 COPY api api
-RUN pnpm --filter @uofthub/api db:generate && pnpm --filter @uofthub/api build
+RUN DATABASE_URL=postgresql://localhost:5432/uofthub pnpm --filter @uofthub/api db:generate \
+  && pnpm --filter @uofthub/api build
 
 # The same install without devDependencies (tsc, tsx, vitest): what runs in
 # production ships no compiler or test runner to anyone who gets a shell in it.
@@ -37,7 +38,7 @@ RUN pnpm --filter @uofthub/api db:generate && pnpm --filter @uofthub/api build
 FROM build AS prod-deps
 RUN rm -rf node_modules api/node_modules packages/types/node_modules \
   && pnpm install --frozen-lockfile --prod --offline --filter @uofthub/api... \
-  && pnpm --filter @uofthub/api db:generate
+  && DATABASE_URL=postgresql://localhost:5432/uofthub pnpm --filter @uofthub/api db:generate
 
 FROM base AS runtime
 WORKDIR /repo
