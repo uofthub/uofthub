@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
-RUN corepack enable
+RUN npm install --global pnpm@10.33.0
 WORKDIR /repo
 
 # Manifests first: this layer only busts when a dependency changes, so day-to-day
