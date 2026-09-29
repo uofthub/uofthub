@@ -39,6 +39,7 @@ jobs:
           --health-retries 5
 
     env:
+      DATABASE_URL: postgresql://uofthub:uofthub@localhost:5432/uofthub_test
       TEST_DATABASE_URL: postgresql://uofthub:uofthub@localhost:5432/uofthub_test
 
     steps:
