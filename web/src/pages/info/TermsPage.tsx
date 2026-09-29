@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { CONTACT_EMAIL } from '../../lib/site'
+import { CONTACT_EMAIL, SOURCE_URL } from '../../lib/site'
 import { Prose } from './Prose'
 
 /**
@@ -46,8 +46,8 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         <p>
           Files are never served from a public bucket. A download always goes through the API, which
           re-checks the project's visibility first, so a link to a file cannot outlive the
-          visibility setting on the project that holds it. TA and professor access is granted by
-          you, per project, and never platform-wide.
+          visibility setting on the project that holds it. Nobody else — a teammate, a TA, a
+          professor — sees a private project unless you invite them to it.
         </p>
       </>
     ),
@@ -73,6 +73,11 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           <li>harasses, threatens or demeans a person or group;</li>
           <li>is malware, or is spam and advertising dressed up as a project.</li>
         </ul>
+        <p>
+          Invite only people you actually work with. An invitation to an address that has no account
+          yet sends that address one email asking them to join, so please don't use invitations to
+          contact strangers.
+        </p>
         <p>
           Confidential research and work under an NDA is your call to make, not ours — but "Private"
           is the setting for it, and if you are unsure whether you may post something at all, ask
@@ -144,6 +149,42 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         <p>
           You can block another student from their profile or a conversation. Neither of you can
           then message, comment on, react to or follow the other. They are not told.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'limits',
+    heading: 'Limits on uploads',
+    body: (
+      <>
+        <p>
+          Files are capped by type — 25 MB for documents, images and audio, 100 MB for a zip, 250 MB
+          for a video — at 20 files a project. An account's projects can hold 5 GB of files between
+          them. That is far more than a portfolio needs; the ceiling is there so nobody can use
+          uofthub as free bulk storage.
+        </p>
+        <p>
+          Executables and scripts are never accepted, and neither are the old Office formats (.doc,
+          .xls, .ppt), which can carry macros. Save them as .docx, .xlsx or .pptx instead.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'open-source',
+    heading: 'The code is open source — your work is not',
+    body: (
+      <>
+        <p>
+          The software that runs uofthub is free software under the GNU Affero General Public
+          License (AGPL-3.0). Anyone can read it, check how it treats your data, and suggest
+          changes. <a href={SOURCE_URL}>The source is on GitHub</a>.
+        </p>
+        <p>
+          That licence covers our code and nothing else. It gives nobody any rights to what you
+          publish here: your projects, files and writing are still yours alone, as set out under{' '}
+          <a href="#ownership">You own your work</a>.
         </p>
       </>
     ),

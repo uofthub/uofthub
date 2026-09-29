@@ -2,6 +2,12 @@
 export const GITHUB_URL = 'https://github.com/uofthub'
 
 /**
+ * This app's source. The AGPL asks that everyone using it over the network
+ * can get the source of the version they use; the footer links here.
+ */
+export const SOURCE_URL = 'https://github.com/uofthub/uofthub'
+
+/**
  * Where students reach a human: About, Terms, Privacy and the take-down and
  * verification appeal paths all point here.
  *

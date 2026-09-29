@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { CONTACT_EMAIL } from '../../lib/site'
+import { CONTACT_EMAIL, SOURCE_URL } from '../../lib/site'
 import { Prose } from './Prose'
 
 /**
@@ -35,12 +35,18 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             you have blocked.
           </li>
           <li>
-            <strong>What you do here</strong> — likes, follows, collaborator invitations, access
-            requests, and a per-day count of views on each project, so owners can see interest over
-            time.
+            <strong>What you do here</strong> — reactions, follows, saves, collaborator and group
+            invitations, and a per-day count of views on each project, so owners can see interest
+            over time.
           </li>
           <li>
-            <strong>Operational records</strong> — server logs.
+            <strong>Addresses you invite</strong> — when you invite a U of T address that has no
+            account yet, we keep that address with the invitation, so it can be handed over once
+            someone signs up with it. Withdrawing the invitation deletes it.
+          </li>
+          <li>
+            <strong>Operational records</strong> — server logs, and a list of sessions that were
+            signed out, kept only until they would have expired anyway.
           </li>
         </ul>
         <p>
@@ -62,9 +68,11 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           projects.
         </p>
         <p>
-          View counts exist so a project owner can see whether anyone found their work. They are
-          aggregate numbers, not a list of who looked: we record that a project was viewed on a
-          date, not who viewed it.
+          View counts exist so a project owner can see whether anyone found their work, and owners
+          only ever see numbers, never who looked. To count each person once a day, we note for that
+          day that a viewer was there — your account if you are signed in, or else a scrambled code
+          made from your connection that cannot be turned back into it — and delete that note the
+          next day.
         </p>
       </>
     ),
@@ -81,9 +89,14 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           is used, so it cannot outlive the setting.
         </p>
         <p>
-          Your name, profile and public projects are visible to anyone. Your email address is not
-          shown on your profile; it is visible to a project owner when you request access to their
-          project, and to moderators reviewing a report.
+          Your name, profile and public projects are visible to anyone. Who you follow and who
+          follows you is visible to signed-in U of T students only. Your email address is never
+          shown on your profile; moderators see it when they review a report.
+        </p>
+        <p>
+          When someone invites you to a project or group, they typed your address. Until you accept,
+          they see only that address — not your name, your profile, or even whether you have an
+          account.
         </p>
         <p>
           A direct message is seen by you and the person you wrote to. If either of you reports the
@@ -108,8 +121,8 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             stored there.
           </li>
           <li>
-            <strong>Cloudflare</strong> — serves the site, and stores uploaded files and avatars in
-            a private bucket that is never publicly readable.
+            <strong>Cloudflare</strong> — serves the site, and stores uploaded files, avatars and
+            group event images in a private bucket that is never publicly readable.
           </li>
           <li>
             <strong>Microsoft</strong> — if you sign in with your UTORid, Microsoft tells us your
@@ -117,9 +130,9 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           </li>
           <li>
             <strong>Resend</strong> — sends the emails we send you: confirming your address,
-            resetting your password, and — unless you turn them off in Settings — invitations,
-            access requests, new conversations and moderation decisions. It sees the address and the
-            message.
+            resetting your password, and — unless you turn them off in Settings — invitations, new
+            conversations and moderation decisions. It also sends one email to an address someone
+            invites that has no account yet. It sees the address and the message.
           </li>
           <li>
             <strong>Your browser’s push service</strong> — only if you turn on push notifications in
@@ -189,8 +202,15 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
       <>
         <p>
           Passwords, where you set one, are stored as scrypt hashes and are never recoverable in
-          plain text. Sessions are signed, HTTP-only cookies. Uploads are checked against their
-          actual bytes rather than their filename, so a renamed executable is rejected.
+          plain text. Sessions are signed, HTTP-only cookies, and signing out ends the session for
+          good. Uploads are checked against their actual bytes rather than their filename, so a
+          renamed executable is rejected.
+        </p>
+        <p>
+          uofthub is open source, so anyone can <a href={SOURCE_URL}>read the code</a> and check all
+          of this for themselves. If you find a security problem, please report it privately as our{' '}
+          <a href={`${SOURCE_URL}/blob/main/SECURITY.md`}>security policy</a> describes, not in a
+          public issue.
         </p>
         <p>
           None of that makes a student project as hardened as a university system. Treat uofthub as
