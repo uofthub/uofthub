@@ -89,8 +89,10 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          Anyone with a U of T email can sign up. We send a link to confirm the address, and once
-          it’s confirmed you can publish, comment and message.
+          Anyone with a U of T email — any address ending in utoronto.ca or toronto.edu — can sign
+          up. We send a link to confirm the address, and once it’s confirmed you can publish,
+          comment and message. If your U of T address isn’t accepted, email us from it and we’ll
+          sort it out.
         </p>
         <ul>
           <li>
@@ -179,9 +181,11 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          Group work is the norm here. Invite your teammates from the project page; once they
-          accept, the project shows up on every collaborator’s profile, and collaborators can edit
-          the write-up, files and links. Visibility and credits stay with the owner.
+          Group work is the norm here. Invite your teammates by their U of T email from the project
+          page. If they aren’t on uofthub yet, we email them to join, and the invitation waits for
+          them. Once they accept, the project shows up on every collaborator’s profile, and
+          collaborators can edit the write-up, files and links. Visibility and credits stay with the
+          owner.
         </p>
         <p>
           Looking for people to build with? Set the project’s status to “Looking for help”, say what

@@ -244,7 +244,7 @@ Not phase-scoped — these are gaps in build/ship confidence rather than user-fa
 - [x] Uploads streamed to storage and served with a type decided from the checked extension; SVG is download-only
 - [x] Input limits on every free-text field, and rate limits on comments, invites and joins
 - [x] Collaborators edit content; invitations can be seen, withdrawn, declined (deleted) and sent to addresses without an account; collaborators can leave
-- [x] TA access requests work for drafts and hidden projects, and a TA's access is never shown as a credit
+- [x] TA access requests work for drafts and hidden projects, and a TA's access is never shown as a credit (asking is paused for now — see [future.md](future.md#who-can-ask-to-see-a-hidden-project))
 - [x] Comments: edit, delete (author, owner, moderator), report
 - [x] Reports on comments, collections, profiles and group events; account suspension; restoring a take-down
 - [x] Blocking covers comments, reactions and follows, not only messages

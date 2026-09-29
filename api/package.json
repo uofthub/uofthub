@@ -15,7 +15,6 @@
     "grant-admin": "tsx src/scripts/grantAdmin.ts",
     "grant-admin:prod": "node dist/scripts/grantAdmin.js",
     "og:site": "tsx src/scripts/renderSiteCard.ts",
-    "seed:demo": "tsx --env-file-if-exists=.env src/scripts/seedDemo.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"

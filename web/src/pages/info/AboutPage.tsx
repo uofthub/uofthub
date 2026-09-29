@@ -27,7 +27,7 @@ const PRINCIPLES: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'code',
     title: 'Open source',
-    text: 'The whole thing is on GitHub. Read the code, follow the roadmap, or send a pull request.',
+    text: 'Free software under the AGPL, on GitHub. Read the code, follow the roadmap, or send a pull request.',
   },
   {
     icon: 'shieldCheck',
