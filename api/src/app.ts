@@ -21,6 +21,7 @@ import { eventRoutes } from './routes/events.js'
 import { emailRoutes } from './routes/email.js'
 import { pushRoutes } from './routes/push.js'
 import { pathRoutes } from './routes/paths.js'
+import { campaignRoutes } from './routes/campaigns.js'
 import { sessionAccount } from './lib/session.js'
 import { jwtSecret } from './lib/keys.js'
 
@@ -182,6 +183,7 @@ export async function buildApp() {
   await app.register(emailRoutes, { prefix: '/email' })
   await app.register(pushRoutes, { prefix: '/push' })
   await app.register(pathRoutes, { prefix: '/paths' })
+  await app.register(campaignRoutes, { prefix: '/go' })
 
   app.get('/health', async () => ({ status: 'ok' }))
 

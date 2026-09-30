@@ -45,6 +45,12 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             someone signs up with it. Withdrawing the invitation deletes it.
           </li>
           <li>
+            <strong>QR code scans</strong> — when you scan one of our printed codes, like the
+            sticker on a laptop lid, we record which code it was, when, your browser's name and
+            version, the page that sent you if there was one, and a scrambled code for that day. We
+            do not record your address.
+          </li>
+          <li>
             <strong>Operational records</strong> — server logs, and a list of sessions that were
             signed out, kept only until they would have expired anyway.
           </li>
@@ -73,6 +79,13 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           day that a viewer was there — your account if you are signed in, or else a scrambled code
           made from your connection that cannot be turned back into it — and delete that note the
           next day.
+        </p>
+        <p>
+          QR code scans tell us whether a sticker or poster brings anyone here, and how many
+          different people. The scrambled code is made from your connection and browser with a
+          secret that changes every day, so it cannot be turned back into your address, and your
+          scans on different days cannot be linked to each other. Scans are counted on our own
+          server; no third party is involved.
         </p>
       </>
     ),

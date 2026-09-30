@@ -36,6 +36,7 @@ export const APP_ROUTES = [
   '/messages',
   '/messages/:userId',
   '/help-wanted',
+  '/lid',
   // /@handle and /@handle/slug — see isAppRoute.
   '/:handle',
   '/:handle/:slug',

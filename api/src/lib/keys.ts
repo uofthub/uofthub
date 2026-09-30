@@ -15,7 +15,9 @@ export const jwtSecret = (): string => process.env.JWT_SECRET ?? 'dev-secret-cha
 const derived = new Map<string, Buffer>()
 
 /** A 32-byte key for one purpose, derived from `JWT_SECRET`. */
-export function derivedKey(purpose: 'unsubscribe-v1' | 'view-salt-v1'): Buffer {
+export function derivedKey(
+  purpose: 'unsubscribe-v1' | 'view-salt-v1' | 'campaign-salt-v1'
+): Buffer {
   const secret = jwtSecret()
   const cacheKey = `${purpose}\0${secret}`
   let key = derived.get(cacheKey)

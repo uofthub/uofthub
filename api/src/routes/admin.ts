@@ -8,6 +8,7 @@ import { deleteObject } from '../lib/storage.js'
 import { startOfUtcWeek } from '../lib/dates.js'
 import { isListed } from '../lib/visibility.js'
 import { changeHandle, HandleError, normalizeHandle } from '../lib/handles.js'
+import { campaignSource } from '../lib/campaigns.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
@@ -561,4 +562,43 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return { ok: true }
     }
   )
+
+  // ── QR CAMPAIGNS ────────────────────────────────────────────────────────────
+
+  // GET /admin/scans?source=lid — how many times a printed code was scanned.
+  // `uniqueVisitors` counts distinct visitor hashes, which rotate daily
+  // (lib/campaigns.ts): one person scanning on three days counts three times,
+  // so it is an upper bound on people, and exact per day.
+  app.get<{ Querystring: { source?: string } }>('/scans', adminOnly, async (request, reply) => {
+    const parsed = campaignSource.safeParse(request.query.source ?? 'lid')
+    if (!parsed.success) return reply.code(400).send({ error: 'Unknown source' })
+    const source = parsed.data
+
+    const [[totals], days] = await Promise.all([
+      db.$queryRaw<{ total: number; uniqueVisitors: number }[]>`
+        SELECT COUNT(*)::int AS "total",
+               COUNT(DISTINCT "visitorHash")::int AS "uniqueVisitors"
+        FROM "CampaignScan"
+        WHERE "source" = ${source}
+      `,
+      // The last 30 UTC days, today included, with the empty ones as zeros.
+      db.$queryRaw<{ date: string; scans: number; uniqueVisitors: number }[]>`
+        SELECT to_char(d.day, 'YYYY-MM-DD') AS "date",
+               COUNT(s."id")::int AS "scans",
+               COUNT(DISTINCT s."visitorHash")::int AS "uniqueVisitors"
+        FROM generate_series(
+          (now() AT TIME ZONE 'UTC')::date - 29,
+          (now() AT TIME ZONE 'UTC')::date,
+          interval '1 day'
+        ) AS d(day)
+        LEFT JOIN "CampaignScan" s
+          ON s."source" = ${source}
+         AND s."createdAt" >= d.day
+         AND s."createdAt" < d.day + interval '1 day'
+        GROUP BY d.day
+        ORDER BY d.day
+      `,
+    ])
+    return { source, ...totals, days }
+  })
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AppShell } from './components/shell'
 import { Spinner } from './components/ui'
@@ -18,6 +18,7 @@ import FeedbackPage from './pages/info/FeedbackPage'
 import NotFoundPage from './pages/info/NotFoundPage'
 import { HelpWantedPage, SavedPage } from './pages/lists/ListPages'
 import { PersonRoute, ProjectRoute } from './pages/paths/PathPages'
+import { API_URL } from './lib/api'
 
 // Pages most visits never open are loaded when first needed, which keeps them
 // out of the bundle every visitor downloads.
@@ -41,6 +42,16 @@ function ToExplore() {
 function CourseToExplore() {
   const { tag = '' } = useParams()
   return <Navigate to={`/explore?course=${encodeURIComponent(tag)}`} replace />
+}
+
+/**
+ * /lid is the laptop-sticker QR code, which web/functions/lid.js sends to the
+ * API to be counted. This only runs when the app gets there first — a link
+ * followed inside it — and leaves for the API the same way.
+ */
+function ToCampaign() {
+  useEffect(() => window.location.replace(`${API_URL}/go/lid`), [])
+  return <Spinner />
 }
 
 /**
@@ -88,6 +99,7 @@ export default function App() {
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/messages/:userId" element={<MessagesPage />} />
             <Route path="/help-wanted" element={<HelpWantedPage />} />
+            <Route path="/lid" element={<ToCampaign />} />
             {/* /@handle and /@handle/slug. React Router can't match a partial
                 segment, so these take any first segment the routes above
                 don't, and the page checks for the @. */}

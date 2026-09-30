@@ -1027,3 +1027,21 @@ model MessageReport {
   @@index([status, createdAt])
   @@index([reportedId, status])
 }
+
+/// One scan of a printed QR code (a laptop-lid sticker, a poster), recorded
+/// by GET /go/:source before it redirects to the home page. `visitorHash`
+/// tells repeat scans from new people within a UTC day without storing an
+/// address: it is a hash of the IP and browser salted with a secret that
+/// changes every day (lib/campaigns.ts), so it can't be reversed or joined
+/// across days.
+model CampaignScan {
+  id          String   @id @default(cuid())
+  /// Which code was scanned — one of CAMPAIGN_SOURCES, e.g. "lid".
+  source      String
+  createdAt   DateTime @default(now())
+  visitorHash String?
+  userAgent   String?
+  referer     String?
+
+  @@index([source, createdAt])
+}
