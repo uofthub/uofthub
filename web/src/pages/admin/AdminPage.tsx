@@ -14,6 +14,7 @@ import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CreateOrgDialog } from '../orgs/CreateOrgDialog'
 import { MessageReportRow } from './MessageReportRow'
+import { ReportMedia } from './ReportMedia'
 import { STATUS_LABELS, reasonShort, isUrgentReason } from '../../lib/moderation'
 import {
   Button,
@@ -162,6 +163,10 @@ function ReportRow({ report }: { report: AdminReport }) {
         </Notice>
       )}
       {report.details && <Quote>{report.details}</Quote>}
+      {/* A comment or a collection is text, already quoted above. */}
+      {report.targetType !== 'COMMENT' && report.targetType !== 'COLLECTION' && (
+        <ReportMedia reportId={report.id} />
+      )}
       {report.status === 'OPEN' ? (
         <>
           <TextArea

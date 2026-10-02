@@ -12,6 +12,7 @@ import { campaignSource } from '../lib/campaigns.js'
 import { URGENT_REASONS } from '../lib/reports.js'
 import { discardEvidence, keepEvidence } from '../lib/evidence.js'
 import { releaseScan } from '../lib/imageScan.js'
+import { reportMedia } from '../lib/reportMedia.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
@@ -245,6 +246,25 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       )
     }
   )
+
+  // GET /admin/reports/:id/media — the images and files a report is about,
+  // signed for a moderator whatever their visibility: a taken-down project
+  // is private, and a flagged image or kept evidence is shown nowhere else.
+  app.get<{ Params: { id: string } }>('/reports/:id/media', adminOnly, async (request, reply) => {
+    const report = await db.report.findUnique({
+      where: { id: request.params.id },
+      select: {
+        targetType: true,
+        projectId: true,
+        activityId: true,
+        subjectUserId: true,
+        scanKey: true,
+        evidenceKeys: true,
+      },
+    })
+    if (!report) return reply.code(404).send({ error: 'Not found' })
+    return reportMedia(report)
+  })
 
   // POST /admin/reports/:id/decision — { decision, note?, suspend? }
   //
