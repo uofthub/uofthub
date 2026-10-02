@@ -162,5 +162,22 @@ export const UOFT = {
   url: 'https://www.utoronto.ca',
 }
 
-/** A page about nothing: the app's own "not found", with a 404 to match. */
-export const notFound = (response) => withHead(response, { noindex: true, status: 404 })
+/**
+ * A page about nothing: the app's own "not found", with a 404 to match. Never
+ * cached: it is index.html under another path, and would otherwise keep the
+ * headers _headers gives that path — a year's "immutable" under /assets/,
+ * which is how one 404 during a deploy blanked the site for every browser.
+ */
+export function notFound(response) {
+  const page = withHead(response, { noindex: true, status: 404 })
+  const headers = new Headers(page.headers)
+  headers.set('Cache-Control', 'no-store')
+  return new Response(page.body, { status: 404, headers })
+}
+
+/** A missing build file: a plain, uncached 404, never index.html passed off as a script. */
+export const missingAsset = () =>
+  new Response('Not found', {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  })
