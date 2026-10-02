@@ -44,6 +44,8 @@ export function Menu({
         <div
           className={cx(
             'absolute top-[calc(100%+6px)] z-60 animate-menu-in rounded-xl border border-line bg-surface p-1.5 shadow-pop',
+            // A long menu on a short phone screen scrolls rather than running off it.
+            'max-h-[calc(100dvh-80px)] overflow-y-auto',
             align === 'right' ? 'right-0' : 'left-0'
           )}
           style={{ width }}
