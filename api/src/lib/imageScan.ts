@@ -63,7 +63,9 @@ export async function queueScan(key: string, target: ScanTarget, subjectId: stri
 
 /** The scanner's answer; 'unreadable' when it could not decode the bytes as an image. */
 async function detect(bytes: Buffer): Promise<Detection[] | 'unreadable'> {
-  const res = await fetch(`${process.env.SCANNER_URL}/scan`, {
+  // Pasted from the dashboard it often ends in a slash, and `//scan` is a 404.
+  const base = process.env.SCANNER_URL!.replace(/\/+$/, '')
+  const res = await fetch(`${base}/scan`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${process.env.SCANNER_TOKEN}`,
