@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type ProfileUser } from '../../lib/api'
@@ -41,7 +41,7 @@ type Section = 'projects' | 'collabs' | 'saved'
 /** The navy banner with the gold dot field from the board. */
 function Banner() {
   return (
-    <div className="h-30 md:h-47.5" aria-hidden="true">
+    <div className="h-30 overflow-hidden md:h-47.5" aria-hidden="true">
       <svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMid slice" className="size-full">
         <rect width="1440" height="200" fill="#1E3765" />
         {Array.from({ length: 22 }, (_, col) =>
@@ -315,16 +315,24 @@ export default function ProfilePage({ id: resolved }: { id?: string }) {
           </div>
           <div className="text-15 text-muted">@{profile.handle}</div>
           {(line.length > 0 || profile.campus) && (
-            <div className="flex flex-wrap items-center gap-1.5 text-16 text-ink-3">
-              {line.join(' · ')}
+            // Each item is unbreakable and its "·" sticks to it, so a wrap
+            // leaves the dot at the end of a line, never starting one.
+            <p className="text-16 text-ink-3">
+              {line.map((item, i) => (
+                <Fragment key={item}>
+                  <span className="whitespace-nowrap">
+                    {item}
+                    {(i < line.length - 1 || profile.campus) && '\u00a0·'}
+                  </span>{' '}
+                </Fragment>
+              ))}
               {profile.campus && (
-                <>
-                  {line.length > 0 && ' · '}
+                <span className="inline-flex items-center gap-1.5 align-bottom whitespace-nowrap">
                   <Icon name="mapPin" size={16} />
                   {campusShort(profile.campus)}
-                </>
+                </span>
               )}
-            </div>
+            </p>
           )}
         </div>
         <div className="flex gap-2.5 pb-2.5">
@@ -367,7 +375,7 @@ export default function ProfilePage({ id: resolved }: { id?: string }) {
           {own && <WeekActivity />}
           <div className="flex flex-col gap-4">
             {profile.bio ? (
-              <p className="max-w-180 text-17 leading-[1.6]">{profile.bio}</p>
+              <p className="max-w-180 text-17 leading-[1.6] wrap-anywhere">{profile.bio}</p>
             ) : (
               own && (
                 <p className="text-15 text-muted">
