@@ -46,13 +46,17 @@ export function SegmentedTabs<T extends string>(props: TabsProps<T>) {
     <div
       role="tablist"
       aria-label={props.label}
-      className={cx('flex gap-1 rounded-xl bg-fill-soft p-1', props.className)}
+      // Scrolls sideways on a phone rather than pushing the page wider.
+      className={cx(
+        'scrollbar-none flex max-w-full gap-1 overflow-x-auto rounded-xl bg-fill-soft p-1',
+        props.className
+      )}
     >
       <TabButtons
         {...props}
         item={(on) =>
           cx(
-            'h-10 rounded-[9px] px-4.5 text-15 font-semibold whitespace-nowrap',
+            'h-10 shrink-0 rounded-[9px] px-4.5 text-15 font-semibold whitespace-nowrap',
             on ? 'bg-surface text-ink shadow-raised' : 'text-ink-3'
           )
         }

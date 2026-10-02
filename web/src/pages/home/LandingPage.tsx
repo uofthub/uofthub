@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
-import { useDocumentTitle } from '../../lib/hooks'
+import { PHONE, useDocumentTitle, useMediaQuery } from '../../lib/hooks'
 import Logo from '../../components/brand/Logo'
 import Mark from '../../components/brand/Mark'
 import { ProjectCard } from '../../components/project'
@@ -107,6 +107,8 @@ function Hero() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  // The long hint is cut off on a phone, and there is no '/' key to press.
+  const phone = useMediaQuery(PHONE)
 
   // '/' focuses the search bar here too, as the header's does.
   useEffect(() => {
@@ -138,8 +140,8 @@ function Hero() {
         />
         <h1 className="mt-6 font-display text-[clamp(2rem,5vw,3.25rem)] leading-[1.1] font-extrabold tracking-tightest">
           Everything students build
-          <br />
-          at U of T, in one place
+          {/* A phone wraps it where it fits; a forced break there strands "build". */}
+          <br className="max-md:hidden" /> at U of T, in one place
         </h1>
         <form
           onSubmit={submit}
@@ -154,7 +156,9 @@ function Hero() {
             ref={input}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Project, course code, or keyword ( Press ' / ' )"
+            placeholder={
+              phone ? 'Project or course code' : "Project, course code, or keyword ( Press ' / ' )"
+            }
             aria-label="Search projects"
             className={cx(searchInput, 'px-0.5 text-17')}
           />
@@ -199,7 +203,7 @@ export default function LandingPage() {
       <Section>
         {trending.length > 0 && (
           <Card className="flex flex-col gap-4.5 p-6 shadow-pop">
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <Heading>Being read right now</Heading>
               <Link to="/explore" className="text-14 font-semibold">
                 Explore everything →

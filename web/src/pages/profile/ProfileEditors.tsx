@@ -72,7 +72,7 @@ export function AvatarEditor({
           if (f) upload.mutate(f)
         }}
       />
-      <span className="absolute right-1.5 bottom-1.5">
+      <span className="absolute right-0.5 bottom-0.5 md:right-1.5 md:bottom-1.5">
         <Menu
           align="left"
           width={200}
@@ -85,6 +85,7 @@ export function AvatarEditor({
               aria-label="Change photo"
               onClick={toggle}
               disabled={busy}
+              className="rounded-full max-md:size-8!"
             />
           )}
         >

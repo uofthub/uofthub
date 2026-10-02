@@ -200,13 +200,14 @@ function Drifting({ shape }: { shape: Shape }) {
 }
 
 /**
- * The drifting shapes behind the landing hero. A wide-screen flourish: phones
- * and anybody who asks for less motion get the calm version.
+ * The drifting shapes behind the landing hero, from laptop width up (1024px).
+ * On a phone or a tablet they cross the heading and the buttons, so those —
+ * and anybody who asks for less motion — get the calm version.
  */
 export function HeroShapes() {
   return (
     <div
-      className="pointer-events-none absolute top-0 left-1/2 z-0 hidden h-screen w-screen -translate-x-1/2 overflow-hidden motion-safe:2xl:block"
+      className="pointer-events-none absolute top-0 left-1/2 z-0 hidden h-screen w-screen -translate-x-1/2 overflow-hidden motion-safe:lg:block"
       aria-hidden="true"
     >
       {SHAPES.map((s) => (

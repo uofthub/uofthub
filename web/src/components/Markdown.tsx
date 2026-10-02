@@ -18,7 +18,8 @@ import { cx } from './ui'
 
 /* ---------------------------------- styles --------------------------------- */
 
-const block = 'mb-3.5 last:mb-0'
+// Long links and unbroken words wrap instead of widening the page.
+const block = 'mb-3.5 last:mb-0 wrap-anywhere'
 
 /** Preformatted text in the document's grey well — code blocks and plain-text previews. */
 export const docPre =
@@ -179,7 +180,7 @@ export default function Markdown({ source }: { source: string }) {
       blocks.push(
         <Tag
           key={key()}
-          className="mt-5.5 mb-1.5 font-display leading-[1.25] font-bold text-ink first:mt-0"
+          className="mt-5.5 mb-1.5 font-display leading-[1.25] font-bold wrap-anywhere text-ink first:mt-0"
           style={{ fontSize: `${1.5 - (level - 1) * 0.11}rem` }}
         >
           {renderInline(heading[2], key())}

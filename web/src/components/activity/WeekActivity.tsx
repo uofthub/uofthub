@@ -78,7 +78,7 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
                 <Avatar person={c.user} size={compact ? 28 : 32} />
               </Link>
               <div className="min-w-0 grow">
-                <div className="text-14">
+                <div className="text-14 wrap-anywhere">
                   <Link to={profilePath(c.user)} className="font-semibold text-ink">
                     {c.user.name}
                   </Link>{' '}
@@ -86,7 +86,9 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
                   <Link to={`${projectPath(c.project)}#comments`}>{c.project.title}</Link>
                   {!compact && <span className="text-muted"> · {timeShort(c.createdAt)}</span>}
                 </div>
-                <p className="mt-0.5 line-clamp-2 text-14 leading-[1.45] text-ink-3">{c.body}</p>
+                <p className="mt-0.5 line-clamp-2 text-14 leading-[1.45] wrap-anywhere text-ink-3">
+                  {c.body}
+                </p>
               </div>
             </li>
           ))}
@@ -95,7 +97,7 @@ function Body({ activity, compact }: { activity: FeedActivity; compact: boolean 
 
       {/* All-time, and worded so it doesn't pretend to be this week's news. */}
       {latest && (
-        <p className="flex items-start gap-1.5 text-13 text-muted">
+        <p className="flex items-start gap-1.5 text-13 wrap-anywhere text-muted">
           <Icon name={REACTIONS.find((r) => r.kind === latest.kind)?.icon ?? 'star'} size={15} />
           <span>
             Most recent reaction: <Link to={profilePath(latest.user)}>{latest.user.name}</Link> —{' '}
