@@ -17,6 +17,7 @@ import {
 } from '../../components/ui'
 import { useDocumentTitle } from '../../lib/hooks'
 import { GITHUB_URL } from '../../lib/site'
+import { LastUpdated } from './Prose'
 
 /** Running text inside a section; lists and links styled once here. */
 const body = cx(
@@ -342,6 +343,7 @@ export default function DocsPage() {
             Everything you need to share your work, find other people’s, and keep control of who
             sees what.
           </PageLede>
+          <LastUpdated date="2026-09-28" className="mt-2" />
         </div>
         <label className={cx(searchFrame, 'h-13 max-w-140 gap-3 rounded-2xl px-4.5')}>
           <Icon name="search" size={18} className="text-muted" />
