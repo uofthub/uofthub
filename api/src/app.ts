@@ -23,6 +23,7 @@ import { pushRoutes } from './routes/push.js'
 import { pathRoutes } from './routes/paths.js'
 import { campaignRoutes } from './routes/campaigns.js'
 import { sessionAccount } from './lib/session.js'
+import { hasAcceptedTerms } from './lib/terms.js'
 import { jwtSecret } from './lib/keys.js'
 
 export async function buildApp() {
@@ -165,6 +166,14 @@ export async function buildApp() {
       return reply
         .code(403)
         .send({ error: 'A moderator has suspended this account', code: 'SUSPENDED' })
+    }
+    // Nothing is published, sent or changed until the account has agreed to
+    // the Terms as they stand. The same routes a suspended account keeps —
+    // signing out, deleting, exporting — stay open, and so does agreeing.
+    if (!hasAcceptedTerms(account.termsAcceptedAt) && !allowed) {
+      return reply
+        .code(403)
+        .send({ error: 'Agree to the Terms to continue', code: 'TERMS_NOT_ACCEPTED' })
     }
   })
 

@@ -16,6 +16,7 @@ import { unconfirmedHandle, withSuggestedHandle } from '../lib/handles.js'
 import { matchesDeclaredType } from '../lib/fileValidation.js'
 import { tenantAllowed, tenantOfIdToken } from '../lib/microsoftTenant.js'
 import { isUofTEmail, NOT_UOFT_EMAIL } from '../lib/uoftEmail.js'
+import { hasAcceptedTerms } from '../lib/terms.js'
 
 const webUrl = () => process.env.WEB_URL ?? 'http://localhost:5173'
 
@@ -198,59 +199,66 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   // address is theirs and starts a session. An address that already has an
   // account gets an email saying so instead — never a password set on it,
   // which would hand the account to whoever typed the address.
-  app.post<{ Body: { email?: string; password?: string; name?: string } }>(
-    '/register',
-    { config: credentialRateLimit },
-    async (request, reply) => {
-      const email = String(request.body?.email ?? '')
-        .trim()
-        .toLowerCase()
-      const password = String(request.body?.password ?? '')
-      const name = String(request.body?.name ?? '').trim()
+  app.post<{
+    Body: { email?: string; password?: string; name?: string; acceptTerms?: boolean }
+  }>('/register', { config: credentialRateLimit }, async (request, reply) => {
+    const email = String(request.body?.email ?? '')
+      .trim()
+      .toLowerCase()
+    const password = String(request.body?.password ?? '')
+    const name = String(request.body?.name ?? '').trim()
 
-      if (!email || !password || !name) {
-        return reply.code(400).send({ error: 'Name, email and password are all required.' })
-      }
-      if (name.length > NAME_MAX)
-        return reply.code(400).send({ error: `A name is at most ${NAME_MAX} characters.` })
-      if (!isUofTEmail(email)) {
-        return reply.code(403).send({ error: NOT_UOFT_EMAIL, code: 'NOT_UOFT' })
-      }
-      const problem = passwordProblem(password)
-      if (problem) return reply.code(400).send({ error: problem })
+    if (!email || !password || !name) {
+      return reply.code(400).send({ error: 'Name, email and password are all required.' })
+    }
+    if (request.body?.acceptTerms !== true)
+      return reply.code(400).send({ error: 'Agree to the Terms to create an account.' })
+    if (name.length > NAME_MAX)
+      return reply.code(400).send({ error: `A name is at most ${NAME_MAX} characters.` })
+    if (!isUofTEmail(email)) {
+      return reply.code(403).send({ error: NOT_UOFT_EMAIL, code: 'NOT_UOFT' })
+    }
+    const problem = passwordProblem(password)
+    if (problem) return reply.code(400).send({ error: problem })
 
-      const existing = await db.user.findUnique({
-        where: { email },
-        select: { id: true, emailVerifiedAt: true, passwordHash: true },
-      })
+    const existing = await db.user.findUnique({
+      where: { email },
+      select: { id: true, emailVerifiedAt: true, passwordHash: true },
+    })
 
-      // Hashed whichever way this goes, so a known address does not answer
-      // faster than a new one.
-      const passwordHash = await hashPassword(password)
+    // Hashed whichever way this goes, so a known address does not answer
+    // faster than a new one.
+    const passwordHash = await hashPassword(password)
 
-      if (existing?.emailVerifiedAt) {
-        if (existing.passwordHash) sendInBackground(sendAlreadyRegisteredEmail(email))
-        else
-          sendInBackground(
-            sendPasswordResetEmail(email, await issueToken(existing.id, 'RESET_PASSWORD'), 'set')
-          )
-        return reply.code(202).send(CHECK_EMAIL)
-      }
-
-      // A confirmed account is somebody's; an unconfirmed one is not yet, so
-      // signing up again simply starts it over with the new details.
-      const user = existing
-        ? await db.user.update({ where: { email }, data: { name, passwordHash } })
-        : await db.user.create({
-            data: { email, name, passwordHash, handle: unconfirmedHandle() },
-          })
-
-      sendInBackground(
-        sendVerificationEmail(email, name, await issueToken(user.id, 'VERIFY_EMAIL'))
-      )
+    if (existing?.emailVerifiedAt) {
+      if (existing.passwordHash) sendInBackground(sendAlreadyRegisteredEmail(email))
+      else
+        sendInBackground(
+          sendPasswordResetEmail(email, await issueToken(existing.id, 'RESET_PASSWORD'), 'set')
+        )
       return reply.code(202).send(CHECK_EMAIL)
     }
-  )
+
+    // A confirmed account is somebody's; an unconfirmed one is not yet, so
+    // signing up again simply starts it over with the new details.
+    const user = existing
+      ? await db.user.update({
+          where: { email },
+          data: { name, passwordHash, termsAcceptedAt: new Date() },
+        })
+      : await db.user.create({
+          data: {
+            email,
+            name,
+            passwordHash,
+            handle: unconfirmedHandle(),
+            termsAcceptedAt: new Date(),
+          },
+        })
+
+    sendInBackground(sendVerificationEmail(email, name, await issueToken(user.id, 'VERIFY_EMAIL')))
+    return reply.code(202).send(CHECK_EMAIL)
+  })
 
   // POST /auth/verify — { token } from the confirmation email
   app.post<{ Body: { token?: string } }>(
@@ -470,6 +478,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
   )
 
+  // POST /auth/accept-terms — agree to the Terms as they stand. Open to a
+  // suspended account too: agreeing changes nothing it can do.
+  app.post(
+    '/accept-terms',
+    { preHandler: [app.authenticate], config: { allowSuspended: true } },
+    async (request) => {
+      const { termsAcceptedAt } = await db.user.update({
+        where: { id: request.user.sub },
+        data: { termsAcceptedAt: new Date() },
+        select: { termsAcceptedAt: true },
+      })
+      return { termsAcceptedAt, termsCurrent: true }
+    }
+  )
+
   // GET /auth/me — returns the current user from DB (requires auth)
   app.get('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
     const user = await db.user.findUnique({
@@ -498,6 +521,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         pushActivity: true,
         isAdmin: true,
         suspendedAt: true,
+        termsAcceptedAt: true,
         passwordHash: true,
         createdAt: true,
       },
@@ -505,6 +529,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!user) return reply.code(404).send({ error: 'User not found' })
     const { passwordHash, ...rest } = user
-    return { ...rest, hasPassword: !!passwordHash }
+    return {
+      ...rest,
+      hasPassword: !!passwordHash,
+      termsCurrent: hasAcceptedTerms(user.termsAcceptedAt),
+    }
   })
 }

@@ -179,3 +179,57 @@ describe('POST /admin/reports/:id/decision', () => {
     expect(res.statusCode).toBe(400)
   })
 })
+
+describe('sexual content reports', () => {
+  it('come first in the open queue, ahead of older reports', async () => {
+    const { report: older } = await openReport()
+    const subject = await createUser()
+    const reporter = await createUser()
+    const urgent = await db.report.create({
+      data: {
+        targetType: 'USER',
+        subjectUserId: subject.id,
+        reporterId: reporter.id,
+        reason: 'SEXUAL_CONTENT',
+      },
+    })
+    const admin = await createUser({ isAdmin: true })
+    const app = await getApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/reports',
+      cookies: await cookieFor(admin),
+    })
+    expect(res.json().map((r: { id: string }) => r.id)).toEqual([urgent.id, older.id])
+  })
+
+  it('keep the image a take-down removes, as evidence on the report', async () => {
+    const subject = await createUser()
+    await db.user.update({
+      where: { id: subject.id },
+      data: { avatarKey: 'avatars/evidence.png', avatarUrl: 'x', avatarIsCustom: true },
+    })
+    const reporter = await createUser()
+    const report = await db.report.create({
+      data: {
+        targetType: 'USER',
+        subjectUserId: subject.id,
+        reporterId: reporter.id,
+        reason: 'SEXUAL_CONTENT',
+      },
+    })
+    const admin = await createUser({ isAdmin: true })
+    const app = await getApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: `/admin/reports/${report.id}/decision`,
+      cookies: await cookieFor(admin),
+      payload: { decision: 'TAKE_DOWN' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect((await db.user.findUniqueOrThrow({ where: { id: subject.id } })).avatarKey).toBeNull()
+    expect((await db.report.findUniqueOrThrow({ where: { id: report.id } })).evidenceKeys).toEqual([
+      'avatars/evidence.png',
+    ])
+  })
+})

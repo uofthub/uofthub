@@ -11,6 +11,7 @@ import { Header } from './Header'
 import { OfflineBanner } from './OfflineBanner'
 import { BottomNav, MobileHeader } from './MobileChrome'
 import { ScrollUp } from './ScrollUp'
+import { TermsGate } from './TermsGate'
 
 /** Wide enough for the home feed's right rail, which carries the footer line itself. */
 const RAIL = '(width >= 75rem)'
@@ -63,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {landing ? <LandingFooter /> : !feedHasRail && <AppFooter />}
       {phone && <BottomNav />}
       <ScrollUp phone={phone} />
+      <TermsGate />
       <CommandPalette />
       <ConfirmHost />
       <Toaster lifted={phone} />

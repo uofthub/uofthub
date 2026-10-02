@@ -4,8 +4,9 @@ import type { OAuth2Namespace } from '@fastify/oauth2'
 declare module 'fastify' {
   interface FastifyContextConfig {
     /**
-     * Lets a suspended account use this write route anyway — signing out,
-     * deleting or exporting its own things. See `authenticate` in app.ts.
+     * Lets a suspended account, or one that has not agreed to the current
+     * Terms, use this write route anyway — signing out, deleting or exporting
+     * its own things, or agreeing. See `authenticate` in app.ts.
      */
     allowSuspended?: boolean
   }

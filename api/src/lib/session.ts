@@ -46,7 +46,11 @@ export function issueSession(
   })
 }
 
-export type SessionAccount = { id: string; suspendedAt: Date | null }
+export type SessionAccount = {
+  id: string
+  suspendedAt: Date | null
+  termsAcceptedAt: Date | null
+}
 
 const checked = new WeakMap<FastifyRequest, SessionAccount | null>()
 
@@ -63,12 +67,16 @@ export async function sessionAccount(request: FastifyRequest): Promise<SessionAc
     const [user, revoked] = await Promise.all([
       db.user.findUnique({
         where: { id: request.user.sub },
-        select: { id: true, sessionVersion: true, suspendedAt: true },
+        select: { id: true, sessionVersion: true, suspendedAt: true, termsAcceptedAt: true },
       }),
       jti ? db.revokedSession.findUnique({ where: { jti }, select: { jti: true } }) : null,
     ])
     if (user && !revoked && user.sessionVersion === (request.user.sv ?? 0))
-      account = { id: user.id, suspendedAt: user.suspendedAt }
+      account = {
+        id: user.id,
+        suspendedAt: user.suspendedAt,
+        termsAcceptedAt: user.termsAcceptedAt,
+      }
   } catch {
     account = null
   }

@@ -14,7 +14,7 @@ import { useAuth } from '../../lib/auth'
 import { useDocumentTitle } from '../../lib/hooks'
 import { CreateOrgDialog } from '../orgs/CreateOrgDialog'
 import { MessageReportRow } from './MessageReportRow'
-import { STATUS_LABELS, reasonShort } from '../../lib/moderation'
+import { STATUS_LABELS, reasonShort, isUrgentReason } from '../../lib/moderation'
 import {
   Button,
   Card,
@@ -129,7 +129,7 @@ function ReportRow({ report }: { report: AdminReport }) {
       tags={
         <>
           <Chip size="sm">{TARGET_LABELS[report.targetType]}</Chip>
-          <Chip size="sm" tone="navy">
+          <Chip size="sm" tone={isUrgentReason(report.reason) ? 'red' : 'navy'}>
             {reasonShort(report.reason)}
           </Chip>
           <Pill dot={REPORT_DOTS[report.status]}>{STATUS_LABELS[report.status]}</Pill>

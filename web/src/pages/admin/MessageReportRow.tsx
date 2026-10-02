@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ReportStatus } from '@uofthub/types'
 import { api, type AdminMessageReport, type MessageReportDecision } from '../../lib/api'
-import { reasonShort } from '../../lib/moderation'
+import { reasonShort, isUrgentReason } from '../../lib/moderation'
 import { Button, Chip, cx, ErrorText, Pill, TextArea } from '../../components/ui'
 import { Decisions, QueueCard, Quote } from './QueueCard'
 
@@ -51,7 +51,7 @@ export function MessageReportRow({ report }: { report: AdminMessageReport }) {
       title={reported.name}
       tags={
         <>
-          <Chip size="sm" tone="navy">
+          <Chip size="sm" tone={isUrgentReason(report.reason) ? 'red' : 'navy'}>
             {reasonShort(report.reason)}
           </Chip>
           <Pill dot={STATUS[report.status].dot}>{STATUS[report.status].label}</Pill>
