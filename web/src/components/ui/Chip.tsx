@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
 
-type ChipTone = 'default' | 'subtle' | 'outline' | 'active' | 'navy' | 'green'
+type ChipTone = 'default' | 'subtle' | 'outline' | 'active' | 'navy' | 'green' | 'red'
 type ChipSize = 'md' | 'sm' | 'xs'
 
 type ChipProps = {
@@ -27,6 +27,7 @@ const TONE: Record<ChipTone, string> = {
   active: 'bg-navy text-white',
   navy: 'bg-navy-tint text-navy-ink',
   green: 'bg-green-tint text-green-ink',
+  red: 'bg-red-tint text-red',
 }
 
 const SIZE: Record<ChipSize, string> = {

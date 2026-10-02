@@ -221,6 +221,7 @@ export type ReportReason =
   | 'INTELLECTUAL_PROPERTY'
   | 'PRIVACY'
   | 'IMPERSONATION'
+  | 'SEXUAL_CONTENT'
   | 'OTHER'
 
 /** `OPEN` until a moderator decides it; the rest are the decision taken. */

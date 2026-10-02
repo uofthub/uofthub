@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { api, API_URL, ApiError } from '../../lib/api'
 import { returnPath } from '../../lib/returnTo'
@@ -38,6 +38,22 @@ const OAUTH_ERRORS: Record<string, string> = {
   unavailable: 'Microsoft sign-in isn’t set up here. Use your email and password instead.',
 }
 
+/** The Terms and Privacy, opened beside the form rather than instead of it. */
+function TermsLinks() {
+  const link = 'font-semibold text-navy-ink underline'
+  return (
+    <>
+      <Link to="/terms" target="_blank" className={link}>
+        Terms
+      </Link>{' '}
+      and{' '}
+      <Link to="/privacy" target="_blank" className={link}>
+        Privacy policy
+      </Link>
+    </>
+  )
+}
+
 /** "Check your inbox", after anything that sent an email. */
 function CheckEmail({ email, what, onBack }: { email: string; what: string; onBack: () => void }) {
   return (
@@ -60,6 +76,7 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
   const { refetch } = useAuth()
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [show, setShow] = useState(false)
+  const [agreed, setAgreed] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
 
   const email = form.email.trim().toLowerCase()
@@ -70,7 +87,12 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
         return 'signed-in' as const
       }
       if (mode === 'signup')
-        await api.auth.register({ name: form.name, email: form.email, password: form.password })
+        await api.auth.register({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          acceptTerms: agreed,
+        })
       else await api.auth.forgotPassword(email)
       return 'sent' as const
     },
@@ -105,7 +127,8 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
     !!email &&
     (mode === 'forgot' ||
       (form.password.length > 0 &&
-        (mode === 'login' || (!!form.name.trim() && form.password.length >= MIN_PASSWORD_LENGTH))))
+        (mode === 'login' ||
+          (!!form.name.trim() && form.password.length >= MIN_PASSWORD_LENGTH && agreed))))
 
   return (
     <form
@@ -177,6 +200,19 @@ function CredentialsForm({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => 
             />
           </span>
         </Field>
+      )}
+      {mode === 'signup' && (
+        <label className="flex cursor-pointer items-start gap-2.5 text-14 text-ink-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-navy"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+          />
+          <span>
+            I agree to the <TermsLinks />, including no sexual content or nudity.
+          </span>
+        </label>
       )}
       {submit.isError && (
         <ErrorText>
@@ -310,7 +346,8 @@ export default function SessionPage() {
           </Eyebrow>
           <CredentialsForm key={mode} mode={mode} setMode={setMode} />
           <p className="text-center text-13 text-muted">
-            Anything you mark public can be seen by anyone on the internet.
+            Anything you mark public can be seen by anyone on the internet. By continuing, you agree
+            to the <TermsLinks />.
           </p>
         </div>
       </main>

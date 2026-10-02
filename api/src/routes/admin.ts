@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
-import type { ReportStatus } from '@prisma/client'
+import type { ReportReason, ReportStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAdmin } from '../lib/admin.js'
 import { notify } from '../lib/notifications.js'
@@ -9,6 +9,7 @@ import { startOfUtcWeek } from '../lib/dates.js'
 import { isListed } from '../lib/visibility.js'
 import { changeHandle, HandleError, normalizeHandle } from '../lib/handles.js'
 import { campaignSource } from '../lib/campaigns.js'
+import { URGENT_REASONS } from '../lib/reports.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
@@ -61,6 +62,7 @@ const REPORT_SELECT = {
 
 type ReportRow = {
   id: string
+  reason: ReportReason
   targetType: (typeof REPORT_TARGETS)[number]
   projectId: string | null
   commentId: string | null
@@ -90,8 +92,17 @@ function sameTargetWhere(report: ReportRow) {
  * (see the route below); a comment, a collection or an event is removed; a
  * profile has its free text and picture cleared. The account itself is a
  * separate decision — see `suspend`.
+ *
+ * For sexual content, an image it takes off the site is kept rather than
+ * deleted, and recorded on the report: if it involves a minor it is evidence,
+ * and the law requires it be preserved and reported, not destroyed.
  */
 async function takeDown(report: ReportRow): Promise<void> {
+  const keepEvidence = report.reason === 'SEXUAL_CONTENT'
+  const keep = (key: string | null | undefined) =>
+    key
+      ? db.report.update({ where: { id: report.id }, data: { evidenceKeys: { push: key } } })
+      : undefined
   switch (report.targetType) {
     case 'PROJECT':
       if (report.projectId)
@@ -113,9 +124,18 @@ async function takeDown(report: ReportRow): Promise<void> {
       if (report.collectionId)
         await db.collection.deleteMany({ where: { id: report.collectionId } })
       return
-    case 'ORG_ACTIVITY':
-      if (report.activityId) await db.orgActivity.deleteMany({ where: { id: report.activityId } })
+    case 'ORG_ACTIVITY': {
+      if (!report.activityId) return
+      if (keepEvidence) {
+        const activity = await db.orgActivity.findUnique({
+          where: { id: report.activityId },
+          select: { imageKey: true },
+        })
+        await keep(activity?.imageKey)
+      }
+      await db.orgActivity.deleteMany({ where: { id: report.activityId } })
       return
+    }
     case 'USER': {
       if (!report.subjectUserId) return
       const user = await db.user.findUnique({
@@ -135,10 +155,23 @@ async function takeDown(report: ReportRow): Promise<void> {
           avatarIsCustom: false,
         },
       })
-      if (user?.avatarKey) await deleteObject(user.avatarKey).catch(() => undefined)
+      if (keepEvidence) await keep(user?.avatarKey)
+      else if (user?.avatarKey) await deleteObject(user.avatarKey).catch(() => undefined)
       return
     }
   }
+}
+
+/**
+ * The open queue with urgent reasons ahead of everything else, each part
+ * oldest first, capped at 100 in all.
+ */
+async function urgentFirst<T>(
+  find: (reason: { in: ReportReason[] } | { notIn: ReportReason[] }, take: number) => Promise<T[]>
+): Promise<T[]> {
+  const urgent = await find({ in: [...URGENT_REASONS] }, 100)
+  const rest = await find({ notIn: [...URGENT_REASONS] }, 100 - urgent.length)
+  return [...urgent, ...rest]
 }
 
 /** What a report's subject is told happened, in the words the bell uses. */
@@ -199,17 +232,18 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (type && !REPORT_TARGETS.includes(type as ReportRow['targetType']))
         return reply.code(400).send({ error: 'Unknown type' })
 
-      return db.report.findMany({
-        where: {
-          ...(status !== 'all' && { status: status as ReportStatus }),
-          ...(type && { targetType: type as ReportRow['targetType'] }),
-        },
-        select: REPORT_SELECT,
-        // Oldest first for the queue: the report waiting longest is the one to
-        // decide next. (`findMany` without an order is not stable.)
-        orderBy: { createdAt: status === 'OPEN' ? 'asc' : 'desc' },
-        take: 100,
-      })
+      const where = {
+        ...(status !== 'all' && { status: status as ReportStatus }),
+        ...(type && { targetType: type as ReportRow['targetType'] }),
+      }
+      // Oldest first for the queue: the report waiting longest is the one to
+      // decide next. (`findMany` without an order is not stable.)
+      const orderBy = { createdAt: status === 'OPEN' ? 'asc' : 'desc' } as const
+      if (status !== 'OPEN')
+        return db.report.findMany({ where, select: REPORT_SELECT, orderBy, take: 100 })
+      return urgentFirst((reason, take) =>
+        db.report.findMany({ where: { ...where, reason }, select: REPORT_SELECT, orderBy, take })
+      )
     }
   )
 
@@ -405,12 +439,21 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       if (status !== 'all' && !REPORT_STATUSES.includes(status as ReportStatus)) {
         return reply.code(400).send({ error: 'Unknown status' })
       }
-      return db.messageReport.findMany({
-        where: status === 'all' ? {} : { status: status as ReportStatus },
-        select: MESSAGE_REPORT_SELECT,
-        orderBy: { createdAt: status === 'OPEN' ? 'asc' : 'desc' },
-        take: 100,
-      })
+      if (status !== 'OPEN')
+        return db.messageReport.findMany({
+          where: status === 'all' ? {} : { status: status as ReportStatus },
+          select: MESSAGE_REPORT_SELECT,
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        })
+      return urgentFirst((reason, take) =>
+        db.messageReport.findMany({
+          where: { status: 'OPEN', reason },
+          select: MESSAGE_REPORT_SELECT,
+          orderBy: { createdAt: 'asc' },
+          take,
+        })
+      )
     }
   )
 

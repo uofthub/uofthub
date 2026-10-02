@@ -161,6 +161,8 @@ enum ReportReason {
   PRIVACY
   /// A profile passing itself off as somebody else.
   IMPERSONATION
+  /// Sexual content or nudity. First in the moderation queue.
+  SEXUAL_CONTENT
   OTHER
 }
 
@@ -240,6 +242,10 @@ model User {
   /// sign in, read, and delete or export their own things, but can't post,
   /// comment, react, follow or message. Cleared to lift it. See lib/session.ts.
   suspendedAt          DateTime?
+  /// When they last agreed to the Terms. Writes are refused while it is unset
+  /// or older than TERMS_VERSION (lib/terms.ts), which is how a change to the
+  /// Terms asks everyone to agree again.
+  termsAcceptedAt      DateTime?
   /// Platform moderator. Set directly in the database (see
   /// `pnpm --filter @uofthub/api grant-admin <email>`) — nothing in the app
   /// grants it, so it can't be escalated to through the API.
@@ -459,6 +465,10 @@ model Report {
   /// What was reported, as it read when it was reported — a comment or an
   /// event can be edited or deleted before a moderator gets to it.
   excerpt       String?
+  /// Files a take-down for sexual content kept instead of deleting — an
+  /// avatar or an event image — in case the report has to go to the police.
+  /// Never served to anyone.
+  evidenceKeys  String[]     @default([])
   reason        ReportReason
   /// Optional free text from the reporter — the reason enum is what the queue
   /// sorts on, this is the context a moderator actually needs to decide.

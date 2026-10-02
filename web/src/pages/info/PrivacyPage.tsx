@@ -51,6 +51,15 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             do not record your address.
           </li>
           <li>
+            <strong>Your agreement to the Terms</strong> — when you agreed to the{' '}
+            <Link to="/terms">Terms</Link>, each time you are asked to.
+          </li>
+          <li>
+            <strong>Reports</strong> — when you report something, who you are, what you reported and
+            why, and a copy of it as it read at the time. The person you reported is never told who
+            reported them.
+          </li>
+          <li>
             <strong>Operational records</strong> — server logs, and a list of sessions that were
             signed out, kept only until they would have expired anyway.
           </li>
@@ -185,6 +194,13 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           you.
         </p>
         <p>
+          When something is taken down for sexual content, an image we remove is kept in private
+          storage instead of being deleted, linked to the report, and seen by nobody but moderators.
+          If it involves a person under 18, we give it and the account details behind it to the
+          police and to Cybertip.ca, as Canadian law requires. See{' '}
+          <Link to="/terms#sexual-content">No sexual content</Link>.
+        </p>
+        <p>
           Your account does not expire when you graduate. Alumni keeping their portfolio is a
           deliberate goal, not an oversight.
         </p>
@@ -251,7 +267,7 @@ export default function PrivacyPage() {
     <Prose
       title="Privacy"
       lede="What we collect, why, and who else sees it."
-      updated="2026-09-30"
+      updated="2026-10-02"
       icon="lock"
       sections={SECTIONS}
       summary={

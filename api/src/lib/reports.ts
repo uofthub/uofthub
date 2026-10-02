@@ -21,8 +21,15 @@ export const REPORT_REASONS = [
   'INTELLECTUAL_PROPERTY',
   'PRIVACY',
   'IMPERSONATION',
+  'SEXUAL_CONTENT',
   'OTHER',
 ] as const satisfies readonly ReportReason[]
+
+/**
+ * Reasons a moderator should see before anything else, whatever their age:
+ * every hour sexual content stays up is an hour more people can come across it.
+ */
+export const URGENT_REASONS = ['SEXUAL_CONTENT'] as const satisfies readonly ReportReason[]
 
 export const REPORT_DETAILS_MAX = 1000
 

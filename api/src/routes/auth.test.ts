@@ -43,7 +43,8 @@ const GOOD_PASSWORD = 'correct horse battery'
 const post = async (url: string, payload: Record<string, unknown>, cookies?: { token: string }) =>
   (await getApp()).inject({ method: 'POST', url, payload, cookies, remoteAddress: uniqueIp() })
 
-const register = (payload: Record<string, unknown>) => post('/auth/register', payload)
+const register = (payload: Record<string, unknown>) =>
+  post('/auth/register', { acceptTerms: true, ...payload })
 const login = (payload: Record<string, unknown>) => post('/auth/login', payload)
 
 /** Sign up and follow the emailed link, as a student would. Returns the verify response. */
@@ -57,6 +58,23 @@ const tokenCookie = (res: Awaited<ReturnType<typeof post>>) =>
   res.cookies.find((c) => c.name === 'token')
 
 describe('POST /auth/register', () => {
+  it('refuses an account without agreeing to the Terms', async () => {
+    const res = await register({
+      name: 'Ada',
+      email: 'ada@mail.utoronto.ca',
+      password: GOOD_PASSWORD,
+      acceptTerms: false,
+    })
+    expect(res.statusCode).toBe(400)
+    expect(await db.user.count()).toBe(0)
+  })
+
+  it('records when the Terms were agreed to', async () => {
+    await register({ name: 'Ada', email: 'ada@mail.utoronto.ca', password: GOOD_PASSWORD })
+    const user = await db.user.findUniqueOrThrow({ where: { email: 'ada@mail.utoronto.ca' } })
+    expect(user.termsAcceptedAt).toBeInstanceOf(Date)
+  })
+
   it('refuses anything that is not exactly one U of T address', async () => {
     for (const email of [
       'me@gmail.com,x@mail.utoronto.ca',
@@ -469,6 +487,44 @@ describe('suspended accounts', () => {
     expect(write.statusCode).toBe(403)
     expect(write.json().code).toBe('SUSPENDED')
     expect((await post('/auth/logout', {}, session)).statusCode).toBe(200)
+  })
+})
+
+describe('agreeing to the Terms', () => {
+  it('blocks writes until the account agrees, then lets them through', async () => {
+    const user = await createUser({ acceptedTerms: false })
+    const session = await cookieFor(user)
+    const app = await getApp()
+    const createProject = () =>
+      app.inject({ method: 'POST', url: '/projects', cookies: session, payload: { title: 'x' } })
+
+    const me = await app.inject({ method: 'GET', url: '/auth/me', cookies: session })
+    expect(me.json()).toMatchObject({ termsAcceptedAt: null, termsCurrent: false })
+    const blocked = await createProject()
+    expect(blocked.statusCode).toBe(403)
+    expect(blocked.json().code).toBe('TERMS_NOT_ACCEPTED')
+
+    expect((await post('/auth/accept-terms', {}, session)).statusCode).toBe(200)
+    expect((await createProject()).statusCode).not.toBe(403)
+    const after = await app.inject({ method: 'GET', url: '/auth/me', cookies: session })
+    expect(after.json().termsCurrent).toBe(true)
+  })
+
+  it('asks again once the Terms change', async () => {
+    const user = await createUser()
+    await db.user.update({
+      where: { id: user.id },
+      data: { termsAcceptedAt: new Date('2020-01-01T00:00:00Z') },
+    })
+    const session = await cookieFor(user)
+    const app = await getApp()
+    const me = await app.inject({ method: 'GET', url: '/auth/me', cookies: session })
+    expect(me.json().termsCurrent).toBe(false)
+  })
+
+  it('still lets the account sign out', async () => {
+    const user = await createUser({ acceptedTerms: false })
+    expect((await post('/auth/logout', {}, await cookieFor(user))).statusCode).toBe(200)
   })
 })
 

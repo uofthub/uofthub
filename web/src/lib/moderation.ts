@@ -1,12 +1,23 @@
 import type { ReportReason, ReportStatus } from '@uofthub/types'
 
 /**
+ * Offered at the top of every report dialog, and first in the moderation queue:
+ * the one reason that must never wait behind the others.
+ */
+const SEXUAL_CONTENT = {
+  value: 'SEXUAL_CONTENT' as const,
+  label: 'Sexual content or nudity',
+  short: 'Sexual content',
+}
+
+/**
  * The reasons a project can be reported for, in the order the report dialog
  * offers them: the ones specific to student work first, the generic ones last.
  * `label` is what the reporter picks from; `short` is what the moderation
  * queue shows on a chip.
  */
 export const REPORT_REASONS: { value: ReportReason; label: string; short: string }[] = [
+  SEXUAL_CONTENT,
   {
     value: 'ACADEMIC_INTEGRITY',
     label: 'Academic integrity — plagiarised work, or solutions to live coursework',
@@ -46,11 +57,15 @@ export const PROFILE_REPORT_REASONS: typeof REPORT_REASONS = [IMPERSONATION, ...
  * moderation queue labels both kinds of report the same way.
  */
 export const MESSAGE_REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'SEXUAL_CONTENT', label: 'Sexual messages or images' },
   { value: 'HARASSMENT', label: 'Harassment, threats or hateful messages' },
   { value: 'SPAM', label: 'Spam, scams or advertising' },
   { value: 'PRIVACY', label: 'Sharing someone’s personal information' },
   { value: 'OTHER', label: 'Something else' },
 ]
+
+/** Reasons the API puts first in the queue (URGENT_REASONS in api/src/lib/reports.ts). */
+export const isUrgentReason = (reason: ReportReason) => reason === 'SEXUAL_CONTENT'
 
 export const reasonShort = (reason: ReportReason) =>
   PROFILE_REPORT_REASONS.find((r) => r.value === reason)?.short ?? reason

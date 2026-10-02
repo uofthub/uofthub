@@ -11,6 +11,25 @@ import { Prose } from './Prose'
 
 const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
   {
+    id: 'agreement',
+    heading: 'Agreeing to these terms',
+    body: (
+      <>
+        <p>
+          These terms are an agreement between you and the students who run uofthub. By creating an
+          account, signing in, or otherwise using uofthub, you agree to them and to the{' '}
+          <Link to="/privacy">Privacy policy</Link>. If you do not agree, do not use uofthub.
+        </p>
+        <p>
+          When you create an account you tick a box saying you agree, and we record when you did. If
+          these terms change in a way that affects you, we ask you to agree again before you can
+          post, comment or message, and we record that too. You can always read the version in force
+          on this page; the date at the top is when it last changed.
+        </p>
+      </>
+    ),
+  },
+  {
     id: 'ownership',
     heading: 'You own your work',
     body: (
@@ -70,6 +89,11 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           <li>
             contains personal information about someone who has not agreed to it being published;
           </li>
+          <li>
+            is sexually explicit, contains nudity, or sexualises anyone — in a project, a file, an
+            image, an avatar, a comment, a link or a message. See{' '}
+            <a href="#sexual-content">No sexual content</a>;
+          </li>
           <li>harasses, threatens or demeans a person or group;</li>
           <li>is malware, or is spam and advertising dressed up as a project.</li>
         </ul>
@@ -82,6 +106,64 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           Confidential research and work under an NDA is your call to make, not ours — but "Private"
           is the setting for it, and if you are unsure whether you may post something at all, ask
           your supervisor first.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'sexual-content',
+    heading: 'No sexual content',
+    body: (
+      <>
+        <p>
+          uofthub is for academic and creative work. Sexual content has no place on it, whatever its
+          visibility — that includes drafts, private projects and direct messages. This covers
+          pornography, nudity, sexual images or video, sexually explicit writing, and anything that
+          sexualises a real person, a classmate above all. Work that genuinely studies these
+          subjects, such as research on sexual health, is allowed as long as it is not itself
+          explicit; if you are unsure, keep it off uofthub.
+        </p>
+        <p>
+          Sending sexual messages or images to someone who has not asked for them is harassment, and
+          so is sharing an intimate image of anyone without their consent. Doing the latter is also
+          a crime in Canada.
+        </p>
+        <p>
+          <strong>Anything sexual that involves a person under 18 is removed at once</strong>, the
+          account that posted it is suspended, and it is reported to the police and to{' '}
+          <a href="https://www.cybertip.ca">Cybertip.ca</a>, as Canadian law requires. We keep a
+          copy of what we removed, out of everyone's sight, so that it can be handed to them; we do
+          not delete evidence.
+        </p>
+        <p>
+          If you come across sexual content here, report it with{' '}
+          <strong>Sexual content or nudity</strong>. Those reports go to the top of the moderation
+          queue, ahead of everything else. If someone is in danger, call 911 first.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'others-content',
+    heading: 'What other people post',
+    body: (
+      <>
+        <p>
+          Everything on uofthub is posted by its users. We do not review projects, files, comments
+          or messages before they appear, and we cannot promise that you will never see something
+          that breaks these terms or that you find offensive. Whoever posts something is responsible
+          for it — not uofthub, and not the people who run it.
+        </p>
+        <p>
+          What we do promise is to act on what we are told about. Every report is read by a
+          moderator, and content that breaks these terms is taken down. If something here upsets
+          you, report it and, if you want to stop seeing someone, block them.
+        </p>
+        <p>
+          You agree that you use uofthub, and look at what other people post on it, at your own
+          discretion, and that uofthub and the students who run it are not liable to you for content
+          another user posted, to the fullest extent the law allows. If something you posted leads
+          to a claim against uofthub, you are responsible for it.
         </p>
       </>
     ),
@@ -110,7 +192,9 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
             <strong>Takes it down</strong> — a project is forced back to private and its owner
             cannot re-open it; nothing is deleted, and the project, its files and its history stay
             in the owner's account. A comment, collection or event is removed. A profile loses its
-            bio, links and photo.
+            bio, links and photo. When the reason is sexual content, an image we take down is kept
+            out of sight rather than deleted, as described under{' '}
+            <a href="#sexual-content">No sexual content</a>.
           </li>
         </ul>
         <p>
@@ -141,10 +225,12 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           or whether you are still enrolled.
         </p>
         <p>
-          We may suspend an account that repeatedly publishes material covered above. A suspended
-          account can still sign in, read, download its data and delete itself, but cannot post,
-          comment, react, follow or message until a moderator lifts it. We do not delete a student's
-          work to make a point: a suspension erases nothing.
+          We may suspend an account that repeatedly publishes material covered above, and suspend
+          one at once for sexual content involving a minor, for sharing intimate images without
+          consent, or for anything else serious enough that a warning would not be enough. A
+          suspended account can still sign in, read, download its data and delete itself, but cannot
+          post, comment, react, follow or message until a moderator lifts it. We do not delete a
+          student's work to make a point: a suspension erases nothing.
         </p>
         <p>
           You can block another student from their profile or a conversation. Neither of you can
@@ -200,10 +286,17 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           backup service. Keep your own copy of anything you would be upset to lose.
         </p>
         <p>
-          We do not sell your work or your attention, run ads, or scrape Canvas or any other
-          university system. If these terms change in a way that affects what happens to your work,
-          the change will be announced in-app before it takes effect.
+          To the fullest extent the law allows, uofthub is provided without warranties of any kind,
+          and the students who run it are not liable for any indirect or consequential loss arising
+          from your use of it, or for anything posted by other users. Nothing in these terms limits
+          a liability that the law does not allow to be limited.
         </p>
+        <p>
+          We do not sell your work or your attention, run ads, or scrape Canvas or any other
+          university system. If these terms change in a way that affects you, the change will be
+          announced in-app before it takes effect, and you will be asked to agree to it again.
+        </p>
+        <p>These terms are governed by the laws of Ontario and of Canada that apply there.</p>
       </>
     ),
   },
@@ -214,14 +307,14 @@ export default function TermsPage() {
     <Prose
       title="Terms & ownership"
       lede="What happens to the work you put here, in plain language."
-      updated="2026-09-28"
+      updated="2026-10-02"
       icon="shieldCheck"
       sections={SECTIONS}
       summary={
         <>
           The short version: <strong>your work stays yours</strong>, it is private until you say
-          otherwise, and the only thing we ask is that what you publish is actually yours to
-          publish.
+          otherwise, nothing sexual is allowed anywhere on uofthub, and we ask that what you publish
+          is actually yours to publish. By using uofthub you agree to these terms.
         </>
       }
       footer={

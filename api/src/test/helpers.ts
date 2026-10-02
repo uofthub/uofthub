@@ -52,7 +52,13 @@ export function uniqueIp(): string {
 let seq = 0
 
 export async function createUser(
-  overrides: { email?: string; name?: string; isAdmin?: boolean; verified?: boolean } = {}
+  overrides: {
+    email?: string
+    name?: string
+    isAdmin?: boolean
+    verified?: boolean
+    acceptedTerms?: boolean
+  } = {}
 ) {
   seq += 1
   const faculty = overrides.email?.endsWith('@utoronto.ca') ?? false
@@ -66,6 +72,8 @@ export async function createUser(
       // Confirmed unless a test says otherwise — the state every account a
       // route sees is in, since an unconfirmed one cannot sign in.
       emailVerifiedAt: overrides.verified === false ? null : new Date(),
+      // Agreed to the current Terms unless a test says otherwise, for the same reason.
+      termsAcceptedAt: overrides.acceptedTerms === false ? null : new Date(),
     },
   })
 }

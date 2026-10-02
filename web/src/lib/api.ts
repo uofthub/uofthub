@@ -74,6 +74,10 @@ export type MeUser = User & {
   pushActivity: boolean
   /** Set while a moderator has suspended the account. */
   suspendedAt: string | null
+  /** When they last agreed to the Terms; null if they never have. */
+  termsAcceptedAt: string | null
+  /** Whether that agreement covers the Terms as they stand — writes are refused until it does. */
+  termsCurrent: boolean
 }
 
 type CheckEmail = { checkEmail: true }
@@ -639,8 +643,10 @@ export const api = {
     logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
     login: (body: { email: string; password: string }) =>
       request<SignedIn>('/auth/login', post(body)),
-    register: (body: { name: string; email: string; password: string }) =>
+    register: (body: { name: string; email: string; password: string; acceptTerms: boolean }) =>
       request<CheckEmail>('/auth/register', post(body)),
+    acceptTerms: () =>
+      request<{ termsAcceptedAt: string; termsCurrent: true }>('/auth/accept-terms', post()),
     verify: (token: string) => request<SignedIn>('/auth/verify', post({ token })),
     resendVerification: (email: string) =>
       request<CheckEmail>('/auth/resend-verification', post({ email })),
