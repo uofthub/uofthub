@@ -543,6 +543,15 @@ export type OrgDetail = Org & {
   }[]
 }
 
+/** An image or file a report is about, signed for a moderator for five minutes. */
+export type ReportMedia = {
+  label: string
+  name: string
+  /** `image` is shown inline; anything else is a download. */
+  kind: 'image' | 'file'
+  url: string
+}
+
 /** A report as the moderation queue sees it — reporter and project inlined. */
 export type ReportTargetType = 'PROJECT' | 'COMMENT' | 'COLLECTION' | 'USER' | 'ORG_ACTIVITY'
 
@@ -806,6 +815,7 @@ export const api = {
   admin: {
     reports: (status: ReportStatus | 'all' = 'OPEN') =>
       request<AdminReport[]>(`/admin/reports?status=${status}`),
+    reportMedia: (id: string) => request<ReportMedia[]>(`/admin/reports/${id}/media`),
     decide: (id: string, body: { decision: ReportDecision; note?: string; suspend?: boolean }) =>
       request<AdminReport>(`/admin/reports/${id}/decision`, post(body)),
     restoreProject: (id: string, note?: string) =>

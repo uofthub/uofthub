@@ -372,9 +372,11 @@ A warning or a take-down also closes every other open report about the same thin
 
 Comments can be edited by their author and deleted by their author, the project's owner or a moderator; one with replies stays as an empty "deleted" placeholder so the thread survives. Blocking (`lib/blocks.ts`) reaches past messages: neither student can comment on, reply to, react to or follow the other, and existing follows end.
 
+**Seeing what was reported** — a moderator can't rely on the public pages: a taken-down project is private, a flagged image is unlinked, and evidence is shown nowhere. **Show what was reported** on a report fetches `GET /admin/reports/:id/media` (`lib/reportMedia.ts`): the kept evidence copies (or, without one, the flagged image), and for a project its files and thumbnails, for a profile its current photo, for an event its image — whatever their visibility, as five-minute signed URLs. Images whose bytes are PNG, JPEG, GIF or WebP are shown inline, blurred until clicked; anything else is a download. Nothing is fetched until a moderator asks.
+
 Message reports work the same way, about a person rather than a project: `GET /admin/message-reports`, and a decision of dismiss, warn, or suspend messaging (`User.messaging_suspended_at`), which sends `MESSAGING_MODERATED`. See [MessageReport](#messagereport).
 
-**Sexual content** is banned everywhere, whatever the visibility (`/terms#sexual-content`). Taking one of these reports down keeps a copy of any image it removes — an avatar, an event image — under `evidence/` (`lib/evidence.ts`), recorded in `Report.evidence_keys`, because sexual content involving a minor must be preserved and reported to police and Cybertip.ca, not destroyed. It is a copy rather than the original key because an avatar's key is reused by every upload and every Microsoft photo sync. Evidence is never served; getting it out is a manual job in the R2 dashboard.
+**Sexual content** is banned everywhere, whatever the visibility (`/terms#sexual-content`). Taking one of these reports down keeps a copy of any image it removes — an avatar, an event image — under `evidence/` (`lib/evidence.ts`), recorded in `Report.evidence_keys`, because sexual content involving a minor must be preserved and reported to police and Cybertip.ca, not destroyed. It is a copy rather than the original key because an avatar's key is reused by every upload and every Microsoft photo sync. Evidence is served to nobody but moderators (below); handing it to the police is a manual export from the R2 dashboard.
 
 ### Image scanning
 
