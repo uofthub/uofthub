@@ -211,7 +211,11 @@ export function Gallery({ project, isOwner }: { project: ProjectDetail; isOwner:
         ) : (
           <Cover project={project} height={520} style={{ height: '100%' }}>
             {isOwner && (
-              <CoverTag icon={<Icon name="image" size={14} />}>
+              // At the top: the cover's own title sits bottom-left.
+              <CoverTag
+                icon={<Icon name="image" size={14} />}
+                className="top-3 right-3 bottom-auto h-auto min-h-6.5 py-1"
+              >
                 Add an image, or lead with an output, to replace this cover
               </CoverTag>
             )}
