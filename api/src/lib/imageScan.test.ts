@@ -83,6 +83,13 @@ describe('the scan sweep', () => {
     expect(await db.report.count()).toBe(0)
   })
 
+  it('copes with a scanner URL that ends in a slash', async () => {
+    vi.stubEnv('SCANNER_URL', 'https://scanner.test/')
+    await avatar()
+    await runScanSweep()
+    expect(scanner).toHaveBeenCalledWith('https://scanner.test/scan', expect.anything())
+  })
+
   it('ignores a nudity label under the threshold', async () => {
     const { key } = await avatar()
     answers = [[{ class: 'FEMALE_BREAST_EXPOSED', score: 0.3 }]]
