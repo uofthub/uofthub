@@ -109,7 +109,9 @@ export default function DiscoverPage() {
             }}
           >
             <div className="flex items-center gap-2.5">
-              <label className={cx(searchFrame, 'h-15 grow gap-3 rounded-2xl px-5')}>
+              <label
+                className={cx(searchFrame, 'h-15 min-w-0 grow gap-3 rounded-2xl px-4 md:px-5')}
+              >
                 <Icon name="sparkle" size={22} />
                 <input
                   value={query}

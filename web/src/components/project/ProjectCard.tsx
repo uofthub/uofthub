@@ -15,7 +15,7 @@ function makersOf(project: Pick<ProjectSummary, 'owner' | 'collaborators'>, make
 }
 
 /** A card's title link: ink at rest, navy under the pointer. */
-export const titleLink = 'text-ink hover:text-navy-ink'
+export const titleLink = 'wrap-anywhere text-ink hover:text-navy-ink'
 
 /**
  * Who made it, as links: the faces open the owner's profile, and so does the

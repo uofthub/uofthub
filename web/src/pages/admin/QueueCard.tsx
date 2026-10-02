@@ -24,7 +24,7 @@ export function QueueCard({
   return (
     <Card as="article" className="flex flex-col gap-3 p-5.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <Link to={to} className="font-display text-19 font-bold">
+        <Link to={to} className="min-w-0 font-display text-19 font-bold wrap-anywhere">
           {title}
         </Link>
         {tags}
