@@ -10,7 +10,7 @@ import { profilePath } from '../../lib/paths'
  * the design has no nav slot for — Clubs & Labs, AI discovery and, for
  * moderators, the queue.
  */
-export function AccountMenu() {
+export function AccountMenu({ size = 40 }: { size?: number }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { darkMode, setDarkMode, setCommandOpen } = useTheme()
@@ -27,7 +27,7 @@ export function AccountMenu() {
           aria-expanded={open}
           onClick={toggle}
         >
-          <Avatar person={user} size={40} />
+          <Avatar person={user} size={size} />
         </button>
       )}
     >

@@ -1,13 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { Button, cx, Icon, type IconName } from '../ui'
+import { AccountMenu } from './AccountMenu'
 import { Logo } from './Logo'
 import { MessagesButton } from './MessagesButton'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from './ThemeToggle'
 import { profilePath } from '../../lib/paths'
 
-/** The Mobile feed board's 60px header: logo, then search and the bell. */
+/** The Mobile feed board's 60px header: logo, then search, messages, the bell and the account menu. */
 export function MobileHeader() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -23,16 +24,21 @@ export function MobileHeader() {
         className="ml-auto"
         onClick={() => navigate('/explore', { state: { focusSearch: true } })}
       />
-      <ThemeToggle bare />
       {user ? (
         <>
           <MessagesButton bare />
           <NotificationBell bare />
+          {/* Sign-out, Settings and the pages with no tab live here, as on
+              desktop; it has the dark-mode switch too, so the header doesn't. */}
+          <AccountMenu size={32} />
         </>
       ) : (
-        <Button size="sm" to="/session">
-          Sign in
-        </Button>
+        <>
+          <ThemeToggle bare />
+          <Button size="sm" to="/session">
+            Sign in
+          </Button>
+        </>
       )}
     </header>
   )
