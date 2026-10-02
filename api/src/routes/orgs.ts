@@ -16,6 +16,7 @@ import { orgCardPng, orgShare } from '../lib/shareCards.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
 import { pageTake } from '../lib/paging.js'
 import { deleteObjects, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { queueScan } from '../lib/imageScan.js'
 import { thumbnailContentType, thumbnailType } from '../lib/outputs.js'
 
 const ORG_NAME_MAX = 100
@@ -792,6 +793,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       const { activity } = found
       const key = `orgs/activities/${activity.id}-${randomUUID()}.${contentType.split('/')[1]}`
       await putObject(key, buffer, contentType)
+      await queueScan(key, 'ORG_ACTIVITY', activity.id)
       const updated = await db.orgActivity.update({
         where: { id: activity.id },
         data: { imageKey: key },

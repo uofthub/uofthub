@@ -557,7 +557,8 @@ export type AdminReport = {
   createdAt: string
   reviewedAt?: string
   reviewNote?: string
-  reporter: Pick<User, 'id' | 'name' | 'email'>
+  /** Null when the image scanner filed it. */
+  reporter: Pick<User, 'id' | 'name' | 'email'> | null
   reviewedBy?: { id: string; name: string }
   /** Whoever posted what was reported. */
   subject: (Pick<User, 'id' | 'name' | 'email'> & { suspendedAt: string | null }) | null

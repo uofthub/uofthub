@@ -3,6 +3,7 @@ import { db } from './db/client.js'
 import { startAnnouncementSweep } from './lib/announcements.js'
 import { stopListening } from './lib/live.js'
 import { startMaintenance } from './lib/maintenance.js'
+import { startScanSweep } from './lib/imageScan.js'
 
 const app = await buildApp()
 
@@ -10,6 +11,8 @@ const app = await buildApp()
 // without wanting a timer.
 const stopSweep = startAnnouncementSweep((err) => app.log.error(err, 'announcement sweep failed'))
 const stopMaintenance = startMaintenance((err) => app.log.error(err, 'maintenance failed'))
+// Warn, not error: a pass that finds the free scanner asleep fails by design.
+const stopScans = startScanSweep((err) => app.log.warn(err, 'image scan pass stopped early'))
 
 await app.listen({ port: Number(process.env.PORT ?? 3001), host: '0.0.0.0' })
 
@@ -27,6 +30,7 @@ async function shutdown(signal: string) {
   setTimeout(() => process.exit(1), 10_000).unref()
   stopSweep()
   stopMaintenance()
+  stopScans()
   try {
     await app.close()
     await stopListening()

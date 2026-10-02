@@ -1,0 +1,8 @@
+nudenet==3.4.2
+# NudeNet uses cv2.dnn; held on 4.x until it is checked against OpenCV 5.
+opencv-python-headless==4.14.0.94
+onnxruntime==1.30.0
+numpy==2.5.3
+pillow==12.3.0
+fastapi==0.142.2
+uvicorn==0.54.0

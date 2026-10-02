@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db } from '../db/client.js'
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/password.js'
 import { putObject } from '../lib/storage.js'
+import { queueScan } from '../lib/imageScan.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
 import { issueSession, revokeSession } from '../lib/session.js'
 import { consumeToken, issueToken } from '../lib/authTokens.js'
@@ -46,10 +47,11 @@ async function syncMicrosoftAvatar(userId: string, accessToken: string): Promise
     const key = avatarObjectKey(userId)
     await putObject(key, buffer, 'image/jpeg')
 
-    await db.user.updateMany({
+    const { count } = await db.user.updateMany({
       where: { id: userId, avatarIsCustom: false },
       data: { avatarKey: key, avatarUrl: avatarUrlFor(userId) },
     })
+    if (count) await queueScan(key, 'AVATAR', userId)
   } catch {
     // Best-effort — a missing/misconfigured storage provider should never
     // block sign-in over something as inconsequential as an avatar.

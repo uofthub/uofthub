@@ -276,13 +276,19 @@ const SECTIONS: Section[] = [
     id: 'safety',
     icon: 'shieldCheck',
     title: 'Reporting & safety',
-    keywords: 'report block moderation abuse spam plagiarism takedown suspended appeal',
+    keywords:
+      'report block moderation abuse spam plagiarism takedown suspended appeal nudity sexual scan',
     body: (
       <>
         <p>
           Use the <strong>Report</strong> option in the menu on any project, profile or
           conversation. Reports go straight to a moderator, and the person you report is never told
-          who sent it.
+          who sent it. Reports of sexual content or nudity are read first.
+        </p>
+        <p>
+          Images you upload are checked automatically for nudity a minute or two after they go up.
+          If one is flagged, it is hidden — and a project made private — until a moderator has
+          looked; if it was a false alarm, it comes back as it was.
         </p>
         <p>
           For anything else — a copyright take-down, an appeal, or something urgent — use{' '}

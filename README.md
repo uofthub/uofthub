@@ -29,7 +29,7 @@ uofthub is a social layer for student-made work. Upload your project, link your 
 - **Social** — three reactions (Impressive, Want to collab, Learned something), private saves, follows (of people and of a project's updates), threaded comments you can edit and delete, versions with update notes that can be viewed and restored, and one-to-one messages; block and report
 - **Clubs & labs** — group pages with events, created by moderators; students ask to join or accept an invitation; projects credit the groups they were built with
 - **Accounts** — every account confirms its U of T address; password reset, sign out everywhere, email notifications for what needs an answer (one-click unsubscribe), push notifications on any device that turns them on, data export and account deletion at `/settings`
-- **Moderation** — reports on projects, comments, collections, profiles, group events and conversations, reviewed at `/admin`, with account suspension
+- **Moderation** — reports on projects, comments, collections, profiles, group events and conversations, reviewed at `/admin`, with account suspension; uploaded images checked for nudity by a self-hosted NudeNet scanner (`scanner/`); everyone agrees to the Terms before posting
 
 The web app works on phones (bottom bar, compact header) and in dark mode, with a ⌘K command palette on desktop.
 
@@ -47,13 +47,14 @@ The live pages are `/terms` (ownership, acceptable use, how moderation works) an
 
 ## Tech Stack
 
-A pnpm workspace with two apps and one shared package.
+A pnpm workspace with two apps and one shared package, plus a small Python service.
 
 | | |
 |---|---|
 | **Web** (`web`) | React 19 + Vite, React Router 7, TanStack Query. Tailwind CSS v4 for styling. The design system from the redesign (see [docs/redesign.md](docs/redesign.md)) — tokens as a Tailwind `@theme` in `src/index.css`, primitives in `src/components/ui`, cards in `src/components/project` |
 | **API** (`api`) | Fastify 5 on Node 22, Prisma + PostgreSQL, JWT sessions in HTTP-only cookies |
 | **Shared** (`packages/types`) | Types crossing the API boundary |
+| **Scanner** (`scanner`) | Python, FastAPI + NudeNet — checks uploaded images for nudity; a free Render instance the API wakes as needed |
 | **Storage** | Cloudflare R2 (S3-compatible), private bucket — every download goes through a visibility check and a signed URL |
 | **Auth** | Microsoft OAuth, or email + password with the address confirmed by email — U of T addresses only (any `utoronto.ca` or `toronto.edu` domain) |
 | **Email** | Resend (required in production: sign-up confirmation and password reset) · **AI search** OpenAI — degrades to keyword search when its key is unset |
@@ -87,7 +88,7 @@ pnpm dev                               # API on :3001, web on :5173
 
 `pnpm dev` applies any pending migrations before the API starts, and the API reads `api/.env` itself. The copied `.env` works as-is against the compose services — database and file uploads included (files go to a local S3 mock on :9090). Postgres is on **5433** so it can sit beside a Postgres already installed on the machine.
 
-Sign up with email + password locally: Microsoft OAuth needs real credentials. With no Resend key, the link that confirms your address is printed in the API's console — open it to finish signing up. **Every other integration is optional** — with no keys, email no-ops with a warning, and AI search falls back to keyword search.
+Sign up with email + password locally: Microsoft OAuth needs real credentials. With no Resend key, the link that confirms your address is printed in the API's console — open it to finish signing up. **Every other integration is optional** — with no keys, email no-ops with a warning, AI search falls back to keyword search, and uploaded images queue unscanned (to run the scanner locally, see the end of `api/.env.example`).
 
 If `docker compose` says *permission denied* on `/var/run/docker.sock`, your user can't reach the Docker daemon yet — run it once with `sudo`, or add yourself to the `docker` group.
 
@@ -110,6 +111,7 @@ The API tests create their own `_test` database and refuse to run against any da
 | `api/src/routes` | HTTP surface — auth, projects, users, feed, courses, collections, messages, orgs, spotlight, discover, admin |
 | `api/src/lib` | The rules: visibility, project content, search, trending, notifications, storage, link import |
 | `api/prisma/schema.prisma` | The data model |
+| `scanner/` | The image scanner the API calls — see [architecture § image scanning](docs/ARCHITECTURE.md#image-scanning) |
 | `web/src/App.tsx` | Every route in the web app |
 | `web/src/pages` | One folder per area (home, explore, project, editor, profile, messages, admin…) |
 | `web/src/components` | `ui` primitives, `project` cards, `shell` (header, phone chrome, command palette) |

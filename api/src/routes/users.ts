@@ -9,6 +9,7 @@ import {
   matchesDeclaredType,
 } from '../lib/fileValidation.js'
 import { deleteObject, putObject, signedDownloadUrl } from '../lib/storage.js'
+import { queueScan } from '../lib/imageScan.js'
 import { avatarObjectKey, avatarUrlFor } from '../lib/avatar.js'
 import { CARD_INCLUDE, decorate } from '../lib/projectShape.js'
 import { isFaculty } from '../lib/faculties.js'
@@ -732,6 +733,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       const userId = request.user.sub
       const key = avatarObjectKey(userId)
       await putObject(key, buffer, contentTypeFor(ext))
+      await queueScan(key, 'AVATAR', userId)
 
       const user = await db.user.update({
         where: { id: userId },

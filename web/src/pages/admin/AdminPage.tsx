@@ -144,8 +144,14 @@ function ReportRow({ report }: { report: AdminReport }) {
               {report.subject?.suspendedAt && ' — suspended'} ·{' '}
             </>
           )}
-          reported by <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> (
-          {report.reporter.email})
+          {report.reporter ? (
+            <>
+              reported by <Link to={`/u/${report.reporter.id}`}>{report.reporter.name}</Link> (
+              {report.reporter.email})
+            </>
+          ) : (
+            'flagged by the image scanner and hidden until you decide — dismissing puts it back'
+          )}
           {report.targetType === 'PROJECT' && report.project && ` · ${report.project.visibility}`}
         </>
       }

@@ -17,6 +17,7 @@ import {
   visibleProjectWhere,
 } from '../lib/visibility.js'
 import { coverUrls } from '../lib/covers.js'
+import { queueScan } from '../lib/imageScan.js'
 import { projectShare, projectCardPng } from '../lib/shareCards.js'
 import { claimProjectSlug, reslugProject, uniqueProjectSlug } from '../lib/handles.js'
 import { PNG_HEADERS } from '../lib/ogImage.js'
@@ -1704,6 +1705,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         await deleteObjects([key])
         return file === 'full' ? full() : overQuota()
       }
+      // Only what is shown inline as a picture; SVG is download-only.
+      if (previewKindFor(ext) === 'image') await queueScan(key, 'PROJECT_FILE', project.id)
       await logChanges(project.id, request.user.sub, [
         { kind: 'added', what: 'file', name: file.name },
       ])
@@ -1899,6 +1902,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       const key = thumbnailKeyFor(request.params.id, output.id, contentType)
       await putObject(key, buffer, contentType)
+      await queueScan(key, 'THUMBNAIL', request.params.id)
       await db.projectOutput.update({ where: { id: output.id }, data: { thumbnailKey: key } })
       await deleteObjects([output.thumbnailKey])
       return {
