@@ -26,6 +26,11 @@ export async function runMaintenance(now: Date = new Date()): Promise<void> {
     db.projectViewer.deleteMany({ where: { date: { lt: yesterday } } }),
     // A revoked session only needs remembering until it would have expired.
     db.revokedSession.deleteMany({ where: { expiresAt: { lt: now } } }),
+    // A settled scan with nothing to undo is only a record that it happened.
+    // Flagged ones stay: a dismissal needs them to put things back.
+    db.imageScan.deleteMany({
+      where: { status: { in: ['CLEAN', 'SKIPPED', 'CLEARED'] }, scannedAt: { lt: cutoff } },
+    }),
   ])
 }
 

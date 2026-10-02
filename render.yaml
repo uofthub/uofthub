@@ -81,6 +81,36 @@ services:
       - key: OPENAI_API_KEY
         sync: false
 
+      # The image scanner below. Its URL is https://<its onrender.com host>;
+      # unset leaves uploads queued, unscanned, until it is set.
+      - key: SCANNER_URL
+        sync: false
+      - key: SCANNER_TOKEN
+        fromService:
+          type: web
+          name: uofthub-scanner
+          envVarKey: SCANNER_TOKEN
+
+  # NudeNet, checking uploaded images for nudity (scanner/, and
+  # api/src/lib/imageScan.ts). Free: it sleeps when idle and the API's sweep
+  # wakes it, so a scan can wait a minute or two. Reachable from the internet
+  # (free instances get no private network), so every request needs the token.
+  - type: web
+    name: uofthub-scanner
+    runtime: docker
+    plan: free
+    region: ohio
+    branch: main
+    dockerfilePath: ./scanner/Dockerfile
+    dockerContext: ./scanner
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - scanner/**
+    envVars:
+      - key: SCANNER_TOKEN
+        generateValue: true
+
 databases:
   - name: uofthub-db
     databaseName: uofthub

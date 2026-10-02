@@ -452,7 +452,8 @@ model Project {
 
 model Report {
   id            String       @id @default(uuid())
-  reporterId    String
+  /// Null for a report filed by the image scanner rather than a person.
+  reporterId    String?
   targetType    ReportTarget @default(PROJECT)
   /// The project reported, or the project a reported comment is on.
   projectId     String?
@@ -465,10 +466,13 @@ model Report {
   /// What was reported, as it read when it was reported — a comment or an
   /// event can be edited or deleted before a moderator gets to it.
   excerpt       String?
-  /// Files a take-down for sexual content kept instead of deleting — an
-  /// avatar or an event image — in case the report has to go to the police.
-  /// Never served to anyone.
+  /// Copies of images a take-down for sexual content removed — an avatar, an
+  /// event image, a flagged upload — kept under evidence/ in case the report
+  /// has to go to the police. Never served to anyone. See lib/evidence.ts.
   evidenceKeys  String[]     @default([])
+  /// The scan that filed this report, when the image scanner filed it.
+  /// Dismissing the report undoes what the scan hid. See lib/imageScan.ts.
+  scanKey       String?
   reason        ReportReason
   /// Optional free text from the reporter — the reason enum is what the queue
   /// sorts on, this is the context a moderator actually needs to decide.
@@ -480,7 +484,7 @@ model Report {
   reviewedById  String?
   reviewNote    String?
 
-  reporter   User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter   User?        @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reviewedBy User?        @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   comment    Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
@@ -490,6 +494,47 @@ model Report {
 
   @@index([status, createdAt])
   @@index([targetType, status])
+}
+
+/// What an uploaded image is, for the scanner: where it is shown, and so how
+/// a flagged one is hidden.
+enum ScanTarget {
+  AVATAR
+  PROJECT_FILE
+  THUMBNAIL
+  ORG_ACTIVITY
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  FLAGGED
+  /// Not scannable: gone before its turn, or not an image the scanner reads.
+  SKIPPED
+  /// Flagged, then cleared by a moderator dismissing the report.
+  CLEARED
+}
+
+/// Every uploaded image, checked for nudity after it is stored — it is shown
+/// straight away and hidden if flagged. Keyed by storage key: re-uploading to
+/// the same key (an avatar) queues it again. See lib/imageScan.ts.
+model ImageScan {
+  key       String     @id
+  target    ScanTarget
+  /// The user for an AVATAR, the project for a PROJECT_FILE or THUMBNAIL, the
+  /// activity for an ORG_ACTIVITY.
+  subjectId String
+  status    ScanStatus @default(PENDING)
+  attempts  Int        @default(0)
+  /// The detections over the threshold, for the moderator.
+  labels    Json?
+  /// What hiding it changed, so dismissing the report can put it back —
+  /// `{ visibility }` for a project.
+  undo      Json?
+  createdAt DateTime   @default(now())
+  scannedAt DateTime?
+
+  @@index([status, createdAt])
 }
 
 model ProjectVersion {
