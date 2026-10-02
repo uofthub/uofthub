@@ -214,6 +214,7 @@ export default function TermsPage() {
     <Prose
       title="Terms & ownership"
       lede="What happens to the work you put here, in plain language."
+      updated="2026-09-28"
       icon="shieldCheck"
       sections={SECTIONS}
       summary={

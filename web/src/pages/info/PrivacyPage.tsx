@@ -251,6 +251,7 @@ export default function PrivacyPage() {
     <Prose
       title="Privacy"
       lede="What we collect, why, and who else sees it."
+      updated="2026-09-30"
       icon="lock"
       sections={SECTIONS}
       summary={

@@ -13,10 +13,29 @@ const body = cx(
   '[&_li]:mb-1.5'
 )
 
+/**
+ * When a page's content last changed, as a YYYY-MM-DD date. Set by hand when
+ * the wording changes, not from the build, so a refactor doesn't bump it.
+ */
+export function LastUpdated({ date, className }: { date: string; className?: string }) {
+  const label = new Date(date).toLocaleDateString('en-CA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+  return (
+    <p className={cx('text-14 text-muted', className)}>
+      Last updated <time dateTime={date}>{label}</time>
+    </p>
+  )
+}
+
 /** The shared layout of the long-form pages: title, a short version, then sections. */
 export function Prose({
   title,
   lede,
+  updated,
   icon,
   summary,
   sections,
@@ -24,6 +43,7 @@ export function Prose({
 }: {
   title: string
   lede: string
+  updated: string
   icon: IconName
   summary: ReactNode
   sections: { id: string; heading: string; body: ReactNode }[]
@@ -34,6 +54,7 @@ export function Prose({
     <Page width="narrow" className="pt-10 md:pt-10 lg:pt-10">
       <PageTitle>{title}</PageTitle>
       <PageLede>{lede}</PageLede>
+      <LastUpdated date={updated} className="mt-2" />
       <Notice tone="navy" icon={icon} iconSize={22} className="mt-6">
         <p className="text-16 text-ink">{summary}</p>
       </Notice>
