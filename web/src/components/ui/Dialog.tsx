@@ -38,7 +38,9 @@ export const dialogPanel = 'flex max-h-[calc(100vh-32px)] w-full flex-col shadow
 
 /**
  * A modal in the design's card language. Escape and a click on the scrim both
- * close it, and the page behind stops scrolling while it is open.
+ * close it, and the page behind stops scrolling while it is open. Without
+ * `onClose` it cannot be closed at all — no close button, no Escape, no scrim
+ * click — and only something in it can make it go away.
  */
 export function Dialog({
   title,
@@ -48,7 +50,7 @@ export function Dialog({
   width = 560,
 }: {
   title: ReactNode
-  onClose: () => void
+  onClose?: () => void
   children: ReactNode
   footer?: ReactNode
   width?: number
@@ -56,7 +58,7 @@ export function Dialog({
   const titleId = useId()
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose?.()
     document.addEventListener('keydown', onKey)
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -67,7 +69,7 @@ export function Dialog({
   }, [onClose])
 
   return (
-    <Scrim onClose={onClose}>
+    <Scrim onClose={() => onClose?.()}>
       <Card
         className={dialogPanel}
         role="dialog"
@@ -79,14 +81,16 @@ export function Dialog({
           <Heading id={titleId} className="text-20">
             {title}
           </Heading>
-          <Button
-            variant="ghost"
-            size="md"
-            iconOnly
-            icon="close"
-            aria-label="Close"
-            onClick={onClose}
-          />
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="md"
+              iconOnly
+              icon="close"
+              aria-label="Close"
+              onClick={onClose}
+            />
+          )}
         </div>
         <div className="flex flex-col gap-4 overflow-y-auto px-6 pt-3 pb-5">{children}</div>
         {footer && (

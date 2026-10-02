@@ -65,3 +65,12 @@ describe('toast', () => {
     expect(undo).toHaveBeenCalledOnce()
   })
 })
+
+describe('Dialog without onClose', () => {
+  it('cannot be closed: no close button, and Escape does nothing', () => {
+    render(<Dialog title="Agree to our Terms">body</Dialog>)
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+})

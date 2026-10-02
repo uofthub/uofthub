@@ -10,24 +10,23 @@ const READABLE = new Set(['/terms', '/privacy'])
 
 /**
  * Asks a signed-in account to agree to the Terms as they stand — the first
- * time it signs in with Microsoft, and again whenever the Terms change. Until
- * it does, the API refuses every write (TERMS_NOT_ACCEPTED), so closing this
- * only lets them keep reading; it comes back on the next page.
+ * time it signs in with Microsoft, and again whenever the Terms change. It
+ * cannot be closed: the only ways past it are agreeing or signing out. The
+ * Terms and Privacy pages themselves stay readable, so they can be read first.
+ * The API refuses every write (TERMS_NOT_ACCEPTED) until they agree anyway.
  */
 export function TermsGate() {
   const { user, refetch, logout } = useAuth()
   const { pathname } = useLocation()
   const [agreed, setAgreed] = useState(false)
-  const [dismissedOn, setDismissedOn] = useState<string | null>(null)
   const accept = useMutation({ mutationFn: api.auth.acceptTerms, onSuccess: () => refetch() })
 
-  if (!user || user.termsCurrent || READABLE.has(pathname) || dismissedOn === pathname) return null
+  if (!user || user.termsCurrent || READABLE.has(pathname)) return null
   const returning = !!user.termsAcceptedAt
 
   return (
     <Dialog
-      title={returning ? 'Our Terms have changed' : 'Before you start'}
-      onClose={() => setDismissedOn(pathname)}
+      title={returning ? 'Our Terms have changed' : 'Agree to our Terms'}
       footer={
         <>
           <Button variant="ghost" onClick={() => void logout()}>
@@ -45,8 +44,8 @@ export function TermsGate() {
     >
       <p className="text-15 text-ink-2">
         {returning
-          ? 'Please read the updated Terms. You can keep browsing, but you can’t post, comment or message until you agree.'
-          : 'uofthub is for your academic and creative work. To post, comment or message, agree to the rules everyone here follows.'}
+          ? 'We have updated our Terms. Please read them and agree to keep using uofthub.'
+          : 'uofthub is for your academic and creative work. To keep using it, agree to the rules everyone here follows.'}
       </p>
       <ul className="list-disc pl-5.5 text-15 text-ink-2 [&_li]:mb-1.5">
         <li>No sexual content or nudity, and nothing that sexualises anyone.</li>
