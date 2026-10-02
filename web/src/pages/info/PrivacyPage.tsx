@@ -140,7 +140,7 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         <ul>
           <li>
             <strong>Render</strong> — runs the API and hosts the database. Everything above is
-            stored there.
+            stored there. It also runs our image scanner, described below.
           </li>
           <li>
             <strong>Cloudflare</strong> — serves the site, and stores uploaded files, avatars and
@@ -173,6 +173,14 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         </ul>
         <p>
           No student work is ever used to train an AI model, by us or by anyone we send data to.
+        </p>
+        <p>
+          Every image you upload — a profile photo, a project image or thumbnail, an event image —
+          is checked automatically for nudity, a minute or two after it goes up, by an open-source
+          model (NudeNet) that we run ourselves on Render. The image goes to that scanner and
+          nowhere else, and the scanner keeps nothing. If it flags an image, the image is hidden and
+          a moderator looks at it; if they decide it was a false alarm, it comes back. Videos, PDFs
+          and other files are not scanned.
         </p>
       </>
     ),

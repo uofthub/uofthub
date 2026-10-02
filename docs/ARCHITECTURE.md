@@ -49,6 +49,7 @@ A project is filed under at most one course (`course_code`) and credited to the 
 | avatar_url                            | string?    | either an externally-pasted URL, or `{API_URL}/users/:id/avatar` when `avatar_key` is set — see [File storage § avatars](#file-storage)               |
 | avatar_key                            | string?    | R2 object key when the avatar lives in our bucket; internal, never sent to the client                                                                 |
 | avatar_is_custom                      | bool       | true once the student has set their own avatar (upload or pasted URL) — blocks the Microsoft sign-in avatar sync from overwriting it                  |
+| terms_accepted_at                     | timestamp? | when they last agreed to the Terms; writes are refused while it is unset or older than `TERMS_VERSION` — see [Auth](#auth)                            |
 | is_admin                              | bool       | platform moderator — see [Moderation](#moderation). Set only from the database (`pnpm --filter @uofthub/api grant-admin <email>`); no route grants it |
 | created_at                            | timestamp  |                                                                                                                                                       |
 | updated_at                            | timestamp  |                                                                                                                                                       |
@@ -227,22 +228,28 @@ Admins invite (`POST /orgs/:slug/members`), students ask (`POST /orgs/:slug/join
 
 One row per person per target per open complaint. See [Moderation](#moderation).
 
-| Field                                    | Type       | Notes                                                                                   |
-| ---------------------------------------- | ---------- | --------------------------------------------------------------------------------------- |
-| id                                       | uuid       |                                                                                         |
-| reporter_id                              | uuid       | FK → User                                                                               |
-| target_type                              | enum       | `PROJECT`, `COMMENT`, `COLLECTION`, `USER`, `ORG_ACTIVITY`                              |
-| project_id                               | uuid?      | the project reported, or the one a reported comment is on                               |
-| comment_id / collection_id / activity_id | uuid?      | the thing reported; set null if it is deleted                                           |
-| subject_user_id                          | uuid?      | whoever posted it — who a warning or suspension is for                                  |
-| excerpt                                  | text?      | what it said when it was reported                                                       |
-| reason                                   | enum       | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `OTHER` |
-| details                                  | text?      | reporter's free text, capped at 1000 chars                                              |
-| status                                   | enum       | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself  |
-| created_at                               | timestamp  |                                                                                         |
-| reviewed_at                              | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides           |
-| reviewed_by_id                           | uuid?      | FK → User (the moderator)                                                               |
-| review_note                              | text?      | shown to the owner on a warning or take-down                                            |
+| Field                                    | Type       | Notes                                                                                                                      |
+| ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| id                                       | uuid       |                                                                                                                            |
+| reporter_id                              | uuid?      | FK → User; null when the [image scanner](#image-scanning) filed it                                                         |
+| target_type                              | enum       | `PROJECT`, `COMMENT`, `COLLECTION`, `USER`, `ORG_ACTIVITY`                                                                 |
+| project_id                               | uuid?      | the project reported, or the one a reported comment is on                                                                  |
+| comment_id / collection_id / activity_id | uuid?      | the thing reported; set null if it is deleted                                                                              |
+| subject_user_id                          | uuid?      | whoever posted it — who a warning or suspension is for                                                                     |
+| excerpt                                  | text?      | what it said when it was reported                                                                                          |
+| reason                                   | enum       | `SPAM`, `HARASSMENT`, `ACADEMIC_INTEGRITY`, `INTELLECTUAL_PROPERTY`, `PRIVACY`, `IMPERSONATION`, `SEXUAL_CONTENT`, `OTHER` |
+| details                                  | text?      | reporter's free text, capped at 1000 chars                                                                                 |
+| status                                   | enum       | `OPEN` until decided, then `DISMISSED` / `WARNED` / `TAKEN_DOWN` — the decision itself                                     |
+| created_at                               | timestamp  |                                                                                                                            |
+| reviewed_at                              | timestamp? | set together with `reviewed_by_id` and `review_note` when a moderator decides                                              |
+| reviewed_by_id                           | uuid?      | FK → User (the moderator)                                                                                                  |
+| review_note                              | text?      | shown to the owner on a warning or take-down                                                                               |
+| evidence_keys                            | string[]   | copies under `evidence/` of images a sexual-content take-down removed; never served                                        |
+| scan_key                                 | string?    | the `ImageScan` that filed it; dismissing the report undoes what the scan hid                                              |
+
+### ImageScan
+
+One row per uploaded image, keyed by its storage key, for [image scanning](#image-scanning). `target` is `AVATAR`, `PROJECT_FILE`, `THUMBNAIL` or `ORG_ACTIVITY`, and `subject_id` the user, project or activity it belongs to. `status` goes `PENDING` → `CLEAN`, `FLAGGED` or `SKIPPED` (gone, or not decodable), and `FLAGGED` → `CLEARED` when a moderator dismisses the report. `labels` keeps the detections that flagged it; `undo` what hiding it changed. Storing to the same key again (an avatar) queues it afresh.
 
 ### MessageReport
 
@@ -260,6 +267,8 @@ Two ways in, both at `/session`:
 **Every account proves it owns its address** (`User.emailVerifiedAt`). Microsoft sign-in proves it; a password sign-up gets a link by email (`POST /auth/verify`) and cannot sign in until it is followed. Until then the account is nobody's: signing up again with the address starts it over, and a Microsoft sign-in to it discards any password set on it. Signing up with an address that already has an account never touches that account — the address gets an email instead, and every "check your email" route answers the same whatever happened, so none of them reveals which addresses are registered. `POST /auth/forgot-password` and `/auth/reset-password` reset (or first set) a password; `POST /auth/password` changes it when signed in. The links are single-use tokens stored only as SHA-256 hashes (`AuthToken`, `lib/authTokens.ts`). Without `RESEND_API_KEY`, outside production, the links are printed to the API's console instead of emailed.
 
 The session is a JWT in an HTTP-only, `SameSite=Lax` cookie, valid for 7 days, and checked against the database on every use (`lib/session.ts`): each token carries the account's `sessionVersion`, and a password change, a reset, **Sign out everywhere** or deleting the account bumps it, ending every other session at once. The same check refuses writes from a suspended account (`User.suspendedAt`), except the few routes marked `allowSuspended` — signing out, blocking, and deleting or exporting its own data. Visitors without an account can browse public projects, and a public project, profile or collection can be opened by anyone with the link.
+
+**Agreeing to the Terms** — `User.termsAcceptedAt` records when an account last agreed. Sign-up requires it (`acceptTerms: true`, a checkbox on the form); a Microsoft sign-in, or any account whose agreement predates `TERMS_VERSION` (`lib/terms.ts`), meets `TermsGate`, a dialog with no way to close it but agreeing (`POST /auth/accept-terms`) or signing out. `/terms` and `/privacy` stay readable behind it. `authenticate` enforces it too: until the account agrees, every write but the `allowSuspended` routes is refused with `403 TERMS_NOT_ACCEPTED`. A change to the Terms that everyone must agree to again is a new `TERMS_VERSION`, with the same date as `updated` on `TermsPage.tsx`.
 
 **Accounts** — `/settings` changes the password, signs out everywhere, turns off email notifications, downloads everything the student put here as JSON (`GET /users/me/export`) and deletes the account (`DELETE /users/me`, confirmed by typing the email). Deleting cascades to everything the account owns and then removes its storage objects.
 
@@ -347,7 +356,7 @@ Moderators are `User.is_admin` accounts. The flag is checked against the databas
 
 The `/admin` page (Moderation, in the account menu for moderators only) has five tabs: **Reports**, **Messages**, **Users** (find an account; suspend it or lift a suspension, including a messaging-only one), **Groups** (create a group) and **Spotlight** (pick the week's project).
 
-`GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide). `POST /admin/reports/:id/decision` takes one of three decisions:
+`GET /admin/reports?status=` serves the queue (`OPEN` by default, oldest first — the report waiting longest is the next to decide — except that `SEXUAL_CONTENT` reports, `URGENT_REASONS` in `lib/reports.ts`, come before all the rest; the message queue does the same). `POST /admin/reports/:id/decision` takes one of three decisions:
 
 | Decision    | Effect                                                                                                                                                | Owner told?                                   |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
@@ -364,6 +373,27 @@ A warning or a take-down also closes every other open report about the same thin
 Comments can be edited by their author and deleted by their author, the project's owner or a moderator; one with replies stays as an empty "deleted" placeholder so the thread survives. Blocking (`lib/blocks.ts`) reaches past messages: neither student can comment on, reply to, react to or follow the other, and existing follows end.
 
 Message reports work the same way, about a person rather than a project: `GET /admin/message-reports`, and a decision of dismiss, warn, or suspend messaging (`User.messaging_suspended_at`), which sends `MESSAGING_MODERATED`. See [MessageReport](#messagereport).
+
+**Sexual content** is banned everywhere, whatever the visibility (`/terms#sexual-content`). Taking one of these reports down keeps a copy of any image it removes — an avatar, an event image — under `evidence/` (`lib/evidence.ts`), recorded in `Report.evidence_keys`, because sexual content involving a minor must be preserved and reported to police and Cybertip.ca, not destroyed. It is a copy rather than the original key because an avatar's key is reused by every upload and every Microsoft photo sync. Evidence is never served; getting it out is a manual job in the R2 dashboard.
+
+### Image scanning
+
+Uploaded images are checked for nudity after they are stored, by NudeNet running as its own service (`scanner/`, a free Render instance). Every image upload — `POST /users/me/avatar`, the Microsoft photo sync, event images, output thumbnails, and project files that preview as images (PNG, JPEG, GIF, WebP) — calls `queueScan`, which upserts an [`ImageScan`](#imagescan). Videos, PDFs and other files are not scanned; a video's or a PDF's thumbnail is.
+
+The image is shown at once. The **scan sweep** (`lib/imageScan.ts`) runs every minute in the API process, sends pending images oldest first (`POST {SCANNER_URL}/scan`, the raw bytes, `Authorization: Bearer {SCANNER_TOKEN}`), and decides from the detections: any of the five `*_EXPOSED` labels for genitalia, breasts, buttocks or anus at or over `SCANNER_THRESHOLD` (default 0.6) flags it. The scanner only reports; the threshold lives in the API so tuning it needs no scanner deploy. A free instance sleeps when idle, so a pass that finds it asleep wakes it, counts an attempt and leaves the rest for the next pass — a scan can wait a minute or two. With `SCANNER_URL` unset, images still queue and are scanned once it is set.
+
+A flagged image is hidden at once, and a `SEXUAL_CONTENT` report with no reporter is filed, with the image copied to evidence:
+
+| Target         | Hidden by                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| `AVATAR`       | clearing the avatar, and marking it custom so the next Microsoft sign-in doesn't restore it    |
+| `THUMBNAIL`    | clearing the output's thumbnail                                                                |
+| `PROJECT_FILE` | taking the project down — private, `taken_down_at` stamped — since the file is the work itself |
+| `ORG_ACTIVITY` | clearing the event's image                                                                     |
+
+A moderator **dismissing** the report undoes it (`releaseScan`): the image comes back, a project returns to its earlier visibility unless another report has taken it down, and the evidence copy is deleted. Nothing is put back that has since been replaced. Taking it down leaves it hidden and keeps the evidence.
+
+The scanner (`scanner/app.py`) is FastAPI around NudeNet's bundled 320 model. It decodes with Pillow — the first frame of a GIF, EXIF rotation applied, scaled to 1280px, and refusing anything over 50 megapixels, since the free instance has 512MB — and returns every detection. It keeps nothing and logs no image. Free instances get no private network, so it is public, and the token is all that stands in front of it. NudeNet detects nudity, not age: it is no substitute for CSAM hash-matching (PhotoDNA, Cloudflare's CSAM Scanning Tool), which uofthub does not have yet.
 
 ---
 
@@ -400,7 +430,7 @@ All checks (type and size) run server-side against the actual file, not the clie
 
 ### Avatars
 
-Same storage client and content-validation as project files, restricted to the `images` category (25MB cap). One fixed key per user (`avatars/<id>`) — a new upload always overwrites the previous one rather than accumulating objects. Served via `GET /users/:id/avatar`, a public redirect to a signed URL with `Content-Disposition: inline` (renders in an `<img>`, unlike the project-file download route, which forces `attachment`).
+Same storage client and content-validation as project files, restricted to the `images` category (25MB cap). One fixed key per user (`avatars/<id>`) — a new upload always overwrites the previous one rather than accumulating objects. Served via `GET /users/:id/avatar`, a public redirect to a signed URL with `Content-Disposition: inline` (renders in an `<img>`, unlike the project-file download route, which forces `attachment`). Every upload and sync is [scanned](#image-scanning).
 
 On a brand-new Microsoft sign-in, the account's Graph profile photo is synced in as the avatar automatically — best-effort, and never blocks sign-in if it fails or the account has no photo set. This only ever happens once, at signup: a student who has set their own avatar (`User.avatarIsCustom`) keeps it, and existing accounts linking Microsoft for the first time don't get resynced.
 
@@ -437,13 +467,13 @@ Two consequences worth knowing: matching is by whole stemmed word plus prefix, s
 
 ## Scheduled jobs
 
-Two, in process. The **maintenance sweep** (`lib/maintenance.ts`) runs hourly and deletes read notifications older than six months, spent or expired auth tokens, and viewer keys older than a day. The **announcement sweep** (`lib/announcements.ts`): A project published with a future show-from date is announced to its owner's followers when that date passes, not when it was saved. The sweep runs at boot and every five minutes, registered in `index.ts` rather than `buildApp()` so tests never start a timer. It claims and marks due projects in one `UPDATE … RETURNING`, so several instances, or overlapping runs, cannot announce a project twice.
+Three, in process. The **maintenance sweep** (`lib/maintenance.ts`) runs hourly and deletes read notifications older than six months, spent or expired auth tokens, viewer keys older than a day, and settled image scans with nothing left to undo after six months. The **scan sweep** runs every minute — see [Image scanning](#image-scanning); it runs one pass at a time, since a pass can wait 90 seconds on a waking scanner. The **announcement sweep** (`lib/announcements.ts`): A project published with a future show-from date is announced to its owner's followers when that date passes, not when it was saved. The sweep runs at boot and every five minutes, registered in `index.ts` rather than `buildApp()` so tests never start a timer. It claims and marks due projects in one `UPDATE … RETURNING`, so several instances, or overlapping runs, cannot announce a project twice.
 
 The two that existed before — the verification sweep (`sweep-orgs`) and term storage grants (`grant-term-storage`) — went with self-serve group verification and group quotas, along with `.github/workflows/scheduled.yml`. Other housekeeping that would need a timer is done inline instead: `lib/views.ts` prunes yesterday's viewer keys when it records a view.
 
 `pnpm --filter @uofthub/api grant-admin <email>` is the one operator script — run by hand, not scheduled. In the production image only the compiled output exists, and no package manager, so there it is `node dist/scripts/grantAdmin.js <email>` from `/repo/api` (Render: the service's Shell tab or `render ssh`). See [Moderation](#moderation).
 
-On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update streams, closes the `LISTEN` connection and the query pool, and exits — or exits anyway after ten seconds.
+On `SIGTERM` (every deploy) the API stops the sweeps, ends open live-update streams, closes the `LISTEN` connection and the query pool, and exits — or exits anyway after ten seconds.
 
 ---
 
@@ -474,13 +504,14 @@ On `SIGTERM` (every deploy) the API stops both sweeps, ends open live-update str
 
 ## Deployment
 
-Three pieces, two platforms, both deploying from `main` on push. CI (`typecheck` → API and web tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
+Four pieces, two platforms, all deploying from `main` on push. CI (`typecheck` → API and web tests → `build` → `lint`) is what gates a PR into `main`; neither platform runs the tests, so a red CI must not be merged.
 
-| Piece    | Where                       | How                                                                                                                                                                                                                                           |
-| -------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API      | Render web service (Docker) | Defined in `render.yaml` (a Blueprint): Dockerfile `api/Dockerfile`, build context the repo root, health check on `/health`                                                                                                                   |
-| Database | Render Postgres             | Also in `render.yaml`; `DATABASE_URL` is wired from it to the API, and nothing else references the credentials                                                                                                                                |
-| Web      | Cloudflare Pages            | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
+| Piece    | Where                             | How                                                                                                                                                                                                                                           |
+| -------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API      | Render web service (Docker)       | Defined in `render.yaml` (a Blueprint): Dockerfile `api/Dockerfile`, build context the repo root, health check on `/health`                                                                                                                   |
+| Scanner  | Render web service (Docker), free | Also in `render.yaml`: `scanner/Dockerfile`, build context `scanner`, health check on `/health`. Sleeps when idle — see [Image scanning](#image-scanning)                                                                                     |
+| Database | Render Postgres                   | Also in `render.yaml`; `DATABASE_URL` is wired from it to the API, and nothing else references the credentials                                                                                                                                |
+| Web      | Cloudflare Pages                  | Root directory `web`; build command `cd .. && pnpm install --frozen-lockfile && pnpm --filter @uofthub/web build`; output directory `dist`. The root directory has to be `web` so Pages finds `web/functions` (link previews and the sitemap) |
 
 **Migrations run at container boot**, not as a separate release step: the image's command is `prisma migrate deploy && node dist/index.js`, the same ordering the local `predev` script uses, so the server can never accept a request against a schema it doesn't match. A failed migration fails the health check, and Render keeps the previous instance serving.
 
@@ -497,6 +528,7 @@ Environment variables in production — see `api/.env.example` for the full list
 - `RESEND_API_KEY`, `EMAIL_FROM` — email no-ops with a warning when the key is unset, so a deploy without it degrades rather than breaks. `EMAIL_FROM` is on the `notifications.uofthub.com` subdomain, which needs its SPF, DKIM and DMARC records verified in Resend — see [Email deliverability](#email-deliverability).
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — push notifications; off, with a warning, when the keys are unset. See [Push notifications](#push-notifications).
 - `OPENAI_API_KEY` — `/discover` falls back to keyword search without it, same as above. `OPENAI_MODEL` is optional and overrides the default model.
+- `SCANNER_URL`, `SCANNER_TOKEN`, `SCANNER_THRESHOLD` — [image scanning](#image-scanning). The token is generated on the scanner service and wired to the API by `render.yaml`; the URL (the scanner's `https://….onrender.com` address) is set by hand once the scanner exists. Unset, images queue unscanned.
 
 `PORT` is provided by Render and read by `src/index.ts`; the server binds `0.0.0.0`.
 
@@ -523,7 +555,7 @@ On Cloudflare Pages, set `VITE_API_URL` (the build reads it, and so do the Funct
 
 Each API instance holds one long-lived Postgres connection for [live updates](#live-updates) on top of Prisma's pool, and the `/events` streams are long-lived HTTP responses — nothing between the browser and Render may buffer them. It also means the API must run on a paid Render instance: free instances spin down when idle, which drops the live-update streams and stops the in-process maintenance sweep.
 
-There are no scheduled jobs to deploy separately: the one sweep runs inside the API process (see [Scheduled jobs](#scheduled-jobs)).
+There are no scheduled jobs to deploy separately: the sweeps run inside the API process (see [Scheduled jobs](#scheduled-jobs)). The scanner is the one exception to "paid instance": it is meant to sleep, and the scan sweep is built around it.
 
 ---
 

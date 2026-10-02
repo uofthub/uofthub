@@ -136,6 +136,14 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
           not delete evidence.
         </p>
         <p>
+          Every image uploaded to uofthub — profile photos, project images and thumbnails, event
+          images, whatever the project's visibility — is checked automatically for nudity shortly
+          after it goes up. An image the check flags is hidden at once and reviewed by a moderator,
+          who puts it back if it was a false alarm. Videos, PDFs and other files are not checked
+          automatically, and no automatic check is perfect, so the rules above apply to them all the
+          same.
+        </p>
+        <p>
           If you come across sexual content here, report it with{' '}
           <strong>Sexual content or nudity</strong>. Those reports go to the top of the moderation
           queue, ahead of everything else. If someone is in danger, call 911 first.
@@ -150,9 +158,10 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
       <>
         <p>
           Everything on uofthub is posted by its users. We do not review projects, files, comments
-          or messages before they appear, and we cannot promise that you will never see something
-          that breaks these terms or that you find offensive. Whoever posts something is responsible
-          for it — not uofthub, and not the people who run it.
+          or messages before they appear — images are checked automatically for nudity, but only
+          after they go up, and that check can miss things — and we cannot promise that you will
+          never see something that breaks these terms or that you find offensive. Whoever posts
+          something is responsible for it — not uofthub, and not the people who run it.
         </p>
         <p>
           What we do promise is to act on what we are told about. Every report is read by a
@@ -176,7 +185,8 @@ const SECTIONS: { id: string; heading: string; body: ReactNode }[] = [
         <p>
           Anyone signed in can report a U of T-visible or public project, a comment, a collection, a
           profile or a group event with its <strong>Report</strong> button. Private projects cannot
-          be reported — nobody outside the project can see them.
+          be reported — nobody outside the project can see them — though their images are still
+          checked for nudity, as described under <a href="#sexual-content">No sexual content</a>.
         </p>
         <p>A moderator reads every report and does one of three things:</p>
         <ul>
