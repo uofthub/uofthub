@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   S3Client,
   PutObjectCommand,
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3'
@@ -76,6 +77,14 @@ export async function putObjectStream(
     queueSize: 2,
     partSize: 8 * 1024 * 1024,
   }).done()
+}
+
+/** Copy an object to a new key in the same bucket, server-side. */
+export async function copyObject(from: string, to: string): Promise<void> {
+  const source = from.split('/').map(encodeURIComponent).join('/')
+  await getClient().send(
+    new CopyObjectCommand({ Bucket: bucket(), CopySource: `${bucket()}/${source}`, Key: to })
+  )
 }
 
 export async function deleteObject(key: string): Promise<void> {

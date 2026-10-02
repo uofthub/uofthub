@@ -10,6 +10,7 @@ import { isListed } from '../lib/visibility.js'
 import { changeHandle, HandleError, normalizeHandle } from '../lib/handles.js'
 import { campaignSource } from '../lib/campaigns.js'
 import { URGENT_REASONS } from '../lib/reports.js'
+import { keepEvidence } from '../lib/evidence.js'
 
 const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'WARNED', 'TAKEN_DOWN'] as const
 const REPORT_TARGETS = ['PROJECT', 'COMMENT', 'COLLECTION', 'USER', 'ORG_ACTIVITY'] as const
@@ -98,11 +99,8 @@ function sameTargetWhere(report: ReportRow) {
  * and the law requires it be preserved and reported, not destroyed.
  */
 async function takeDown(report: ReportRow): Promise<void> {
-  const keepEvidence = report.reason === 'SEXUAL_CONTENT'
-  const keep = (key: string | null | undefined) =>
-    key
-      ? db.report.update({ where: { id: report.id }, data: { evidenceKeys: { push: key } } })
-      : undefined
+  const sexual = report.reason === 'SEXUAL_CONTENT'
+  const keep = (key: string | null | undefined) => (key ? keepEvidence(report.id, key) : undefined)
   switch (report.targetType) {
     case 'PROJECT':
       if (report.projectId)
@@ -126,7 +124,7 @@ async function takeDown(report: ReportRow): Promise<void> {
       return
     case 'ORG_ACTIVITY': {
       if (!report.activityId) return
-      if (keepEvidence) {
+      if (sexual) {
         const activity = await db.orgActivity.findUnique({
           where: { id: report.activityId },
           select: { imageKey: true },
@@ -155,7 +153,7 @@ async function takeDown(report: ReportRow): Promise<void> {
           avatarIsCustom: false,
         },
       })
-      if (keepEvidence) await keep(user?.avatarKey)
+      if (sexual) await keep(user?.avatarKey)
       else if (user?.avatarKey) await deleteObject(user.avatarKey).catch(() => undefined)
       return
     }
